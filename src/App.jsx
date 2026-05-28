@@ -1146,9 +1146,8 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           >UNRANKED · {games}/{3} GAMES</text>
         )}
 
-        {/* NAPL crest — below position. White circular badge behind it
-            so the transparent PNG reads cleanly on any tier color. */}
-        <circle cx="55" cy="126" r="24" fill="#ffffff" stroke={palette.stroke} strokeWidth="0.8" strokeOpacity="0.35" />
+        {/* NAPL crest — below position. The PNG itself should have its
+            negative space white; we don't wrap it in any extra shape. */}
         <image
           href={NAPL_LOGO_SRC}
           x="34" y="105"
@@ -1210,18 +1209,21 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
             tier.name === 'SILVER'  ? '#dfe4e8' :
                                       '#d99c5c'; // bronze
           return (
-            <g>
-              {/* black label bar */}
-              <rect x="40" y="305" width="240" height="26" rx="4"
-                fill="#0a0a0e" stroke="#d4af37" strokeWidth="1" strokeOpacity="0.8" />
-              {/* thin gold sheen line on top of the bar */}
-              <rect x="44" y="308" width="232" height="2" rx="1"
-                fill="#d4af37" fillOpacity="0.4" />
+            // Clip to the card shape so the bar follows the narrowing card edges
+            <g clipPath={`url(#card-clip-${overall})`}>
+              {/* Black label bar — spans the full available width at y=305. */}
+              <rect x="0" y="305" width="320" height="26"
+                fill="#0a0a0e" />
+              {/* thin gold sheen lines top + bottom of the bar */}
+              <rect x="0" y="306" width="320" height="2"
+                fill="#d4af37" fillOpacity="0.45" />
+              <rect x="0" y="328" width="320" height="1.5"
+                fill="#d4af37" fillOpacity="0.3" />
             </g>
           );
         })()}
         <text
-          x="160" y="320"
+          x="160" y="324"
           fontFamily="Anton, sans-serif"
           fontSize="22"
           fill={hasAwards
@@ -1360,13 +1362,14 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       {/* thin gold frame just inside the card edge */}
       <path d={cardPath} fill="none" stroke="#d4af37" strokeWidth="1.5" strokeOpacity="0.55" />
 
-      {/* header */}
+      {/* header — text is white so it reads on the dark inner panel.
+          (C.cream is actually navy in this codebase; we use #ffffff explicitly here.) */}
       <text x="160" y="62" fontFamily="Anton, sans-serif" fontSize="24"
-        fill={C.cream} textAnchor="middle" letterSpacing="2">
+        fill="#ffffff" textAnchor="middle" letterSpacing="2">
         {account.username.toUpperCase().slice(0, 14)}
       </text>
       <text x="160" y="80" fontFamily="JetBrains Mono, monospace" fontSize="9"
-        fill={`${C.cream}88`} textAnchor="middle" letterSpacing="3">
+        fill="#ffffffaa" textAnchor="middle" letterSpacing="3">
         {account.position} • CAREER RECORD
       </text>
       <line x1="50" y1="92" x2="270" y2="92" stroke="#d4af37" strokeWidth="1" strokeOpacity="0.5" />
@@ -1377,7 +1380,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
 
       {cabinetItems.length === 0 ? (
         <text x="160" y="155" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-          fill={`${C.cream}66`} textAnchor="middle">No awards yet — keep grinding.</text>
+          fill="#ffffff88" textAnchor="middle">No awards yet — keep grinding.</text>
       ) : (
         cabinetItems.map((item, i) => {
           const rowY = 138 + i * 28;
@@ -1431,7 +1434,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
                   <ellipse cx="42" cy="35" rx="6" ry="14" fill={shine} opacity="0.45" />
                 </g>
                 <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-                  fill={C.cream} letterSpacing="0.5">
+                  fill="#ffffff" letterSpacing="0.5">
                   {label}
                 </text>
                 {item.season && (
@@ -1483,7 +1486,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
             <g key={i} transform={`translate(40 ${rowY})`}>
               {renderIcon()}
               <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-                fill={C.cream} letterSpacing="0.5">
+                fill="#ffffff" letterSpacing="0.5">
                 {AWARD_FULL_NAMES[item.awardId] || 'Award'}
               </text>
               {item.season && (
@@ -1497,11 +1500,11 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
 
       {/* JOIN DATE footer — raised so it sits cleanly inside the dark inset
           rather than straddling the tier-colored chin of the card */}
-      <line x1="50" y1="425" x2="270" y2="425" stroke={`${C.cream}33`} strokeWidth="1" />
+      <line x1="50" y1="425" x2="270" y2="425" stroke="#ffffff33" strokeWidth="1" />
       <text x="160" y="443" fontFamily="JetBrains Mono, monospace" fontSize="9"
-        fill={`${C.cream}66`} textAnchor="middle" letterSpacing="2">MEMBER SINCE</text>
+        fill="#ffffff88" textAnchor="middle" letterSpacing="2">MEMBER SINCE</text>
       <text x="160" y="460" fontFamily="Barlow Condensed, sans-serif" fontSize="13"
-        fill={C.cream} textAnchor="middle">{joinDate}</text>
+        fill="#ffffff" textAnchor="middle">{joinDate}</text>
     </svg>
   );
 
@@ -2925,6 +2928,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
     const s = await db.getSeason();
     setCurrentSeason(s);
     setSeasonInput(s);
+    // Also refresh the parent Dashboard so changes (approved pictures, renames,
+    // edited stats, new champions, etc.) propagate to the leaderboard / my card
+    // / teams / hall-of-fame views without needing a page reload.
+    if (onRefreshAdmins) onRefreshAdmins();
   };
   useEffect(() => { refresh(); }, []);
 

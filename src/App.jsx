@@ -53,6 +53,86 @@ const isAdmin = (account, dynamicAdmins = []) => {
   return dynamicAdmins.some(a => a.toLowerCase() === u);
 };
 
+// ============ USERNAME PROFANITY FILTER ============
+// Blocks offensive usernames at registration. To add/remove words, edit the
+// lists below. The check normalizes the username first (strips separators,
+// numbers, repeated letters, common leetspeak) so simple evasions like
+// "f_u_c_k" or "sh1t" are also caught.
+//
+// BLOCKED_SUBSTRINGS: long, unambiguous words — blocked anywhere in the name.
+// BLOCKED_WHOLEWORDS: short words that appear inside innocent words
+//   (e.g. "cunt" in "Scunthorpe") — blocked only when they stand alone-ish.
+const BLOCKED_SUBSTRINGS = [
+  'fuck', 'shit', 'bitch', 'asshole', 'bastard', 'pussy', 'whore',
+  'porn', 'rapist', 'dildo', 'masturbate', 'orgasm',
+  'nigger', 'nigga', 'faggot', 'retard', 'wetback',
+  'chink', 'kike', 'tranny', 'nazi', 'hitler', 'rapehub',
+];
+const BLOCKED_WHOLEWORDS = [
+  'cunt', 'dick', 'cock', 'piss', 'wank', 'twat', 'prick', 'slut',
+  'sex', 'rape', 'cum', 'penis', 'vagina', 'boobs', 'horny',
+  'nude', 'nudes', 'fag', 'spic', 'dyke', 'coon', 'gook', 'kkk',
+];
+
+// Normalize a string to catch obfuscated profanity
+const normalizeForProfanity = (str) => {
+  let s = str.toLowerCase();
+  const leet = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '8': 'b', '@': 'a', '$': 's', '!': 'i' };
+  s = s.replace(/[013457 8@$!]/g, (c) => leet[c] || c);
+  s = s.replace(/[^a-z]/g, '');
+  s = s.replace(/(.)\1{2,}/g, '$1');
+  return s;
+};
+
+// Returns the offending word if the username is not allowed, else null
+const checkUsernameProfanity = (username) => {
+  const normalized = normalizeForProfanity(username);
+  const collapsed = normalized.replace(/(.)\1+/g, '$1');
+
+  // Long unambiguous words: block anywhere
+  for (const word of BLOCKED_SUBSTRINGS) {
+    if (normalized.includes(word) || collapsed.includes(word)) return word;
+  }
+  // Short words: block only when surrounded by non-letters or string ends
+  // (so "cunt" blocks "x_cunt_x" but not "Scunthorpe")
+  for (const word of BLOCKED_WHOLEWORDS) {
+    const re = new RegExp(`(^|[^a-z])${word}([^a-z]|$)`);
+    // test against the ORIGINAL lowercased name (keeps separators as boundaries)
+    if (re.test(username.toLowerCase())) return word;
+    // also catch it as the entire normalized string (e.g. "sex" alone)
+    if (normalized === word || collapsed === word) return word;
+  }
+  return null;
+};
+
+// ============ COUNTRIES ============
+// Players pick a country at registration; the flag shows on their card.
+// COUNTRY_CODES maps the country name to its ISO code, used to load a real
+// flag image from flagcdn.com (e.g. https://flagcdn.com/w80/ca.png).
+const COUNTRIES = [
+  'Canada', 'United States', 'Mexico', 'United Kingdom', 'Ireland', 'France',
+  'Germany', 'Spain', 'Portugal', 'Italy', 'Netherlands', 'Belgium',
+  'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Brazil',
+  'Argentina', 'Colombia', 'Chile', 'Australia', 'New Zealand', 'Japan',
+  'South Korea', 'Nigeria', 'South Africa', 'India', 'Other',
+];
+const COUNTRY_CODES = {
+  'Canada': 'ca', 'United States': 'us', 'Mexico': 'mx',
+  'United Kingdom': 'gb', 'Ireland': 'ie', 'France': 'fr',
+  'Germany': 'de', 'Spain': 'es', 'Portugal': 'pt', 'Italy': 'it',
+  'Netherlands': 'nl', 'Belgium': 'be', 'Switzerland': 'ch',
+  'Sweden': 'se', 'Norway': 'no', 'Denmark': 'dk', 'Poland': 'pl',
+  'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Chile': 'cl',
+  'Australia': 'au', 'New Zealand': 'nz', 'Japan': 'jp',
+  'South Korea': 'kr', 'Nigeria': 'ng', 'South Africa': 'za',
+  'India': 'in',
+};
+// Returns a flag image URL for a country, or null (e.g. for "Other")
+const flagUrl = (country) => {
+  const code = COUNTRY_CODES[country];
+  return code ? `https://flagcdn.com/w80/${code}.png` : null;
+};
+
 // ============ AWARDS SYSTEM ============
 const AWARD_TYPES = [
   { id: 'glove',     name: 'Golden Glove',     short: 'GG', desc: 'Best Goalkeeper',    pos: 'GK' },
@@ -67,7 +147,7 @@ const GoldGlove = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" style={{ display: 'block' }}>
     <defs>
       <linearGradient id="ggrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fce98a" /><stop offset="50%" stopColor="#d4af37" /><stop offset="100%" stopColor="#8a6914" />
+        <stop offset="0%" stopColor="#fce98a" /><stop offset="40%" stopColor="#f5cc3e" /><stop offset="100%" stopColor="#8a6914" />
       </linearGradient>
     </defs>
     <path d="M9 6 Q9 3 12 3 L20 3 Q23 3 23 6 L23 14 L25 14 Q27 14 27 16 L27 20 Q27 22 25 22 L23 22 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z" fill="url(#ggrad)" stroke="#5c4710" strokeWidth="0.8" />
@@ -79,11 +159,41 @@ const GoldBoot = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" style={{ display: 'block' }}>
     <defs>
       <linearGradient id="bgrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fce98a" /><stop offset="50%" stopColor="#d4af37" /><stop offset="100%" stopColor="#8a6914" />
+        <stop offset="0%" stopColor="#fce98a" /><stop offset="40%" stopColor="#f5cc3e" /><stop offset="100%" stopColor="#8a6914" />
       </linearGradient>
     </defs>
-    <path d="M6 18 L6 12 Q6 8 10 8 L14 8 L14 16 L24 16 Q28 16 28 20 L28 23 Q28 25 26 25 L8 25 Q6 25 6 23 Z" fill="url(#bgrad)" stroke="#5c4710" strokeWidth="0.8" />
-    <circle cx="11" cy="20" r="1" fill="#5c4710" /><circle cx="16" cy="20" r="1" fill="#5c4710" /><circle cx="21" cy="20" r="1" fill="#5c4710" />
+    {/* Cleat body: pointed toe on the right, heel curved up on the left,
+        low-cut throat opening at the top */}
+    <path d="M 28 22
+             L 28 24
+             Q 28 25.5 26.5 25.5
+             L 5 25.5
+             Q 3.5 25.5 3.5 24
+             L 3.5 21
+             Q 3.5 19 6 18.5
+             Q 8 18 10 16.5
+             Q 11 15 11 13
+             Q 11 11.5 12.5 11.5
+             L 15 11.5
+             Q 16.5 11.5 17 13
+             L 17.5 16
+             Q 18 17.5 19.5 17.5
+             L 25 17.5
+             Q 28 17.5 28 20
+             Z"
+      fill="url(#bgrad)" stroke="#5c4710" strokeWidth="0.7" strokeLinejoin="round" />
+    {/* Throat opening (collar) on top of foot */}
+    <path d="M 12.5 12.5 Q 14 14 16.5 14 L 18 14"
+      fill="none" stroke="#5c4710" strokeWidth="0.6" opacity="0.55" />
+    {/* Three lace stripes diagonally across the side */}
+    <path d="M 14 17 L 16.5 19" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+    <path d="M 16 17.5 L 18.5 19.5" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+    <path d="M 18 18 L 20.5 20" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+    {/* Studs along the sole */}
+    <rect x="6" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+    <rect x="12" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+    <rect x="18" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+    <rect x="24" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
   </svg>
 );
 
@@ -91,7 +201,7 @@ const GoldShield = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" style={{ display: 'block' }}>
     <defs>
       <linearGradient id="sgrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fce98a" /><stop offset="50%" stopColor="#d4af37" /><stop offset="100%" stopColor="#8a6914" />
+        <stop offset="0%" stopColor="#fce98a" /><stop offset="40%" stopColor="#f5cc3e" /><stop offset="100%" stopColor="#8a6914" />
       </linearGradient>
     </defs>
     <path d="M16 3 L26 6 L26 16 Q26 24 16 29 Q6 24 6 16 L6 6 Z" fill="url(#sgrad)" stroke="#5c4710" strokeWidth="0.8" />
@@ -99,25 +209,67 @@ const GoldShield = ({ size = 20 }) => (
   </svg>
 );
 
-const GoldTarget = ({ size = 20 }) => (
+const GoldStar = ({ size = 20 }) => (
   <svg width={size} height={size} viewBox="0 0 32 32" style={{ display: 'block' }}>
     <defs>
-      <linearGradient id="tgrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#fce98a" /><stop offset="50%" stopColor="#d4af37" /><stop offset="100%" stopColor="#8a6914" />
+      <linearGradient id="stargrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#fce98a" /><stop offset="40%" stopColor="#f5cc3e" /><stop offset="100%" stopColor="#8a6914" />
       </linearGradient>
     </defs>
-    <circle cx="16" cy="16" r="13" fill="url(#tgrad)" stroke="#5c4710" strokeWidth="0.8" />
-    <circle cx="16" cy="16" r="9" fill="none" stroke="#5c4710" strokeWidth="1.2" />
-    <circle cx="16" cy="16" r="5" fill="none" stroke="#5c4710" strokeWidth="1.2" />
-    <circle cx="16" cy="16" r="2" fill="#5c4710" />
+    {/* Classic 5-point star */}
+    <path d="M 16 3 L 19.5 12.2 L 29 12.6 L 21.5 18.6 L 24.2 28 L 16 22.7 L 7.8 28 L 10.5 18.6 L 3 12.6 L 12.5 12.2 Z"
+          fill="url(#stargrad)" stroke="#5c4710" strokeWidth="0.8" strokeLinejoin="round" />
+    {/* Subtle inner highlight on the upper facets */}
+    <path d="M 16 3 L 19.5 12.2 L 16 12 L 12.5 12.2 Z" fill="#fce98a" opacity="0.55" />
   </svg>
 );
+
+// Championship trophy cup — used for SEASON WINNERS (gold) and RUNNER-UP (silver).
+// `tone` = 'gold' or 'silver'. Each instance generates a unique gradient id so
+// multiple trophies on a page don't share state.
+let __trophyIdCounter = 0;
+const ChampionTrophy = ({ size = 24, tone = 'gold' }) => {
+  const uid = useMemo(() => `trophy-${tone}-${++__trophyIdCounter}`, [tone]);
+  const palette = tone === 'silver'
+    ? { light: '#f5f7fa', mid: '#cdd3dc', dark: '#7a8290', stroke: '#4a4e54', shine: '#ffffff' }
+    : { light: '#fce98a', mid: '#f5cc3e', dark: '#8a6914', stroke: '#5c4710', shine: '#fff5b8' };
+  return (
+    <svg width={size} height={size * 1.2} viewBox="0 0 100 120" style={{ display: 'block' }}>
+      <defs>
+        <linearGradient id={uid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={palette.light} />
+          <stop offset="40%" stopColor={palette.mid} />
+          <stop offset="100%" stopColor={palette.dark} />
+        </linearGradient>
+      </defs>
+      {/* Square base — two tiers */}
+      <rect x="28" y="108" width="44" height="10" rx="1.5" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="0.8" />
+      <rect x="32" y="100" width="36" height="10" rx="1" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Stem */}
+      <rect x="44" y="86" width="12" height="16" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Stem flare into cup */}
+      <path d="M 38 86 L 62 86 L 58 78 L 42 78 Z" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Cup body */}
+      <path d="M 28 22 L 72 22 L 72 40 Q 72 70 50 78 Q 28 70 28 40 Z" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="1" />
+      {/* Cup rim */}
+      <rect x="25" y="18" width="50" height="6" rx="1" fill={`url(#${uid})`} stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Left handle */}
+      <path d="M 28 28 Q 12 28 12 42 Q 12 56 28 56" fill="none" stroke={`url(#${uid})`} strokeWidth="5" strokeLinecap="round" />
+      <path d="M 28 28 Q 12 28 12 42 Q 12 56 28 56" fill="none" stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Right handle */}
+      <path d="M 72 28 Q 88 28 88 42 Q 88 56 72 56" fill="none" stroke={`url(#${uid})`} strokeWidth="5" strokeLinecap="round" />
+      <path d="M 72 28 Q 88 28 88 42 Q 88 56 72 56" fill="none" stroke={palette.stroke} strokeWidth="0.8" />
+      {/* Cup highlight */}
+      <ellipse cx="42" cy="35" rx="6" ry="14" fill={palette.shine} opacity="0.45" />
+    </svg>
+  );
+};
 
 const AwardIcon = ({ awardId, size = 20 }) => {
   if (awardId === 'glove')     return <GoldGlove size={size} />;
   if (awardId === 'striker')   return <GoldBoot size={size} />;
   if (awardId === 'defender')  return <GoldShield size={size} />;
-  if (awardId === 'playmaker') return <GoldTarget size={size} />;
+  if (awardId === 'playmaker') return <GoldStar size={size} />;
   return null;
 };
 
@@ -749,6 +901,32 @@ input[type=number]::-webkit-inner-spin-button { opacity: 1; }
 ::-webkit-scrollbar-track { background: ${C.navyDeep}; }
 ::-webkit-scrollbar-thumb { background: ${C.navyLight}; border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: ${C.green}; }
+
+/* Flippable card */
+.flip-card {
+  perspective: 1400px;
+  cursor: pointer;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-card.flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-face {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.flip-card-back {
+  transform: rotateY(180deg);
+}
 `;
 
 // ============ PLAYER CARD (FIFA STYLE) ============
@@ -778,6 +956,19 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   const games = account.stats?.games || 0;
   const awards = getPlayerAwards(account);
   const hasAwards = awards.length > 0;
+  const canFlip = size === 'lg'; // only the large card flips
+  const [flipped, setFlipped] = useState(false);
+
+  // Until a player has played MIN_GAMES_FOR_RANKING games, the card shows 0
+  // for the overall and every stat — they haven't "earned" a rating yet.
+  // forceOverall/forceTier (Tier Preview, etc.) bypass this.
+  const showZeroStats = isUnranked;
+  const displayOverall = showZeroStats ? 0 : overall;
+  const emptyDisplayStats = {
+    goals: 0, assists: 0, passes: 0, shots: 0, tackles: 0,
+    interceptions: 0, saves: 0, catches: 0, cleanSheets: 0, games,
+  };
+  const displayStats = showZeroStats ? emptyDisplayStats : (account.stats || emptyDisplayStats);
 
   // Two-tone palette per tier — these match what FIFA actually uses
   // (lighter fill is the main card body; darker fill is the inner accent band)
@@ -842,24 +1033,15 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
     Z
   `;
 
-  return (
-    <div
-      ref={ref}
-      className="relative select-none transition-all hover:scale-[1.03] hover:-translate-y-1 duration-300"
-      style={{
-        width: dims.w,
-        height: dims.h,
-        filter: `drop-shadow(0 8px 20px rgba(0,0,0,0.35))`,
-      }}
+  const cardFrontSvg = (
+    <svg
+      viewBox={`0 0 ${VB_W} ${VB_H}`}
+      width={dims.w}
+      height={dims.h}
+      style={{ display: 'block' }}
     >
-      <svg
-        viewBox={`0 0 ${VB_W} ${VB_H}`}
-        width={dims.w}
-        height={dims.h}
-        style={{ display: 'block' }}
-      >
-        <defs>
-          {/* Main card gradient — light at top, mid in middle, dark at bottom */}
+      <defs>
+        {/* Main card gradient — light at top, mid in middle, dark at bottom */}
           <linearGradient id={`card-bg-${overall}-${tier.name}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={palette.light} />
             <stop offset="50%" stopColor={palette.mid} />
@@ -878,6 +1060,28 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           <clipPath id={`card-clip-${overall}`}>
             <path d={cardPath} />
           </clipPath>
+          {/* Photo fade mask — white = visible, black = transparent.
+              Soft fade on the LEFT edge of the photo (so it blends into the
+              OVR/crest column instead of looking pasted on), plus subtle
+              softening at the TOP and BOTTOM. */}
+          <linearGradient id={`photo-fade-x-${overall}`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%"  stopColor="#000" />
+            <stop offset="25%" stopColor="#666" />
+            <stop offset="55%" stopColor="#fff" />
+          </linearGradient>
+          <linearGradient id={`photo-fade-y-${overall}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%"  stopColor="#444" />
+            <stop offset="15%" stopColor="#fff" />
+            <stop offset="80%" stopColor="#fff" />
+            <stop offset="100%" stopColor="#333" />
+          </linearGradient>
+          <mask id={`photo-mask-${overall}`} maskUnits="userSpaceOnUse">
+            {/* Two-axis fade: stack a vertical fade with a horizontal one set to
+                multiply, yielding a soft vignette where black areas hide the
+                photo and white areas keep it fully visible. */}
+            <rect x="100" y="15" width="220" height="285" fill={`url(#photo-fade-y-${overall})`} />
+            <rect x="100" y="15" width="220" height="285" fill={`url(#photo-fade-x-${overall})`} style={{ mixBlendMode: 'multiply' }} />
+          </mask>
         </defs>
 
         {/* MAIN CARD BODY */}
@@ -898,7 +1102,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
               x="110" y="20"
               width="200" height="270"
               preserveAspectRatio="xMidYMin slice"
-              opacity="0.95"
+              mask={`url(#photo-mask-${overall})`}
             />
           ) : (
             <text
@@ -919,7 +1123,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           fontSize="56"
           fill={palette.stroke}
           textAnchor="middle"
-        >{overall}</text>
+        >{displayOverall}</text>
         {/* POSITION — directly below OVR, smaller */}
         <text
           x="55" y="92"
@@ -929,7 +1133,22 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           textAnchor="middle"
         >{account.position}</text>
 
-        {/* NAPL crest — below position */}
+        {/* UNRANKED tag — shown until the player has 3 games. Explains the 0s. */}
+        {showZeroStats && (
+          <text
+            x="160" y="300"
+            fontFamily="Russo One, sans-serif"
+            fontSize={size === 'lg' ? '11' : '9'}
+            fill={palette.stroke}
+            opacity="0.75"
+            textAnchor="middle"
+            letterSpacing="1.5"
+          >UNRANKED · {games}/{3} GAMES</text>
+        )}
+
+        {/* NAPL crest — below position. White circular badge behind it
+            so the transparent PNG reads cleanly on any tier color. */}
+        <circle cx="55" cy="126" r="24" fill="#ffffff" stroke={palette.stroke} strokeWidth="0.8" strokeOpacity="0.35" />
         <image
           href={NAPL_LOGO_SRC}
           x="34" y="105"
@@ -963,41 +1182,83 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           >{team.tag}</text>
         ) : null}
 
+        {/* COUNTRY FLAG — below the team logo slot */}
+        {account.country && flagUrl(account.country) && (
+          <g>
+            {/* white rounded backing so the flag reads on any tier color */}
+            <rect x="35" y="205" width="40" height="28" rx="3"
+              fill="#ffffff" stroke={palette.stroke} strokeWidth="0.8" strokeOpacity="0.35" />
+            <image
+              href={flagUrl(account.country)}
+              x="37" y="207" width="36" height="24"
+              preserveAspectRatio="xMidYMid slice"
+            />
+          </g>
+        )}
+
         {/* INNER STAT BAND */}
         <path d={bandPath} fill={`url(#band-bg-${overall}-${tier.name})`} stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.3" />
 
-        {/* NAME — across the top of the band, with a thin line under */}
+        {/* NAME — across the top of the band, with a thin line under.
+            Award winners get a black "label" bar behind the name; the name
+            text keeps the tier color so you can still read their tier at a glance. */}
+        {hasAwards && (() => {
+          // Tier-colored text for the name on the black bar
+          const tierTextColor =
+            tier.name === 'DIAMOND' ? '#bfe4f0' :
+            tier.name === 'GOLD'    ? '#f5cc3e' :
+            tier.name === 'SILVER'  ? '#dfe4e8' :
+                                      '#d99c5c'; // bronze
+          return (
+            <g>
+              {/* black label bar */}
+              <rect x="40" y="305" width="240" height="26" rx="4"
+                fill="#0a0a0e" stroke="#d4af37" strokeWidth="1" strokeOpacity="0.8" />
+              {/* thin gold sheen line on top of the bar */}
+              <rect x="44" y="308" width="232" height="2" rx="1"
+                fill="#d4af37" fillOpacity="0.4" />
+            </g>
+          );
+        })()}
         <text
           x="160" y="320"
           fontFamily="Anton, sans-serif"
           fontSize="22"
-          fill={palette.stroke}
+          fill={hasAwards
+            ? (tier.name === 'DIAMOND' ? '#bfe4f0'
+             : tier.name === 'GOLD'    ? '#f5cc3e'
+             : tier.name === 'SILVER'  ? '#dfe4e8'
+             : '#d99c5c')
+            : palette.stroke}
           textAnchor="middle"
           letterSpacing="2"
         >{account.username.toUpperCase().slice(0, 14)}</text>
-        <line x1="50" y1="332" x2="270" y2="332" stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.4" />
+        {!hasAwards && (
+          <line x1="50" y1="332" x2="270" y2="332" stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.4" />
+        )}
 
         {/* STATS — two columns, classic FIFA layout */}
         {(() => {
           const isGK = account.position === 'GK';
-          const fmtPerGame = (n) => games > 0 ? (n / games).toFixed(1) : '0.0';
+          // displayStats is zeroed for players with fewer than 3 games
+          const fmtPerGame = (n) => games > 0 && !showZeroStats ? (n / games).toFixed(1) : '0.0';
           const leftStats = isGK
             ? [
-                ['SAVES', fmtPerGame(account.stats?.saves || 0)],
-                ['CATCH', fmtPerGame(account.stats?.catches || 0)],
-                ['CLEAN', account.stats?.cleanSheets || 0],
+                ['SAVES', fmtPerGame(displayStats.saves || 0)],
+                ['CATCH', fmtPerGame(displayStats.catches || 0)],
+                ['CLEAN', displayStats.cleanSheets || 0],
               ]
             : [
-                ['GOALS', account.stats?.goals || 0],
-                ['ASSIST', account.stats?.assists || 0],
-                ['PASS',  fmtPerGame(account.stats?.passes || 0)],
+                ['GOALS', displayStats.goals || 0],
+                ['ASSIST', displayStats.assists || 0],
+                ['PASS',  fmtPerGame(displayStats.passes || 0)],
               ];
           const rightStats = isGK
             ? [['GAMES', games]]
             : [
-                ['SHO%', (account.stats?.shots || 0) > 0 ? Math.round(((account.stats?.goals || 0) / account.stats.shots) * 100) : 0],
-                ['TKL',  fmtPerGame(account.stats?.tackles || 0)],
-                ['INT',  fmtPerGame(account.stats?.interceptions || 0)],
+                ['SHO%', (displayStats.shots || 0) > 0 ? Math.round(((displayStats.goals || 0) / displayStats.shots) * 100) : 0],
+                ['TKL',  fmtPerGame(displayStats.tackles || 0)],
+                ['INT',  fmtPerGame(displayStats.interceptions || 0)],
               ];
           const startY = 360;
           const rowGap = 26;
@@ -1030,27 +1291,6 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           );
         })()}
 
-        {/* TROPHY EMOJIS for award winners — subtle row at the very bottom */}
-        {hasAwards && (() => {
-          const trophyCount = Math.min(awards.length, 5);
-          const trophySize = 14;
-          const totalW = trophyCount * (trophySize + 2);
-          const startX = 160 - totalW / 2;
-          return (
-            <g>
-              {awards.slice(0, 5).map((aw, i) => (
-                <text
-                  key={i}
-                  x={startX + i * (trophySize + 2) + trophySize / 2}
-                  y={478}
-                  fontSize={trophySize}
-                  textAnchor="middle"
-                >🏆</text>
-              ))}
-            </g>
-          );
-        })()}
-
         {/* TIER BADGE — top-right corner of the card body */}
         <g transform={`translate(260, 26)`}>
           <polygon
@@ -1069,7 +1309,234 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
             letterSpacing="1.5"
           >{tier.name}</text>
         </g>
-      </svg>
+    </svg>
+  );
+
+  // ---- BACK OF THE CARD: trophies + join date ----
+  const AWARD_FULL_NAMES = {
+    glove: 'Golden Glove',
+    striker: 'Golden Striker',
+    defender: 'Golden Defender',
+    playmaker: 'Golden Playmaker',
+  };
+  const joinDate = account.createdAt
+    ? new Date(account.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    : 'Unknown';
+  // Combined cabinet items: individual awards + team championships. Each is
+  // tagged with a kind so the renderer picks the right icon.
+  const cabinetItems = [
+    ...awards.map(a => ({ kind: 'award', awardId: a.awardId, season: a.season })),
+    ...(account.championships || []).map(c => ({
+      kind: 'champ',
+      placement: c.placement,             // 'winner' | 'runner_up'
+      season: c.season,
+    })),
+  ].slice(0, 10);
+
+  const cardBackSvg = (
+    <svg
+      viewBox={`0 0 ${VB_W} ${VB_H}`}
+      width={dims.w}
+      height={dims.h}
+      style={{ display: 'block' }}
+    >
+      <defs>
+        <linearGradient id={`back-bg-${overall}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={palette.mid} />
+          <stop offset="100%" stopColor={palette.dark} />
+        </linearGradient>
+      </defs>
+
+      {/* card body — same shape, tier-toned */}
+      <path d={cardPath} fill={`url(#back-bg-${overall})`} stroke={palette.stroke} strokeWidth="1.5" strokeOpacity="0.4" />
+
+      {/* dark inner panel so text reads cleanly. The pivot is shifted DOWN
+          (y=300, not the geometric center y=255) so the inset extends further
+          into the pointed chin area — keeping "MEMBER SINCE" fully on the
+          dark panel instead of straddling the tier-colored edge. */}
+      <g transform="translate(160 300) scale(0.93) translate(-160 -300)">
+        <path d={cardPath} fill="#0d1018" fillOpacity="0.92" />
+      </g>
+      {/* thin gold frame just inside the card edge */}
+      <path d={cardPath} fill="none" stroke="#d4af37" strokeWidth="1.5" strokeOpacity="0.55" />
+
+      {/* header */}
+      <text x="160" y="62" fontFamily="Anton, sans-serif" fontSize="24"
+        fill={C.cream} textAnchor="middle" letterSpacing="2">
+        {account.username.toUpperCase().slice(0, 14)}
+      </text>
+      <text x="160" y="80" fontFamily="JetBrains Mono, monospace" fontSize="9"
+        fill={`${C.cream}88`} textAnchor="middle" letterSpacing="3">
+        {account.position} • CAREER RECORD
+      </text>
+      <line x1="50" y1="92" x2="270" y2="92" stroke="#d4af37" strokeWidth="1" strokeOpacity="0.5" />
+
+      {/* TROPHIES section */}
+      <text x="160" y="120" fontFamily="Russo One, sans-serif" fontSize="13"
+        fill="#d4af37" textAnchor="middle" letterSpacing="2">TROPHY CABINET</text>
+
+      {cabinetItems.length === 0 ? (
+        <text x="160" y="155" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
+          fill={`${C.cream}66`} textAnchor="middle">No awards yet — keep grinding.</text>
+      ) : (
+        cabinetItems.map((item, i) => {
+          const rowY = 138 + i * 28;
+
+          // Shared gold gradient (used by award icons). Each row gets a unique id.
+          const gid = `cab-grad-${i}`;
+          const grad = (
+            <defs>
+              <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#fce98a" />
+                <stop offset="40%" stopColor="#f5cc3e" />
+                <stop offset="100%" stopColor="#8a6914" />
+              </linearGradient>
+              {/* silver gradient — only used by runner-up rows */}
+              <linearGradient id={`${gid}-silver`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#f5f7fa" />
+                <stop offset="50%" stopColor="#cdd3dc" />
+                <stop offset="100%" stopColor="#7a8290" />
+              </linearGradient>
+            </defs>
+          );
+
+          // CHAMPIONSHIP TROPHY ROW (winner = gold cup, runner_up = silver cup)
+          if (item.kind === 'champ') {
+            const isSilver = item.placement === 'runner_up';
+            const tgid = isSilver ? `${gid}-silver` : gid;
+            const stroke = isSilver ? '#4a4e54' : '#5c4710';
+            const shine = isSilver ? '#ffffff' : '#fff5b8';
+            const label = isSilver ? 'Runner-Up' : 'Champion';
+            // Trophy is in 100x120 viewBox; row icon area is ~24px wide.
+            // Scale 0.2 fits and centers the cup vertically in the 24px row.
+            return (
+              <g key={i} transform={`translate(40 ${rowY})`}>
+                {grad}
+                <g transform="translate(0 -4) scale(0.22)">
+                  {/* Square base */}
+                  <rect x="28" y="108" width="44" height="10" rx="1.5" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
+                  <rect x="32" y="100" width="36" height="10" rx="1" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
+                  {/* Stem */}
+                  <rect x="44" y="86" width="12" height="16" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
+                  {/* Stem flare */}
+                  <path d="M 38 86 L 62 86 L 58 78 L 42 78 Z" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
+                  {/* Cup */}
+                  <path d="M 28 22 L 72 22 L 72 40 Q 72 70 50 78 Q 28 70 28 40 Z" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="1" />
+                  {/* Rim */}
+                  <rect x="25" y="18" width="50" height="6" rx="1" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
+                  {/* Handles */}
+                  <path d="M 28 28 Q 12 28 12 42 Q 12 56 28 56" fill="none" stroke={`url(#${tgid})`} strokeWidth="5" strokeLinecap="round" />
+                  <path d="M 72 28 Q 88 28 88 42 Q 88 56 72 56" fill="none" stroke={`url(#${tgid})`} strokeWidth="5" strokeLinecap="round" />
+                  {/* Highlight */}
+                  <ellipse cx="42" cy="35" rx="6" ry="14" fill={shine} opacity="0.45" />
+                </g>
+                <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
+                  fill={C.cream} letterSpacing="0.5">
+                  {label}
+                </text>
+                {item.season && (
+                  <text x="240" y="13" fontFamily="JetBrains Mono, monospace" fontSize="10"
+                    fill={isSilver ? '#cdd3dc' : '#d4af37'} textAnchor="end">{item.season}</text>
+                )}
+              </g>
+            );
+          }
+
+          // INDIVIDUAL AWARD ROW (Golden Glove, Striker, Defender, Playmaker)
+          const renderIcon = () => {
+            if (item.awardId === 'striker') {
+              return (<g transform="translate(0 -3) scale(0.7)">{grad}
+                <path d="M 28 22 L 28 24 Q 28 25.5 26.5 25.5 L 5 25.5 Q 3.5 25.5 3.5 24 L 3.5 21 Q 3.5 19 6 18.5 Q 8 18 10 16.5 Q 11 15 11 13 Q 11 11.5 12.5 11.5 L 15 11.5 Q 16.5 11.5 17 13 L 17.5 16 Q 18 17.5 19.5 17.5 L 25 17.5 Q 28 17.5 28 20 Z"
+                      fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.7" strokeLinejoin="round" />
+                <path d="M 12.5 12.5 Q 14 14 16.5 14 L 18 14" fill="none" stroke="#5c4710" strokeWidth="0.6" opacity="0.55" />
+                <path d="M 14 17 L 16.5 19" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+                <path d="M 16 17.5 L 18.5 19.5" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+                <path d="M 18 18 L 20.5 20" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
+                <rect x="6" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+                <rect x="12" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+                <rect x="18" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+                <rect x="24" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
+              </g>);
+            }
+            if (item.awardId === 'glove') {
+              return (<g transform="translate(0 -3) scale(0.7)">{grad}
+                <path d="M9 6 Q9 3 12 3 L20 3 Q23 3 23 6 L23 14 L25 14 Q27 14 27 16 L27 20 Q27 22 25 22 L23 22 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z" fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" />
+                <path d="M12 6 L12 14 M16 6 L16 14 M20 6 L20 14" stroke="#5c4710" strokeWidth="0.6" fill="none" opacity="0.5" />
+              </g>);
+            }
+            if (item.awardId === 'defender') {
+              return (<g transform="translate(0 -3) scale(0.7)">{grad}
+                <path d="M16 3 L26 6 L26 16 Q26 24 16 29 Q6 24 6 16 L6 6 Z" fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" />
+                <path d="M16 10 L19 14 L23 14 L20 17 L21 21 L16 19 L11 21 L12 17 L9 14 L13 14 Z" fill="#5c4710" opacity="0.7" />
+              </g>);
+            }
+            if (item.awardId === 'playmaker') {
+              return (<g transform="translate(0 -3) scale(0.7)">{grad}
+                <path d="M 16 3 L 19.5 12.2 L 29 12.6 L 21.5 18.6 L 24.2 28 L 16 22.7 L 7.8 28 L 10.5 18.6 L 3 12.6 L 12.5 12.2 Z"
+                      fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" strokeLinejoin="round" />
+                <path d="M 16 3 L 19.5 12.2 L 16 12 L 12.5 12.2 Z" fill="#fce98a" opacity="0.55" />
+              </g>);
+            }
+            return null;
+          };
+          return (
+            <g key={i} transform={`translate(40 ${rowY})`}>
+              {renderIcon()}
+              <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
+                fill={C.cream} letterSpacing="0.5">
+                {AWARD_FULL_NAMES[item.awardId] || 'Award'}
+              </text>
+              {item.season && (
+                <text x="240" y="13" fontFamily="JetBrains Mono, monospace" fontSize="10"
+                  fill="#d4af37" textAnchor="end">{item.season}</text>
+              )}
+            </g>
+          );
+        })
+      )}
+
+      {/* JOIN DATE footer — raised so it sits cleanly inside the dark inset
+          rather than straddling the tier-colored chin of the card */}
+      <line x1="50" y1="425" x2="270" y2="425" stroke={`${C.cream}33`} strokeWidth="1" />
+      <text x="160" y="443" fontFamily="JetBrains Mono, monospace" fontSize="9"
+        fill={`${C.cream}66`} textAnchor="middle" letterSpacing="2">MEMBER SINCE</text>
+      <text x="160" y="460" fontFamily="Barlow Condensed, sans-serif" fontSize="13"
+        fill={C.cream} textAnchor="middle">{joinDate}</text>
+    </svg>
+  );
+
+  // Non-flippable (small/medium cards): just show the front
+  if (!canFlip) {
+    return (
+      <div
+        ref={ref}
+        className="relative select-none transition-all hover:scale-[1.03] hover:-translate-y-1 duration-300"
+        style={{
+          width: dims.w, height: dims.h,
+          filter: `drop-shadow(0 8px 20px rgba(0,0,0,0.35))`,
+        }}
+      >
+        {cardFrontSvg}
+      </div>
+    );
+  }
+
+  // Flippable large card
+  return (
+    <div
+      ref={ref}
+      className={`flip-card ${flipped ? 'flipped' : ''}`}
+      onClick={() => setFlipped(f => !f)}
+      style={{
+        width: dims.w, height: dims.h,
+        filter: `drop-shadow(0 8px 20px rgba(0,0,0,0.35))`,
+      }}
+      title="Click to flip"
+    >
+      <div className="flip-card-inner">
+        <div className="flip-card-face">{cardFrontSvg}</div>
+        <div className="flip-card-face flip-card-back">{cardBackSvg}</div>
+      </div>
     </div>
   );
 });
@@ -1113,20 +1580,56 @@ const AuthScreen = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [position, setPosition] = useState('ST');
+  const [email, setEmail] = useState('');
+  const [country, setCountry] = useState('');
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Simple email format check
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
+
+  // "Forgot password" — sends a reset link to the account's email
+  const handleForgotPassword = async () => {
+    setError(''); setInfo('');
+    if (!username.trim()) { setError('Enter your username first, then tap "Forgot password".'); return; }
+    setLoading(true);
+    try {
+      const res = await auth.sendPasswordReset(username.trim());
+      if (res.ok) {
+        setInfo(`A password reset link has been sent to ${res.email}. Check your inbox (and spam folder).`);
+      } else {
+        setError(res.reason || 'Could not send a reset link.');
+      }
+    } catch (e) {
+      setError(e?.message || 'Could not send a reset link.');
+    }
+    setLoading(false);
+  };
+
   const handleSubmit = async () => {
-    setError('');
+    setError(''); setInfo('');
     if (!username.trim() || !password.trim()) { setError('Username and password required'); return; }
     if (username.length < 3) { setError('Username must be at least 3 characters'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) { setError('Letters, numbers, and underscores only'); return; }
+    // Sign-up only: profanity check, email, and country are required
+    if (mode === 'signup') {
+      if (checkUsernameProfanity(username)) {
+        setError('That username isn\'t allowed. Please choose a different one.');
+        return;
+      }
+      if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
+      if (!country) { setError('Please select your country'); return; }
+    }
     setLoading(true);
     try {
       let account;
       if (mode === 'signup') {
-        account = await auth.signUp({ username: username.trim(), password, position });
+        account = await auth.signUp({
+          username: username.trim(), password, position,
+          email: email.trim(), country,
+        });
       } else {
         account = await auth.signIn({ username: username.trim(), password });
       }
@@ -1221,11 +1724,43 @@ const AuthScreen = ({ onLogin }) => {
                 </select>
               </Field>
             )}
+            {mode === 'signup' && (
+              <Field label="EMAIL">
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
+                  placeholder="you@example.com"
+                  style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+                />
+              </Field>
+            )}
+            {mode === 'signup' && (
+              <Field label="COUNTRY">
+                <select
+                  value={country}
+                  onChange={(e) => setCountry(e.target.value)}
+                  className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
+                  style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: country ? C.cream : `${C.cream}66` }}
+                >
+                  <option value="" style={{ background: C.navyDeep }}>Select your country…</option>
+                  {COUNTRIES.map(c => <option key={c} value={c} style={{ background: C.navyDeep }}>{c}</option>)}
+                </select>
+              </Field>
+            )}
             {error && (
               <div className="flex items-center gap-2 px-3 py-2 rounded font-mono text-xs" style={{
                 background: `${C.red}22`, border: `1px solid ${C.red}66`, color: C.redLight,
               }}>
                 <XCircle size={12} /> {error}
+              </div>
+            )}
+            {info && (
+              <div className="flex items-start gap-2 px-3 py-2 rounded font-mono text-xs" style={{
+                background: `${C.green}22`, border: `1px solid ${C.green}66`, color: C.greenLight,
+              }}>
+                <CheckCircle size={12} style={{ marginTop: 2, flexShrink: 0 }} /> {info}
               </div>
             )}
             <button
@@ -1240,6 +1775,14 @@ const AuthScreen = ({ onLogin }) => {
             >
               {loading ? 'LOADING...' : mode === 'login' ? 'ENTER LEAGUE' : 'JOIN THE LEAGUE'}
             </button>
+            {mode === 'login' && (
+              <button
+                onClick={handleForgotPassword}
+                disabled={loading}
+                className="w-full font-mono text-[11px] tracking-wider disabled:opacity-50 mt-1"
+                style={{ color: `${C.cream}88`, textDecoration: 'underline' }}
+              >Forgot my password</button>
+            )}
           </div>
 
           <div className="mt-5 pt-4 text-center" style={{ borderTop: `1px solid ${C.navyLight}33` }}>
@@ -1741,24 +2284,107 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
   );
 };
 
+// ============ EDIT NAME MODAL (player changes own username) ============
+const EditNameModal = ({ account, onClose, onSave }) => {
+  const [name, setName] = useState(account.username);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const handleSave = async () => {
+    setError('');
+    const trimmed = name.trim();
+    if (trimmed === account.username) { onClose(); return; }
+    if (trimmed.length < 3) { setError('Username must be at least 3 characters'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError('Letters, numbers, and underscores only'); return; }
+    // Profanity filter applies to player self-rename
+    if (checkUsernameProfanity(trimmed)) {
+      setError('That username isn\'t allowed. Please choose a different one.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await db.renameAccount(account.id, trimmed);
+      if (!result.ok) { setError(result.reason || 'Could not change name'); setBusy(false); return; }
+      onSave({ ...account, username: trimmed });
+      onClose();
+    } catch (e) {
+      setError('Could not change name: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <ModalShell onClose={onClose} title="CHANGE USERNAME" maxWidth="max-w-sm">
+      <div className="space-y-3">
+        <p className="font-body text-sm" style={{ color: `${C.cream}aa` }}>
+          This is the name shown on your card and across the league. Letters, numbers, and underscores only.
+        </p>
+        <input
+          type="text"
+          value={name}
+          maxLength={20}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full rounded px-3 py-3 text-base font-heading tracking-wider"
+          style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+        />
+        {error && <div className="font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{error}</div>}
+        <button
+          onClick={handleSave}
+          disabled={busy}
+          className="w-full py-3 font-display tracking-widest text-lg rounded disabled:opacity-50"
+          style={{
+            background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
+            color: C.onColor,
+            boxShadow: `0 4px 16px ${C.green}66`,
+          }}
+        >{busy ? 'SAVING…' : 'SAVE USERNAME'}</button>
+      </div>
+    </ModalShell>
+  );
+};
+
 // ============ SUBMIT TEAM MODAL ============
 const SubmitTeamModal = ({ account, onClose, onSave }) => {
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [color, setColor] = useState(C.green);
   const [description, setDescription] = useState('');
+  const [logoUrl, setLogoUrl] = useState(null);
+  const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const logoInputRef = useRef(null);
+
+  const handleLogoFile = async (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError('Team logo must be an image file'); return; }
+    setError('');
+    setLogoBusy(true);
+    try {
+      // logos are square-ish and small — 300px is plenty
+      const dataUrl = await compressImage(file, 300, 0.85);
+      setLogoUrl(dataUrl);
+    } catch (e) {
+      setError('Could not process logo: ' + (e?.message || e));
+    }
+    setLogoBusy(false);
+  };
 
   const handleSubmit = async () => {
     setError('');
     if (!name.trim() || name.length < 3) { setError('Team name must be 3+ characters'); return; }
     if (!tag.trim() || tag.length < 2 || tag.length > 5) { setError('Tag must be 2-5 characters'); return; }
+    if (!logoUrl) { setError('Please upload a team logo'); return; }
+    if (checkUsernameProfanity(name) || checkUsernameProfanity(tag)) {
+      setError('That team name or tag isn\'t allowed. Please choose something else.');
+      return;
+    }
     setLoading(true);
     const id = `t_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
     const team = {
       id, name: name.trim(), tag: tag.trim().toUpperCase(),
       color, description: description.trim(),
+      logoUrl,
       ownerUsername: account.username,
       members: [account.username],
       status: 'pending',
@@ -1822,6 +2448,30 @@ const SubmitTeamModal = ({ account, onClose, onSave }) => {
             className="w-full rounded px-3 py-2 font-body text-sm focus:outline-none"
             style={inputStyle}
           />
+        </div>
+        <div>
+          <Lbl>TEAM LOGO (REQUIRED)</Lbl>
+          <input
+            ref={logoInputRef}
+            type="file" accept="image/*"
+            onChange={(e) => handleLogoFile(e.target.files?.[0])}
+            className="hidden"
+          />
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg flex items-center justify-center shrink-0"
+              style={{ width: 56, height: 56, background: C.navyDeep, border: `1px solid ${C.navyLight}66`, overflow: 'hidden' }}>
+              {logoUrl
+                ? <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                : <Shield size={22} style={{ color: `${C.cream}44` }} />}
+            </div>
+            <button
+              type="button"
+              onClick={() => logoInputRef.current?.click()}
+              disabled={logoBusy}
+              className="px-3 py-2 rounded font-mono text-[11px] tracking-wider disabled:opacity-50"
+              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}88`, color: C.cream }}
+            >{logoBusy ? 'PROCESSING...' : logoUrl ? 'CHANGE LOGO' : 'UPLOAD LOGO'}</button>
+          </div>
         </div>
         {error && (
           <div className="flex items-center gap-2 px-3 py-2 rounded font-mono text-xs" style={{
@@ -2320,6 +2970,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
         {[
           { id: 'stats',   label: 'STATS',   icon: BarChart3 },
           { id: 'teams',   label: 'TEAMS',   icon: Users },
+          { id: 'players', label: 'PLAYERS', icon: User },
           { id: 'pictures',label: 'PICTURES',icon: User },
           { id: 'awards',  label: 'AWARDS',  icon: Trophy },
           { id: 'season',  label: 'SEASON',  icon: Calendar },
@@ -2360,6 +3011,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
         <PicturesManager allPlayers={allPlayers} onRefresh={refresh} />
       )}
 
+      {section === 'players' && (
+        <PlayersManager allPlayers={allPlayers} onRefresh={refresh} />
+      )}
+
       {section === 'season' && (
         <SeasonManager
           account={account}
@@ -2370,7 +3025,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
       )}
 
       {section === 'awards' && (
-        <AwardsManager account={account} allPlayers={allPlayers} onRefresh={refresh} currentSeason={currentSeason} />
+        <div className="space-y-8">
+          <AwardsManager account={account} allPlayers={allPlayers} onRefresh={refresh} currentSeason={currentSeason} />
+          <SeasonChampionsManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
+        </div>
       )}
 
       {section === 'teams' && (
@@ -2794,6 +3452,382 @@ const AwardsManager = ({ account, allPlayers, onRefresh, currentSeason }) => {
                     className="px-2 py-1 font-heading tracking-wider text-[10px] rounded"
                     style={{ background: `${C.red}22`, color: C.redLight, border: `1px solid ${C.red}44` }}
                   >REMOVE</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+
+// ============ SEASON CHAMPIONS MANAGER (admin: pick winner + runner-up per season) ============
+// Picks a winner team and a runner-up team for a given season. On save, the current
+// rosters of those teams get a `championship` entry stamped onto each player's account
+// (so transferring later doesn't strip the trophy). Editing a past season wipes any
+// previous championship entries for that season first.
+const SeasonChampionsManager = ({ account, allPlayers, allTeams, currentSeason, onRefresh }) => {
+  const [champions, setChampions] = useState({});             // { S1: { winnerTeamId, runnerUpTeamId } }
+  const [editingSeason, setEditingSeason] = useState(currentSeason);
+  const [winnerTeamId, setWinnerTeamId] = useState('');
+  const [runnerUpTeamId, setRunnerUpTeamId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [confirming, setConfirming] = useState(null);          // 'save' | 'clear' | null
+
+  const approvedTeams = useMemo(
+    () => allTeams.filter(t => t.status === 'approved').sort((a, b) => a.name.localeCompare(b.name)),
+    [allTeams]
+  );
+
+  // Load championships once
+  useEffect(() => {
+    (async () => {
+      const c = await db.getChampions();
+      setChampions(c || {});
+    })();
+  }, []);
+
+  // Whenever the editing season changes, pre-fill from saved values
+  useEffect(() => {
+    const existing = champions[editingSeason] || {};
+    setWinnerTeamId(existing.winnerTeamId || '');
+    setRunnerUpTeamId(existing.runnerUpTeamId || '');
+    setError(''); setInfo('');
+  }, [editingSeason, champions]);
+
+  const teamById = (id) => approvedTeams.find(t => t.id === id) || allTeams.find(t => t.id === id);
+  const playersOnTeam = (teamId) => allPlayers.filter(p => p.teamId === teamId);
+
+  // Collect every season that currently has championships set, plus the current season
+  const knownSeasons = useMemo(() => {
+    const set = new Set(Object.keys(champions));
+    set.add(currentSeason);
+    return Array.from(set).sort();
+  }, [champions, currentSeason]);
+
+  const reset = () => {
+    setError(''); setInfo(''); setConfirming(null);
+  };
+
+  // Save handler — confirms first to make the impact explicit
+  const requestSave = () => {
+    setError(''); setInfo('');
+    if (!editingSeason.trim()) { setError('Pick a season'); return; }
+    if (!winnerTeamId && !runnerUpTeamId) { setError('Pick at least a winner or runner-up'); return; }
+    if (winnerTeamId && winnerTeamId === runnerUpTeamId) {
+      setError('Winner and runner-up cannot be the same team');
+      return;
+    }
+    setConfirming('save');
+  };
+
+  const doSave = async () => {
+    setBusy(true);
+    setError(''); setInfo('');
+    try {
+      // 1. Strip any existing championship entries for this season from every player.
+      // (Edit-safe: if the admin is reassigning S1, the old S1 trophies are removed first.)
+      const playersToUpdate = [];
+      for (const p of allPlayers) {
+        const champs = p.championships || [];
+        const filtered = champs.filter(c => c.season !== editingSeason);
+        if (filtered.length !== champs.length) {
+          playersToUpdate.push({ ...p, championships: filtered });
+        }
+      }
+
+      // 2. Stamp the new championship onto current roster members of the chosen teams.
+      const now = Date.now();
+      const stampOn = (teamId, placement) => {
+        if (!teamId) return;
+        const team = teamById(teamId);
+        if (!team) return;
+        for (const p of playersOnTeam(teamId)) {
+          // If this player is already in playersToUpdate from step 1, mutate that copy.
+          let target = playersToUpdate.find(x => x.id === p.id);
+          if (!target) {
+            target = { ...p, championships: [...(p.championships || [])] };
+            playersToUpdate.push(target);
+          } else {
+            target.championships = [...(target.championships || [])];
+          }
+          target.championships.push({
+            season: editingSeason,
+            placement,
+            teamId,
+            awardedAt: now,
+          });
+        }
+      };
+      stampOn(winnerTeamId, 'winner');
+      stampOn(runnerUpTeamId, 'runner_up');
+
+      // 3. Persist all account changes.
+      for (const p of playersToUpdate) {
+        await db.saveAccount(p);
+      }
+
+      // 4. Update the season_champions setting.
+      const next = { ...champions };
+      if (!winnerTeamId && !runnerUpTeamId) {
+        delete next[editingSeason];
+      } else {
+        next[editingSeason] = {
+          winnerTeamId: winnerTeamId || null,
+          runnerUpTeamId: runnerUpTeamId || null,
+          setAt: now,
+        };
+      }
+      await db.setChampions(next);
+      setChampions(next);
+
+      const wTeam = winnerTeamId ? teamById(winnerTeamId) : null;
+      const rTeam = runnerUpTeamId ? teamById(runnerUpTeamId) : null;
+      const wCount = wTeam ? playersOnTeam(winnerTeamId).length : 0;
+      const rCount = rTeam ? playersOnTeam(runnerUpTeamId).length : 0;
+      const parts = [];
+      if (wTeam) parts.push(`${wTeam.name} (winner) — ${wCount} player${wCount === 1 ? '' : 's'}`);
+      if (rTeam) parts.push(`${rTeam.name} (runner-up) — ${rCount} player${rCount === 1 ? '' : 's'}`);
+      setInfo(`Saved ${editingSeason}: ${parts.join(' · ')}`);
+      setConfirming(null);
+      if (onRefresh) await onRefresh();
+    } catch (e) {
+      setError('Save failed: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const requestClear = () => {
+    if (!champions[editingSeason]) { setError(`No championship set for ${editingSeason}`); return; }
+    setError(''); setInfo('');
+    setConfirming('clear');
+  };
+
+  const doClear = async () => {
+    setBusy(true);
+    try {
+      // Strip all championship entries for this season from every player
+      const playersToUpdate = [];
+      for (const p of allPlayers) {
+        const champs = p.championships || [];
+        const filtered = champs.filter(c => c.season !== editingSeason);
+        if (filtered.length !== champs.length) {
+          playersToUpdate.push({ ...p, championships: filtered });
+        }
+      }
+      for (const p of playersToUpdate) await db.saveAccount(p);
+
+      const next = { ...champions };
+      delete next[editingSeason];
+      await db.setChampions(next);
+      setChampions(next);
+      setWinnerTeamId(''); setRunnerUpTeamId('');
+      setInfo(`Cleared ${editingSeason} championships.`);
+      setConfirming(null);
+      if (onRefresh) await onRefresh();
+    } catch (e) {
+      setError('Clear failed: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-4">
+        <Trophy size={22} style={{ color: C.goldLight }} />
+        <h3 className="font-display text-2xl tracking-wider" style={{ color: C.cream }}>SEASON CHAMPIONS</h3>
+      </div>
+      <p className="font-body text-sm mb-4" style={{ color: `${C.cream}99` }}>
+        Pick the season winner (gold trophy) and runner-up (silver trophy). The trophy is awarded to the team's <span style={{ color: C.goldLight }}>current roster</span> — players who later transfer keep their trophy. Editing a season replaces the previous result.
+      </p>
+
+      {/* SEASON PICKER + TEAM PICKERS */}
+      <div className="rounded-xl p-4 mb-6" style={{ background: `${C.navyDeep}88`, border: `1px solid ${C.navyLight}66` }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>SEASON</div>
+            <div className="flex gap-2">
+              <select
+                value={editingSeason}
+                onChange={(e) => setEditingSeason(e.target.value)}
+                className="flex-1 px-3 py-2 font-body text-sm rounded focus:outline-none"
+                style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}88`, color: C.cream }}
+              >
+                {knownSeasons.map(s => <option key={s} value={s} style={{ background: C.navyDeep }}>{s}</option>)}
+                {!knownSeasons.includes(editingSeason) && (
+                  <option value={editingSeason} style={{ background: C.navyDeep }}>{editingSeason}</option>
+                )}
+              </select>
+              <input
+                type="text"
+                placeholder="New season..."
+                onKeyDown={(e) => { if (e.key === 'Enter' && e.currentTarget.value.trim()) { setEditingSeason(e.currentTarget.value.trim().toUpperCase()); e.currentTarget.value = ''; } }}
+                className="w-28 px-2 py-2 font-mono text-[11px] rounded focus:outline-none"
+                style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}88`, color: C.cream }}
+                title="Type a new season name and press Enter"
+              />
+            </div>
+          </div>
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>
+              🥇 WINNER (GOLD TROPHY)
+            </div>
+            <select
+              value={winnerTeamId}
+              onChange={(e) => setWinnerTeamId(e.target.value)}
+              className="w-full px-3 py-2 font-body text-sm rounded focus:outline-none"
+              style={{ background: C.navyDeep, border: `1px solid ${C.gold}66`, color: C.cream }}
+            >
+              <option value="" style={{ background: C.navyDeep }}>— None —</option>
+              {approvedTeams.map(t => (
+                <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
+                  {t.name} ({playersOnTeam(t.id).length} players)
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>
+              🥈 RUNNER-UP (SILVER TROPHY)
+            </div>
+            <select
+              value={runnerUpTeamId}
+              onChange={(e) => setRunnerUpTeamId(e.target.value)}
+              className="w-full px-3 py-2 font-body text-sm rounded focus:outline-none"
+              style={{ background: C.navyDeep, border: `1px solid #cdd3dc66`, color: C.cream }}
+            >
+              <option value="" style={{ background: C.navyDeep }}>— None —</option>
+              {approvedTeams.map(t => (
+                <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
+                  {t.name} ({playersOnTeam(t.id).length} players)
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {error && <div className="mt-3 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{error}</div>}
+        {info && <div className="mt-3 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.green}22`, color: C.greenLight }}>{info}</div>}
+
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <button
+            onClick={requestSave}
+            disabled={busy}
+            className="flex-1 py-2.5 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+            style={{
+              background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldLight} 100%)`,
+              color: C.brandNavy,
+              boxShadow: `0 4px 12px ${C.gold}66`,
+            }}
+          >{busy ? 'WORKING...' : `SAVE ${editingSeason} CHAMPIONS`}</button>
+          {champions[editingSeason] && (
+            <button
+              onClick={requestClear}
+              disabled={busy}
+              className="px-4 py-2.5 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+              style={{ background: 'transparent', color: C.redLight, border: `1px solid ${C.red}88` }}
+            >CLEAR {editingSeason}</button>
+          )}
+        </div>
+
+        {/* Roster preview */}
+        {(winnerTeamId || runnerUpTeamId) && (
+          <div className="mt-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: `1px solid ${C.navyLight}44` }}>
+            {winnerTeamId && (
+              <div>
+                <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: C.goldLight }}>
+                  PLAYERS GETTING THE GOLD TROPHY
+                </div>
+                <div className="font-body text-xs" style={{ color: C.cream }}>
+                  {playersOnTeam(winnerTeamId).length === 0
+                    ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
+                    : playersOnTeam(winnerTeamId).map(p => p.username).join(', ')}
+                </div>
+              </div>
+            )}
+            {runnerUpTeamId && (
+              <div>
+                <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: '#cdd3dc' }}>
+                  PLAYERS GETTING THE SILVER TROPHY
+                </div>
+                <div className="font-body text-xs" style={{ color: C.cream }}>
+                  {playersOnTeam(runnerUpTeamId).length === 0
+                    ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
+                    : playersOnTeam(runnerUpTeamId).map(p => p.username).join(', ')}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* CONFIRMATION MODAL */}
+      {confirming && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: `${C.black}cc`, backdropFilter: 'blur(8px)' }}>
+          <div className="max-w-md w-full rounded-xl p-5" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+            <div className="font-display text-xl tracking-wider mb-2" style={{ color: C.brandNavy }}>
+              {confirming === 'save' ? `SAVE ${editingSeason} CHAMPIONS?` : `CLEAR ${editingSeason}?`}
+            </div>
+            <div className="font-body text-sm mb-4" style={{ color: `${C.brandNavy}cc` }}>
+              {confirming === 'save'
+                ? `This will award trophies to the current rosters. ${champions[editingSeason] ? `Any previous ${editingSeason} trophies will be removed first (players who have since transferred will lose them).` : ''}`
+                : `Every player who currently holds a ${editingSeason} trophy will lose it. This cannot be undone.`}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirming(null)}
+                disabled={busy}
+                className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
+                style={{ background: 'transparent', color: C.brandNavy, border: `1px solid ${C.navyLight}` }}
+              >CANCEL</button>
+              <button
+                onClick={confirming === 'save' ? doSave : doClear}
+                disabled={busy}
+                className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+                style={{
+                  background: confirming === 'save' ? C.gold : C.red,
+                  color: confirming === 'save' ? C.brandNavy : C.onColor,
+                }}
+              >{busy ? 'WORKING...' : confirming === 'save' ? 'YES, AWARD' : 'YES, CLEAR'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAST SEASONS LIST */}
+      <div>
+        <h4 className="font-display text-lg tracking-wider mb-2" style={{ color: C.cream }}>
+          RECORD ({Object.keys(champions).length} season{Object.keys(champions).length === 1 ? '' : 's'})
+        </h4>
+        {Object.keys(champions).length === 0 ? (
+          <EmptyState icon={<Trophy size={40} />} text="No season champions recorded yet." />
+        ) : (
+          <div className="space-y-1.5">
+            {Object.entries(champions).sort(([a], [b]) => a.localeCompare(b)).map(([season, info]) => {
+              const w = info.winnerTeamId ? teamById(info.winnerTeamId) : null;
+              const r = info.runnerUpTeamId ? teamById(info.runnerUpTeamId) : null;
+              return (
+                <div key={season} className="rounded p-2.5 flex items-center gap-3" style={{
+                  background: `${C.navyDeep}aa`, border: `1px solid ${C.gold}33`,
+                }}>
+                  <div className="font-display text-lg tracking-wider" style={{ color: C.goldLight, width: 48 }}>{season}</div>
+                  <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    <div className="font-body text-sm" style={{ color: C.cream }}>
+                      🥇 <span style={{ color: C.goldLight }}>Winner:</span> {w ? w.name : <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>—</span>}
+                    </div>
+                    <div className="font-body text-sm" style={{ color: C.cream }}>
+                      🥈 <span style={{ color: '#cdd3dc' }}>Runner-Up:</span> {r ? r.name : <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>—</span>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setEditingSeason(season); reset(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                    className="font-mono text-[10px] tracking-wider px-2 py-1 rounded"
+                    style={{ background: 'transparent', color: C.goldLight, border: `1px solid ${C.gold}44` }}
+                  >EDIT</button>
                 </div>
               );
             })}
@@ -3634,6 +4668,135 @@ const StatLine = ({ label, value }) => (
 );
 
 
+// ============ PLAYERS MANAGER (admin: rename players) ============
+const PlayersManager = ({ allPlayers, onRefresh }) => {
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState(null);   // account being renamed
+  const [newName, setNewName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  const filtered = allPlayers
+    .filter(p => !search || p.username.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase()));
+
+  const startEdit = (player) => {
+    setEditing(player);
+    setNewName(player.username);
+    setError('');
+  };
+
+  const saveRename = async () => {
+    setError('');
+    const trimmed = newName.trim();
+    if (trimmed === editing.username) { setEditing(null); return; }
+    if (trimmed.length < 3) { setError('Must be at least 3 characters'); return; }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError('Letters, numbers, underscores only'); return; }
+    // NOTE: admins bypass the profanity filter on purpose — they're the ones cleaning things up.
+    setBusy(true);
+    try {
+      const result = await db.renameAccount(editing.id, trimmed);
+      if (!result.ok) { setError(result.reason || 'Could not rename'); setBusy(false); return; }
+      setInfo(`✓ Renamed to ${trimmed}`);
+      setEditing(null);
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) {
+      setError('Could not rename: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl p-4" style={{
+        background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
+        border: `1px solid ${C.gold}55`,
+      }}>
+        <div className="flex items-center gap-2 mb-1">
+          <User size={14} style={{ color: C.goldLight }} />
+          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>MANAGE PLAYERS</span>
+        </div>
+        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
+          Rename any player — useful for cleaning up inappropriate usernames. The player keeps all their stats, team, and awards.
+        </p>
+      </div>
+
+      {info && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
+      )}
+
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search players…"
+        className="w-full rounded px-3 py-2 text-sm"
+        style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
+      />
+
+      <div className="space-y-2">
+        {filtered.length === 0 ? (
+          <div className="font-mono text-xs tracking-wider text-center py-4" style={{ color: `${C.cream}66` }}>
+            NO PLAYERS FOUND
+          </div>
+        ) : filtered.map(p => (
+          <div key={p.id || p.username} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+            {editing && (editing.id === p.id) ? (
+              <div className="space-y-2">
+                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
+                  RENAMING — {p.username.toUpperCase()}
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newName}
+                  maxLength={20}
+                  onChange={(e) => setNewName(e.target.value)}
+                  className="w-full rounded px-3 py-2 font-heading tracking-wider"
+                  style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
+                />
+                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEditing(null); setError(''); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                  >CANCEL</button>
+                  <button
+                    onClick={saveRename}
+                    disabled={busy}
+                    className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`, color: C.onColor }}
+                  >{busy ? 'SAVING…' : 'SAVE NEW NAME'}</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
+                    {p.username.toUpperCase()}
+                  </div>
+                  <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
+                    {p.position} • {p.stats?.games || 0} GAMES
+                  </div>
+                </div>
+                <button
+                  onClick={() => startEdit(p)}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
+                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                ><Edit3 size={11} /> RENAME</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+
 // ============ PICTURES MANAGER (admin: approve player images) ============
 const PicturesManager = ({ allPlayers, onRefresh }) => {
   const [busy, setBusy] = useState('');
@@ -4253,19 +5416,19 @@ const TierPreview = () => {
     } else {
       stats = { games, wins: 4, draws: 3, losses: 8, goals: 3, assists: 2, shots: 18, shotsOnTarget: 6, passes: 270, passAccuracy: 64, tackles: 12, interceptions: 8, saves: 0, cleanSheets: 1, catches: 0, motm: 0 };
     }
-    return { username, position, stats, awards, matches: [], imageUrl: null };
+    return { username, position, stats, awards, matches: [], imageUrl: null, country: null };
   };
 
   const samples = [
     { account: mkAccount('Rookie',     'ST',  60), label: 'BRONZE',  desc: 'Bottom 40% of position', forceTier: 'BRONZE' },
     { account: mkAccount('Solid',      'CM',  72), label: 'SILVER',  desc: 'Next 30% (40th–70th %ile)', forceTier: 'SILVER' },
-    { account: mkAccount('Vet',        'DEF', 80), label: 'GOLD',    desc: 'Next 20% (70th–90th %ile)', forceTier: 'GOLD' },
+    { account: { ...mkAccount('Vet',   'DEF', 80), country: 'Canada' }, label: 'GOLD', desc: 'Country flag shows on the card', forceTier: 'GOLD' },
     { account: mkAccount('Champion',   'ST',  90, [
       { awardId: 'striker', season: 'S1', assignedBy: 'admin', assignedAt: Date.now() },
-    ]), label: 'DIAMOND', desc: 'Top 10% of position', forceTier: 'DIAMOND' },
+    ]), label: 'DIAMOND + AWARD', desc: 'Award winners get a black name bar', forceTier: 'DIAMOND' },
     { account: mkAccount('Decorated',  'CM',  72, [
       { awardId: 'playmaker', season: 'S1', assignedBy: 'admin', assignedAt: Date.now() },
-    ]), label: 'SILVER + AWARD', desc: 'Awards show on any tier', forceTier: 'SILVER' },
+    ]), label: 'SILVER + AWARD', desc: 'Black name bar shows on any tier', forceTier: 'SILVER' },
   ];
 
   return (
@@ -4275,7 +5438,7 @@ const TierPreview = () => {
         <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>TIER PREVIEW</h3>
       </div>
       <p className="font-body text-sm mb-6" style={{ color: `${C.cream}aa` }}>
-        Each tier rendered with its material treatment. The Diamond card also shows what an awarded card looks like (gold border + gold text).
+        Each tier rendered with its material treatment. Award winners get a black bar behind their name in the tier's accent color. The Gold card shows how a player's country flag appears below the team logo.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center">
         {samples.map((s, i) => (
@@ -4293,11 +5456,34 @@ const TierPreview = () => {
 };
 
 // ============ HOME (LANDING PAGE) ============
-const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJump }) => {
+const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJump, onUpdate }) => {
   const [news, setNews] = useState([]);
+  const [addingEmail, setAddingEmail] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailMsg, setEmailMsg] = useState('');
   useEffect(() => {
     db.listNews().then(setNews);
   }, []);
+
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e || '').trim());
+
+  // Existing accounts created before the email feature can add one here.
+  const handleSaveEmail = async () => {
+    setEmailMsg('');
+    if (!isValidEmail(emailInput)) { setEmailMsg('Please enter a valid email address'); return; }
+    setEmailBusy(true);
+    try {
+      const updated = { ...account, email: emailInput.trim().toLowerCase() };
+      await db.saveAccount(updated);
+      onUpdate && onUpdate(updated);
+      setAddingEmail(false);
+      setEmailMsg('');
+    } catch (e) {
+      setEmailMsg('Could not save email: ' + (e?.message || e));
+    }
+    setEmailBusy(false);
+  };
 
   const myTeam = allTeams.find(t => t.id === account.teamId && t.status === 'approved');
   const myRanking = getPlayerRanking(account, rankings);
@@ -4377,6 +5563,77 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
         <QuickStat label="GAMES PLAYED" value={account.stats?.games || 0} accent={C.green} />
         <QuickStat label="LEAGUE PLAYERS" value={allPlayers.length} accent={C.brandNavy} />
         <QuickStat label="ACTIVE TEAMS" value={allTeams.filter(t => t.status === 'approved').length} accent={C.red} />
+      </div>
+
+      {/* MY PROFILE — email + country */}
+      <div className="rounded-2xl p-5" style={{
+        background: C.white,
+        border: `1px solid ${C.navyLight}`,
+        boxShadow: `0 4px 16px ${C.brandNavy}11`,
+      }}>
+        <div className="flex items-center gap-2 mb-4">
+          <User size={15} style={{ color: C.green }} />
+          <span className="font-display text-lg tracking-wider" style={{ color: C.brandNavy }}>MY PROFILE</span>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {/* EMAIL */}
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.brandNavy}88` }}>EMAIL</div>
+            {account.email ? (
+              <div className="font-body text-sm" style={{ color: C.brandNavy }}>{account.email}</div>
+            ) : addingEmail ? (
+              <div className="space-y-2">
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full px-3 py-2 font-body text-sm focus:outline-none rounded"
+                  style={{ background: C.cream, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveEmail}
+                    disabled={emailBusy}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: C.green, color: C.onColor }}
+                  >{emailBusy ? 'SAVING...' : 'SAVE'}</button>
+                  <button
+                    onClick={() => { setAddingEmail(false); setEmailMsg(''); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: 'transparent', color: `${C.brandNavy}99`, border: `1px solid ${C.navyLight}` }}
+                  >CANCEL</button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="font-body text-sm italic" style={{ color: `${C.brandNavy}66` }}>No email on file</div>
+                <button
+                  onClick={() => { setAddingEmail(true); setEmailInput(''); }}
+                  className="font-mono text-[11px] tracking-wider"
+                  style={{ color: C.green, textDecoration: 'underline' }}
+                >+ Add an email (enables password reset)</button>
+              </div>
+            )}
+            {emailMsg && (
+              <div className="font-mono text-[11px] mt-1" style={{ color: C.red }}>{emailMsg}</div>
+            )}
+          </div>
+          {/* COUNTRY */}
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.brandNavy}88` }}>COUNTRY</div>
+            {account.country ? (
+              <div className="flex items-center gap-2">
+                {flagUrl(account.country) && (
+                  <img src={flagUrl(account.country)} alt="" style={{ width: 24, height: 16, objectFit: 'cover', borderRadius: 2, border: `1px solid ${C.navyLight}` }} />
+                )}
+                <span className="font-body text-sm" style={{ color: C.brandNavy }}>{account.country}</span>
+              </div>
+            ) : (
+              <div className="font-body text-sm italic" style={{ color: `${C.brandNavy}66` }}>Not set</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* MAIN GRID */}
@@ -4945,7 +6202,12 @@ const NewsComposeModal = ({ existing, defaultType, allTeams, author, onClose, on
 };
 
 // ============ HALL OF FAME ============
-const HallOfFameView = ({ allPlayers, onPlayerClick }) => {
+const HallOfFameView = ({ allPlayers, allTeams, onPlayerClick }) => {
+  // Load season champions (separate from individual awards)
+  const [champions, setChampions] = useState({});
+  useEffect(() => { db.getChampions().then(c => setChampions(c || {})); }, []);
+  const teamById = (id) => (allTeams || []).find(t => t.id === id);
+
   // Build a map: { season -> { awardId -> { player, award } } }
   const bySeason = {};
   allPlayers.forEach(p => {
@@ -4955,6 +6217,7 @@ const HallOfFameView = ({ allPlayers, onPlayerClick }) => {
     });
   });
   const seasons = Object.keys(bySeason).sort().reverse();
+  const championSeasons = Object.keys(champions).sort().reverse();
 
   // Per-player count for "most decorated" leaderboard
   const decoratedPlayers = allPlayers
@@ -4969,7 +6232,50 @@ const HallOfFameView = ({ allPlayers, onPlayerClick }) => {
         <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>HALL OF FAME</h3>
       </div>
 
-      {seasons.length === 0 ? (
+      {/* SEASON CHAMPIONS — winner + runner-up per season */}
+      {championSeasons.length > 0 && (
+        <div className="mb-8">
+          <h4 className="font-display text-xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
+            <Trophy size={16} style={{ color: C.goldLight }} /> SEASON CHAMPIONS
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {championSeasons.map(s => {
+              const info = champions[s];
+              const w = info.winnerTeamId ? teamById(info.winnerTeamId) : null;
+              const r = info.runnerUpTeamId ? teamById(info.runnerUpTeamId) : null;
+              return (
+                <div key={s} className="rounded-xl p-4" style={{
+                  background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
+                  border: `1px solid ${C.gold}55`,
+                  boxShadow: `0 2px 10px ${C.gold}22`,
+                }}>
+                  <div className="font-display text-2xl tracking-wider mb-3" style={{ color: C.brandNavy }}>{s}</div>
+                  <div className="flex items-start gap-3 mb-2">
+                    <ChampionTrophy size={32} tone="gold" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.brandNavy}88` }}>CHAMPION</div>
+                      <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.brandNavy }}>
+                        {w ? w.name : <span style={{ fontStyle: 'italic', color: `${C.brandNavy}66` }}>—</span>}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <ChampionTrophy size={28} tone="silver" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.brandNavy}88` }}>RUNNER-UP</div>
+                      <div className="font-heading tracking-wider text-sm truncate" style={{ color: `${C.brandNavy}cc` }}>
+                        {r ? r.name : <span style={{ fontStyle: 'italic', color: `${C.brandNavy}66` }}>—</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {seasons.length === 0 && championSeasons.length === 0 ? (
         <EmptyState icon={<Trophy size={40} />} text="No award winners yet. Champions will be honored here." />
       ) : (
         <>
@@ -5074,6 +6380,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [view, setView] = useState('home');
   const [showLog, setShowLog] = useState(false);
   const [showEditPos, setShowEditPos] = useState(false);
+  const [showEditName, setShowEditName] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [allPlayers, setAllPlayers] = useState([]);
@@ -5209,6 +6516,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
             rankings={rankings}
             currentSeason={currentSeason}
             onJump={setView}
+            onUpdate={onUpdate}
           />
         )}
 
@@ -5278,6 +6586,13 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
                       background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
                     }}
                   ><Edit3 size={12} /> POSITION</button>
+                  <button
+                    onClick={() => setShowEditName(true)}
+                    className="px-4 py-2 font-heading tracking-wider text-xs flex items-center gap-2 rounded transition-all"
+                    style={{
+                      background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
+                    }}
+                  ><Edit3 size={12} /> NAME</button>
                 </div>
                 {myTeam && (
                   <div className="text-center mt-1">
@@ -5445,7 +6760,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
 
         {/* HALL OF FAME */}
         {view === 'hof' && (
-          <HallOfFameView allPlayers={allPlayers} onPlayerClick={setSelectedPlayer} />
+          <HallOfFameView allPlayers={allPlayers} allTeams={allTeams} onPlayerClick={setSelectedPlayer} />
         )}
 
         {view === 'tiers' && <TierPreview />}
@@ -5459,6 +6774,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
       {/* MODALS */}
       {showLog && <LogMatchModal account={account} allPlayers={allPlayers} currentSeason={currentSeason} onClose={() => setShowLog(false)} onSave={onUpdate} />}
       {showEditPos && <EditPositionModal account={account} onClose={() => setShowEditPos(false)} onSave={onUpdate} />}
+      {showEditName && <EditNameModal account={account} onClose={() => setShowEditName(false)} onSave={onUpdate} />}
       {showUpload && <UploadImageModal account={account} onClose={() => setShowUpload(false)} onSave={onUpdate} />}
       {showShare && <ShareableCardModal account={accountForCard} team={myTeam} onClose={() => setShowShare(false)} />}
       {selectedPlayer && (

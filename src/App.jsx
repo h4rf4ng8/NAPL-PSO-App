@@ -112,9 +112,9 @@ const checkUsernameProfanity = (username) => {
 const COUNTRIES = [
   'Canada', 'United States', 'Mexico', 'United Kingdom', 'Ireland', 'France',
   'Germany', 'Spain', 'Portugal', 'Italy', 'Netherlands', 'Belgium',
-  'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Brazil',
-  'Argentina', 'Colombia', 'Chile', 'Australia', 'New Zealand', 'Japan',
-  'South Korea', 'Nigeria', 'South Africa', 'India', 'Other',
+  'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Bosnia and Herzegovina',
+  'Brazil', 'Argentina', 'Colombia', 'Chile', 'Australia', 'New Zealand', 'Japan',
+  'South Korea', 'China', 'Nigeria', 'South Africa', 'India', 'Other',
 ];
 const COUNTRY_CODES = {
   'Canada': 'ca', 'United States': 'us', 'Mexico': 'mx',
@@ -122,9 +122,10 @@ const COUNTRY_CODES = {
   'Germany': 'de', 'Spain': 'es', 'Portugal': 'pt', 'Italy': 'it',
   'Netherlands': 'nl', 'Belgium': 'be', 'Switzerland': 'ch',
   'Sweden': 'se', 'Norway': 'no', 'Denmark': 'dk', 'Poland': 'pl',
+  'Bosnia and Herzegovina': 'ba',
   'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Chile': 'cl',
   'Australia': 'au', 'New Zealand': 'nz', 'Japan': 'jp',
-  'South Korea': 'kr', 'Nigeria': 'ng', 'South Africa': 'za',
+  'South Korea': 'kr', 'China': 'cn', 'Nigeria': 'ng', 'South Africa': 'za',
   'India': 'in',
 };
 // Returns a flag image URL for a country, or null (e.g. for "Other")
@@ -970,68 +971,52 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   };
   const displayStats = showZeroStats ? emptyDisplayStats : (account.stats || emptyDisplayStats);
 
-  // Two-tone palette per tier — these match what FIFA actually uses
-  // (lighter fill is the main card body; darker fill is the inner accent band)
+  // v33 palette — metallic body with light/mid/dark/shadow stops for the
+  // brushed-metal gradient, plus a separate panel palette for the stats area
+  // and awardText (used when an award winner gets a black name label).
   const palette = (() => {
     if (tier.name === 'DIAMOND') return {
-      light: '#e6f0f4', mid: '#cbe0e8', dark: '#9ec1cf',
-      bandLight: '#dde8ec', bandDark: '#a8c0c8',
-      ribbon: 'rgba(255,255,255,0.55)',
-      stroke: '#5a7888',
+      lightest: '#f5fafc', light: '#dceaf2', mid: '#a8c8db', dark: '#5a8aa8', shadow: '#2c4e68',
+      panelLight: '#dceaf2', panelMid: '#b8d0e0', panelDark: '#7c9eb8',
+      text: '#0e1e2e', awardText: '#bfd9e8',
+      stroke: '#2c4e68',
     };
     if (tier.name === 'GOLD') return {
-      light: '#ffd84a', mid: '#e8b020', dark: '#a87018',
-      bandLight: '#fbe07c', bandDark: '#d99c2b',
-      ribbon: 'rgba(255,245,180,0.7)',
+      lightest: '#fff5cc', light: '#fde583', mid: '#ecbd35', dark: '#a87a18', shadow: '#5a3e08',
+      panelLight: '#fae27a', panelMid: '#ecbd35', panelDark: '#a87a18',
+      text: '#1a1004', awardText: '#f5cc3e',
       stroke: '#5a3e08',
     };
     if (tier.name === 'SILVER') return {
-      light: '#dee2e6', mid: '#b8bcc0', dark: '#8a9098',
-      bandLight: '#e6eaee', bandDark: '#a4a8ac',
-      ribbon: 'rgba(255,255,255,0.55)',
-      stroke: '#4a4e54',
+      lightest: '#fafbfc', light: '#dde2e8', mid: '#b8bdc4', dark: '#7a8088', shadow: '#3a3e44',
+      panelLight: '#dde2e8', panelMid: '#b8bdc4', panelDark: '#7a8088',
+      text: '#0e1014', awardText: '#dfe4e8',
+      stroke: '#3a3e44',
     };
     return {
-      light: '#d18a4a', mid: '#a85c20', dark: '#6e3c10',
-      bandLight: '#dba068', mid2: '#a85c20', bandDark: '#7a4818',
-      ribbon: 'rgba(255,210,170,0.55)',
+      lightest: '#f0d4a8', light: '#d49058', mid: '#a85a20', dark: '#6e3c10', shadow: '#3a1e08',
+      panelLight: '#d49058', panelMid: '#a85a20', panelDark: '#6e3c10',
+      text: '#0a0604', awardText: '#d99c5c',
       stroke: '#3a1e08',
     };
   })();
 
   const VB_W = 320, VB_H = 510; // Internal SVG viewBox so coordinates stay consistent
 
-  // FIFA-style card outline — coat-of-arms shape:
-  // Curved shoulders at the top, slight inward curve at the sides, pointed bottom.
-  const cardPath = `
-    M 30 0
-    L 290 0
-    Q 320 0 320 30
-    L 320 320
-    Q 320 360 300 380
-    L 220 470
-    Q 200 495 160 510
-    Q 120 495 100 470
-    L 20 380
-    Q 0 360 0 320
-    L 0 30
-    Q 0 0 30 0
-    Z
-  `;
+  // v33 coat-of-arms card outline. Curved shoulders at top, slight inward
+  // curve at the sides, pointed bottom.
+  const cardPath = "M 22 4 L 298 4 Q 316 4 316 22 L 316 360 Q 316 380 308 396 Q 280 460 160 506 Q 40 460 12 396 Q 4 380 4 360 L 4 22 Q 4 4 22 4 Z";
 
-  // Inner stat band — the lighter colored panel where name/stats sit
-  const bandPath = `
-    M 12 290
-    L 308 290
-    L 308 380
-    Q 308 410 290 425
-    L 220 490
-    Q 200 502 160 510
-    Q 120 502 100 490
-    L 30 425
-    Q 12 410 12 380
-    Z
-  `;
+  // TOTW flag flows from the team to all its members.
+  const isTotw = !!(team && team.totw);
+
+  // Award winners get a black label across the name; TOTW marker (above OVR)
+  // is independent of awards, so a player can have both.
+  const ovrY = isTotw ? 132 : 118;
+  const posY = isTotw ? 160 : 146;
+
+  // A unique id suffix so multiple cards on the same page get unique <defs>
+  const uid = `${overall}-${tier.name}-${account.username || 'p'}`;
 
   const cardFrontSvg = (
     <svg
@@ -1041,290 +1026,155 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       style={{ display: 'block' }}
     >
       <defs>
-        {/* Main card gradient — light at top, mid in middle, dark at bottom */}
-          <linearGradient id={`card-bg-${overall}-${tier.name}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={palette.light} />
-            <stop offset="50%" stopColor={palette.mid} />
-            <stop offset="100%" stopColor={palette.dark} />
-          </linearGradient>
-          {/* Stat band gradient */}
-          <linearGradient id={`band-bg-${overall}-${tier.name}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={palette.bandLight} />
-            <stop offset="100%" stopColor={palette.bandDark} />
-          </linearGradient>
-          {/* Player image clip — confined to the upper area only */}
-          <clipPath id={`portrait-clip-${overall}`}>
-            <path d="M 130 30 L 290 30 Q 308 30 308 50 L 308 280 L 110 280 Z" />
-          </clipPath>
-          {/* Card-shaped clip for image fallback (so initial letter doesn't bleed past) */}
-          <clipPath id={`card-clip-${overall}`}>
-            <path d={cardPath} />
-          </clipPath>
-          {/* Photo fade mask — white = visible, black = transparent.
-              Soft fade on the LEFT edge of the photo (so it blends into the
-              OVR/crest column instead of looking pasted on), plus subtle
-              softening at the TOP and BOTTOM. */}
-          <linearGradient id={`photo-fade-x-${overall}`} x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"  stopColor="#888" />
-            <stop offset="18%" stopColor="#fff" />
-          </linearGradient>
-          <linearGradient id={`photo-fade-y-${overall}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"  stopColor="#aaa" />
-            <stop offset="10%" stopColor="#fff" />
-            <stop offset="88%" stopColor="#fff" />
-            <stop offset="100%" stopColor="#888" />
-          </linearGradient>
-          <mask id={`photo-mask-${overall}`} maskUnits="userSpaceOnUse">
-            {/* Two-axis fade: stack a vertical fade with a horizontal one set to
-                multiply, yielding a soft vignette where black areas hide the
-                photo and white areas keep it fully visible. */}
-            <rect x="100" y="15" width="220" height="285" fill={`url(#photo-fade-y-${overall})`} />
-            <rect x="100" y="15" width="220" height="285" fill={`url(#photo-fade-x-${overall})`} style={{ mixBlendMode: 'multiply' }} />
-          </mask>
-        </defs>
+        {/* v33: brushed metallic body — light/mid/dark/shadow gradient. */}
+        <linearGradient id={`base-${uid}`} x1="0" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor={palette.lightest} />
+          <stop offset="25%" stopColor={palette.light} />
+          <stop offset="55%" stopColor={palette.mid} />
+          <stop offset="85%" stopColor={palette.dark} />
+          <stop offset="100%" stopColor={palette.shadow} />
+        </linearGradient>
+        {/* Vertical sheen overlay for uneven metal-surface lighting */}
+        <linearGradient id={`sheen-${uid}`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={palette.shadow} stopOpacity="0.25" />
+          <stop offset="20%" stopColor={palette.lightest} stopOpacity="0.35" />
+          <stop offset="50%" stopColor={palette.mid} stopOpacity="0" />
+          <stop offset="80%" stopColor={palette.light} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={palette.shadow} stopOpacity="0.3" />
+        </linearGradient>
+        {/* Bottom stats panel: distinct lighter surface */}
+        <linearGradient id={`panel-${uid}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={palette.panelLight} />
+          <stop offset="50%" stopColor={palette.panelMid} />
+          <stop offset="100%" stopColor={palette.panelDark} />
+        </linearGradient>
+        {/* Brushed-metal hairlines pattern */}
+        <pattern id={`brush-${uid}`} x="0" y="0" width="3" height="80" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
+          <line x1="0" y1="0" x2="0" y2="80" stroke={palette.shadow} strokeWidth="0.18" opacity="0.18" />
+        </pattern>
+        {/* Halftone dots covering the top half */}
+        <pattern id={`dots-${uid}`} x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
+          <circle cx="2.5" cy="2.5" r="0.7" fill={palette.shadow} opacity="0.35" />
+        </pattern>
+        {/* Player photo soft feather: photo blends into the gold body */}
+        <radialGradient id={`ph-fade-${uid}`} cx="0.5" cy="0.45" r="0.55">
+          <stop offset="0%" stopColor="#fff" stopOpacity="1" />
+          <stop offset="50%" stopColor="#fff" stopOpacity="0.9" />
+          <stop offset="80%" stopColor="#fff" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
+        <mask id={`ph-mask-${uid}`}>
+          <rect width="320" height="510" fill="black" />
+          <rect x="50" y="-10" width="290" height="310" fill={`url(#ph-fade-${uid})`} />
+        </mask>
+        <clipPath id={`cc-${uid}`}><path d={cardPath} /></clipPath>
+        <clipPath id={`top-clip-${uid}`}><rect x="0" y="0" width="320" height="293" /></clipPath>
+      </defs>
 
-        {/* MAIN CARD BODY */}
-        <path d={cardPath} fill={`url(#card-bg-${overall}-${tier.name})`} stroke={palette.stroke} strokeWidth="1.5" strokeOpacity="0.4" />
+      {/* 1. METALLIC CARD BASE + sheen + brushed hairlines */}
+      <path d={cardPath} fill={`url(#base-${uid})`} />
+      <g clipPath={`url(#cc-${uid})`}>
+        <rect width="320" height="510" fill={`url(#sheen-${uid})`} />
+        <rect width="320" height="510" fill={`url(#brush-${uid})`} />
+      </g>
 
-        {/* DIAGONAL RIBBONS — characteristic FIFA flourishes. Clipped to the
-            left column (behind the OVR/badge stack) so they don't run across
-            the player photo on the right. */}
-        <clipPath id={`ribbon-clip-${overall}`}>
-          <rect x="0" y="0" width="105" height="300" />
-        </clipPath>
-        <g clipPath={`url(#ribbon-clip-${overall})`} opacity="0.5">
-          <path d="M -20 60 Q 100 100 320 50 L 320 80 Q 100 130 -20 90 Z" fill={palette.ribbon} />
-          <path d="M -20 130 Q 100 170 320 120 L 320 145 Q 100 195 -20 155 Z" fill={palette.ribbon} opacity="0.6" />
-          <path d="M -20 200 Q 100 240 320 190 L 320 215 Q 100 265 -20 225 Z" fill={palette.ribbon} opacity="0.4" />
-        </g>
-
-        {/* PLAYER IMAGE / FALLBACK — fills the right side of the upper area */}
-        <g clipPath={`url(#portrait-clip-${overall})`}>
-          {account.imageUrl ? (
-            <image
-              href={account.imageUrl}
-              x="110" y="20"
-              width="200" height="270"
-              preserveAspectRatio="xMidYMin slice"
-              mask={`url(#photo-mask-${overall})`}
-            />
-          ) : (
-            <text
-              x="220" y="200"
-              fontFamily="Anton, sans-serif"
-              fontSize="180"
-              fill={palette.dark}
-              opacity="0.18"
-              textAnchor="middle"
-            >{account.username.charAt(0).toUpperCase()}</text>
+      {/* 2. TOP HALF: halftone dots + player photo */}
+      <g clipPath={`url(#top-clip-${uid})`}>
+        <g clipPath={`url(#cc-${uid})`}>
+          <rect x="0" y="0" width="320" height="293" fill={`url(#dots-${uid})`} opacity="0.5" />
+          {account.imageUrl && (
+            <g mask={`url(#ph-mask-${uid})`} opacity="0.62">
+              <image href={account.imageUrl} x="50" y="-10" width="290" height="310" preserveAspectRatio="xMidYMid slice" />
+            </g>
           )}
         </g>
+      </g>
 
-        {/* OVR — big, top-left */}
-        <text
-          x="55" y="65"
-          fontFamily="Anton, sans-serif"
-          fontSize="56"
-          fill={palette.stroke}
-          textAnchor="middle"
-        >{displayOverall}</text>
-        {/* POSITION — directly below OVR, smaller */}
-        <text
-          x="55" y="92"
-          fontFamily="Anton, sans-serif"
-          fontSize="22"
-          fill={palette.stroke}
-          textAnchor="middle"
-        >{account.position}</text>
+      {/* 3. DIVIDER LINE between photo area and stats panel */}
+      <g clipPath={`url(#cc-${uid})`}>
+        <line x1="20" y1="293" x2="300" y2="293" stroke={palette.shadow} strokeWidth="1" opacity="0.45" />
+        <line x1="20" y1="294" x2="300" y2="294" stroke={palette.lightest} strokeWidth="0.4" opacity="0.6" />
+        <rect x="0" y="293" width="320" height="217" fill={`url(#panel-${uid})`} />
+        <line x1="20" y1="295" x2="300" y2="295" stroke={palette.lightest} strokeWidth="0.5" opacity="0.6" />
+      </g>
 
-        {/* UNRANKED tag — shown until the player has 3 games. Explains the 0s. */}
-        {showZeroStats && (
-          <text
-            x="160" y="300"
-            fontFamily="Russo One, sans-serif"
-            fontSize={size === 'lg' ? '11' : '9'}
-            fill={palette.stroke}
-            opacity="0.75"
-            textAnchor="middle"
-            letterSpacing="1.5"
-          >UNRANKED · {games}/{3} GAMES</text>
-        )}
+      {/* 4. TOTW MARKER (above OVR, big and prominent) */}
+      {isTotw && (
+        <text x="47" y="78" fontFamily="Anton, sans-serif" fontSize="22" fill="#2196f3" textAnchor="middle" letterSpacing="2.5" style={{ paintOrder: 'stroke', stroke: '#0d47a1', strokeWidth: 0.9 }}>TOTW</text>
+      )}
 
-        {/* NAPL crest — full league badge (already has its own white field
-            and navy border, so no extra backing shape is needed). */}
-        <image
-          href={NAPL_LOGO_SRC}
-          x="33" y="104"
-          width="44" height="48"
-          preserveAspectRatio="xMidYMid meet"
-        />
+      {/* 5. OVR + POS + FLAG + TEAM (left column, centered at x=47) */}
+      <text x="47" y={ovrY} fontFamily="Anton, sans-serif" fontSize="42" fill={palette.text} textAnchor="middle" letterSpacing="-0.5">{displayOverall}</text>
+      <text x="47" y={posY} fontFamily="Anton, sans-serif" fontSize="18" fill={palette.text} textAnchor="middle" letterSpacing="2">{account.position}</text>
 
-        {/* TEAM LOGO SLOT — always reserved square. Shows the team logo/tag
-            when the player is on a team, or a "FREE AGENT" badge when not. */}
-        <rect x="34" y="166" width="42" height="42" rx="3"
-          fill={team?.logoUrl ? 'transparent' : (team ? (team.color || palette.dark) : '#ffffff')}
-          fillOpacity={team ? 1 : 0.9}
-          stroke={team ? 'none' : palette.stroke}
-          strokeWidth="1"
-          strokeOpacity="0.3"
-        />
-        {team?.logoUrl ? (
-          <image
-            href={team.logoUrl}
-            x="34" y="166"
-            width="42" height="42"
-            preserveAspectRatio="xMidYMid meet"
-          />
-        ) : team ? (
-          <text
-            x="55" y="194"
-            fontFamily="Russo One, sans-serif"
-            fontSize="14"
-            fill="#ffffff"
-            textAnchor="middle"
-            letterSpacing="1"
-          >{team.tag}</text>
-        ) : (
-          // FREE AGENT — no team. Two short lines fit the 42px square.
-          <g>
-            <text x="55" y="184" fontFamily="Russo One, sans-serif" fontSize="9"
-              fill={palette.stroke} textAnchor="middle" letterSpacing="0.5">FREE</text>
-            <text x="55" y="196" fontFamily="Russo One, sans-serif" fontSize="9"
-              fill={palette.stroke} textAnchor="middle" letterSpacing="0.5">AGENT</text>
-          </g>
-        )}
-
-        {/* COUNTRY FLAG — below the team logo slot */}
-        {account.country && flagUrl(account.country) && (
-          <g>
-            {/* white rounded backing so the flag reads on any tier color */}
-            <rect x="35" y="224" width="40" height="28" rx="3"
-              fill="#ffffff" stroke={palette.stroke} strokeWidth="0.8" strokeOpacity="0.35" />
-            <image
-              href={flagUrl(account.country)}
-              x="37" y="226" width="36" height="24"
-              preserveAspectRatio="xMidYMid slice"
-            />
-          </g>
-        )}
-
-        {/* INNER STAT BAND */}
-        <path d={bandPath} fill={`url(#band-bg-${overall}-${tier.name})`} stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.3" />
-
-        {/* NAME — across the top of the band, with a thin line under.
-            Award winners get a black "label" bar behind the name; the name
-            text keeps the tier color so you can still read their tier at a glance. */}
-        {hasAwards && (() => {
-          // Tier-colored text for the name on the black bar
-          const tierTextColor =
-            tier.name === 'DIAMOND' ? '#bfe4f0' :
-            tier.name === 'GOLD'    ? '#f5cc3e' :
-            tier.name === 'SILVER'  ? '#dfe4e8' :
-                                      '#d99c5c'; // bronze
-          return (
-            // Clip to the card shape so the bar follows the narrowing card edges
-            <g clipPath={`url(#card-clip-${overall})`}>
-              {/* Black label bar — spans the full available width at y=305. */}
-              <rect x="0" y="305" width="320" height="26"
-                fill="#0a0a0e" />
-              {/* thin gold sheen lines top + bottom of the bar */}
-              <rect x="0" y="306" width="320" height="2"
-                fill="#d4af37" fillOpacity="0.45" />
-              <rect x="0" y="328" width="320" height="1.5"
-                fill="#d4af37" fillOpacity="0.3" />
-            </g>
-          );
-        })()}
-        <text
-          x="160" y={hasAwards ? 319 : 324}
-          fontFamily="Anton, sans-serif"
-          fontSize="22"
-          fill={hasAwards
-            ? (tier.name === 'DIAMOND' ? '#bfe4f0'
-             : tier.name === 'GOLD'    ? '#f5cc3e'
-             : tier.name === 'SILVER'  ? '#dfe4e8'
-             : '#d99c5c')
-            : palette.stroke}
-          textAnchor="middle"
-          dominantBaseline={hasAwards ? 'central' : 'auto'}
-          letterSpacing="2"
-        >{account.username.toUpperCase().slice(0, 14)}</text>
-        {!hasAwards && (
-          <line x1="50" y1="332" x2="270" y2="332" stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.4" />
-        )}
-
-        {/* STATS — two columns, classic FIFA layout */}
-        {(() => {
-          const isGK = account.position === 'GK';
-          // displayStats is zeroed for players with fewer than 3 games
-          const fmtPerGame = (n) => games > 0 && !showZeroStats ? (n / games).toFixed(1) : '0.0';
-          const leftStats = isGK
-            ? [
-                ['SAVES', fmtPerGame(displayStats.saves || 0)],
-                ['CATCH', fmtPerGame(displayStats.catches || 0)],
-                ['CLEAN', displayStats.cleanSheets || 0],
-              ]
-            : [
-                ['GOALS', displayStats.goals || 0],
-                ['ASSIST', displayStats.assists || 0],
-                ['PASS',  fmtPerGame(displayStats.passes || 0)],
-              ];
-          const rightStats = isGK
-            ? [['GAMES', games]]
-            : [
-                ['SHO%', (displayStats.shots || 0) > 0 ? Math.round(((displayStats.goals || 0) / displayStats.shots) * 100) : 0],
-                ['TKL',  fmtPerGame(displayStats.tackles || 0)],
-                ['INT',  fmtPerGame(displayStats.interceptions || 0)],
-              ];
-          const startY = 360;
-          const rowGap = 26;
-          return (
-            <>
-              {leftStats.map(([lbl, val], i) => (
-                <g key={`l-${i}`}>
-                  <text x="100" y={startY + i * rowGap}
-                    fontFamily="Russo One, sans-serif" fontSize="18" fill={palette.stroke}
-                    textAnchor="end">{val}</text>
-                  <text x="108" y={startY + i * rowGap}
-                    fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.stroke} opacity="0.7"
-                    textAnchor="start" letterSpacing="1.5">{lbl}</text>
-                </g>
-              ))}
-              {/* Vertical divider between columns */}
-              <line x1="160" y1={startY - 16} x2="160" y2={startY + (leftStats.length - 1) * rowGap + 6}
-                stroke={palette.stroke} strokeWidth="1" strokeOpacity="0.3" />
-              {rightStats.map(([lbl, val], i) => (
-                <g key={`r-${i}`}>
-                  <text x="220" y={startY + i * rowGap}
-                    fontFamily="Russo One, sans-serif" fontSize="18" fill={palette.stroke}
-                    textAnchor="end">{val}</text>
-                  <text x="228" y={startY + i * rowGap}
-                    fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.stroke} opacity="0.7"
-                    textAnchor="start" letterSpacing="1.5">{lbl}</text>
-                </g>
-              ))}
-            </>
-          );
-        })()}
-
-        {/* TIER BADGE — top-right corner of the card body */}
-        <g transform={`translate(260, 26)`}>
-          <polygon
-            points="-22,-10 22,-10 28,0 22,10 -22,10 -28,0"
-            fill={palette.bandLight}
-            stroke={palette.stroke}
-            strokeWidth="0.7"
-            strokeOpacity="0.5"
-          />
-          <text
-            x="0" y="3"
-            fontFamily="Russo One, sans-serif"
-            fontSize="9"
-            fill={palette.stroke}
-            textAnchor="middle"
-            letterSpacing="1.5"
-          >{tier.name}</text>
+      {account.country && flagUrl(account.country) && (
+        <g>
+          <rect x="32" y="177" width="30" height="20" rx="2" fill={palette.text} fillOpacity="0.18" stroke={palette.shadow} strokeWidth="0.5" strokeOpacity="0.5" />
+          <image href={flagUrl(account.country)} x="33" y="178" width="28" height="18" preserveAspectRatio="xMidYMid slice" />
         </g>
+      )}
+
+      {!hideTeam && (team ? (
+        team.logoUrl ? (
+          <g>
+            <circle cx="47" cy="222" r="14" fill="#ffffff" stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.55" />
+            <image href={team.logoUrl} x="33" y="208" width="28" height="28" preserveAspectRatio="xMidYMid meet" clipPath={`circle(13px at 14px 14px)`} />
+          </g>
+        ) : (
+          <g>
+            <circle cx="47" cy="222" r="14" fill={team.color || '#1a5c2c'} stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.55" />
+            <text x="47" y="226" fontFamily="Russo One, sans-serif" fontSize="10" fill="#fff" textAnchor="middle" letterSpacing="0.3">{team.tag}</text>
+          </g>
+        )
+      ) : (
+        <g transform="translate(47 222)">
+          <circle r="14" fill={palette.lightest} fillOpacity="0.25" stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.55" strokeDasharray="2 2" />
+          <text y="-2" fontFamily="Russo One, sans-serif" fontSize="6" fill={palette.text} textAnchor="middle">FREE</text>
+          <text y="6" fontFamily="Russo One, sans-serif" fontSize="6" fill={palette.text} textAnchor="middle">AGENT</text>
+        </g>
+      ))}
+
+      {/* 6. NAME — full-width black label if player has awards */}
+      {hasAwards ? (
+        <g>
+          <g clipPath={`url(#cc-${uid})`}>
+            <rect x="0" y="305" width="320" height="34" fill="#000000" opacity="0.94" />
+            <line x1="0" y1="305" x2="320" y2="305" stroke={palette.awardText} strokeWidth="0.6" opacity="0.55" />
+            <line x1="0" y1="339" x2="320" y2="339" stroke={palette.awardText} strokeWidth="0.6" opacity="0.55" />
+          </g>
+          <text x="160" y="328" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 14)}</text>
+        </g>
+      ) : (
+        <g>
+          <text x="160" y="326" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.text} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 14)}</text>
+          <line x1="55" y1="338" x2="265" y2="338" stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.6" />
+        </g>
+      )}
+
+      {/* 7. STATS GRID 3x2 — center-anchored numbers, symmetric around x=160 */}
+      <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
+        <text x="62" y="364" fontSize="20" textAnchor="middle">{displayStats.goals}</text>
+        <text x="100" y="364" fontSize="11" letterSpacing="1.5">GOALS</text>
+        <text x="62" y="390" fontSize="20" textAnchor="middle">{displayStats.assists}</text>
+        <text x="100" y="390" fontSize="11" letterSpacing="1.5">ASSIST</text>
+        <text x="62" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.passes || 0).toFixed(1)}</text>
+        <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS</text>
+
+        <text x="220" y="364" fontSize="20" textAnchor="middle">{displayStats.shots}</text>
+        <text x="256" y="364" fontSize="11" letterSpacing="1.5">SHO%</text>
+        <text x="220" y="390" fontSize="20" textAnchor="middle">{Number(displayStats.tackles || 0).toFixed(1)}</text>
+        <text x="256" y="390" fontSize="11" letterSpacing="1.5">TKL</text>
+        <text x="220" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.interceptions || 0).toFixed(1)}</text>
+        <text x="256" y="416" fontSize="11" letterSpacing="1.5">INT</text>
+      </g>
+      <line x1="160" y1="348" x2="160" y2="422" stroke={palette.shadow} strokeWidth="0.7" strokeOpacity="0.55" />
+
+      {/* 8. NAPL CREST at bottom center */}
+      <image href={NAPL_LOGO_SRC} x="146" y="438" width="28" height="28" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+
+      {/* 9. Outer stroke + inner highlight */}
+      <path d={cardPath} fill="none" stroke={palette.shadow} strokeWidth="1.8" strokeOpacity="0.8" />
+      <path d={cardPath} fill="none" stroke={palette.lightest} strokeWidth="0.5" strokeOpacity="0.8" transform="translate(0 -0.5)" />
     </svg>
   );
 
@@ -1357,168 +1207,111 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       style={{ display: 'block' }}
     >
       <defs>
-        <linearGradient id={`back-bg-${overall}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={palette.mid} />
-          <stop offset="100%" stopColor={palette.dark} />
+        {/* Same metallic body as the front, so the back feels like the same object */}
+        <linearGradient id={`b-base-${uid}`} x1="0" y1="0" x2="0.5" y2="1">
+          <stop offset="0%" stopColor={palette.lightest} />
+          <stop offset="25%" stopColor={palette.light} />
+          <stop offset="55%" stopColor={palette.mid} />
+          <stop offset="85%" stopColor={palette.dark} />
+          <stop offset="100%" stopColor={palette.shadow} />
         </linearGradient>
+        <linearGradient id={`b-sheen-${uid}`} x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor={palette.shadow} stopOpacity="0.25" />
+          <stop offset="20%" stopColor={palette.lightest} stopOpacity="0.35" />
+          <stop offset="50%" stopColor={palette.mid} stopOpacity="0" />
+          <stop offset="80%" stopColor={palette.light} stopOpacity="0.18" />
+          <stop offset="100%" stopColor={palette.shadow} stopOpacity="0.3" />
+        </linearGradient>
+        <pattern id={`b-brush-${uid}`} x="0" y="0" width="3" height="80" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
+          <line x1="0" y1="0" x2="0" y2="80" stroke={palette.shadow} strokeWidth="0.18" opacity="0.18" />
+        </pattern>
+        <pattern id={`b-dots-${uid}`} x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
+          <circle cx="2.5" cy="2.5" r="0.7" fill={palette.shadow} opacity="0.35" />
+        </pattern>
+        <clipPath id={`b-cc-${uid}`}><path d={cardPath} /></clipPath>
       </defs>
 
-      {/* card body — same shape, tier-toned */}
-      <path d={cardPath} fill={`url(#back-bg-${overall})`} stroke={palette.stroke} strokeWidth="1.5" strokeOpacity="0.4" />
-
-      {/* dark inner panel so text reads cleanly. The pivot is shifted DOWN
-          (y=300, not the geometric center y=255) so the inset extends further
-          into the pointed chin area — keeping "MEMBER SINCE" fully on the
-          dark panel instead of straddling the tier-colored edge. */}
-      <g transform="translate(160 300) scale(0.93) translate(-160 -300)">
-        <path d={cardPath} fill="#0d1018" fillOpacity="0.92" />
+      {/* Metallic body (same as front, no photo) */}
+      <path d={cardPath} fill={`url(#b-base-${uid})`} />
+      <g clipPath={`url(#b-cc-${uid})`}>
+        <rect width="320" height="510" fill={`url(#b-sheen-${uid})`} />
+        <rect width="320" height="510" fill={`url(#b-brush-${uid})`} />
+        {/* Halftone dots over the whole card (no photo to compete with) */}
+        <rect width="320" height="510" fill={`url(#b-dots-${uid})`} opacity="0.4" />
       </g>
-      {/* thin gold frame just inside the card edge */}
-      <path d={cardPath} fill="none" stroke="#d4af37" strokeWidth="1.5" strokeOpacity="0.55" />
 
-      {/* header — text is white so it reads on the dark inner panel.
-          (C.cream is actually navy in this codebase; we use #ffffff explicitly here.) */}
-      <text x="160" y="62" fontFamily="Anton, sans-serif" fontSize="24"
-        fill="#ffffff" textAnchor="middle" letterSpacing="2">
-        {account.username.toUpperCase().slice(0, 14)}
+      {/* Header band at top — black bar with player name + position + OVR */}
+      <g clipPath={`url(#b-cc-${uid})`}>
+        <rect x="0" y="0" width="320" height="80" fill="#000000" opacity="0.78" />
+        <line x1="0" y1="80" x2="320" y2="80" stroke={palette.awardText} strokeWidth="0.8" opacity="0.5" />
+      </g>
+      <text x="160" y="38" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 16)}</text>
+      <text x="160" y="60" fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5" opacity="0.85">
+        {account.position} · {displayOverall} OVR{isTotw ? ' · TOTW' : ''}
       </text>
-      <text x="160" y="80" fontFamily="JetBrains Mono, monospace" fontSize="9"
-        fill="#ffffffaa" textAnchor="middle" letterSpacing="3">
-        {account.position} • CAREER RECORD
-      </text>
-      <line x1="50" y1="92" x2="270" y2="92" stroke="#d4af37" strokeWidth="1" strokeOpacity="0.5" />
 
-      {/* TROPHIES section */}
-      <text x="160" y="120" fontFamily="Russo One, sans-serif" fontSize="13"
-        fill="#d4af37" textAnchor="middle" letterSpacing="2">TROPHY CABINET</text>
+      {/* TROPHY CABINET section */}
+      <text x="22" y="106" fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.text} letterSpacing="2.5">TROPHY CABINET</text>
+      <line x1="22" y1="112" x2="298" y2="112" stroke={palette.shadow} strokeWidth="0.6" opacity="0.55" />
 
       {cabinetItems.length === 0 ? (
-        <text x="160" y="155" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-          fill="#ffffff88" textAnchor="middle">No awards yet — keep grinding.</text>
-      ) : (
-        cabinetItems.map((item, i) => {
-          const rowY = 138 + i * 28;
-
-          // Shared gold gradient (used by award icons). Each row gets a unique id.
-          const gid = `cab-grad-${i}`;
-          const grad = (
-            <defs>
-              <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#fce98a" />
-                <stop offset="40%" stopColor="#f5cc3e" />
-                <stop offset="100%" stopColor="#8a6914" />
-              </linearGradient>
-              {/* silver gradient — only used by runner-up rows */}
-              <linearGradient id={`${gid}-silver`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f5f7fa" />
-                <stop offset="50%" stopColor="#cdd3dc" />
-                <stop offset="100%" stopColor="#7a8290" />
-              </linearGradient>
-            </defs>
-          );
-
-          // CHAMPIONSHIP TROPHY ROW (winner = gold cup, runner_up = silver cup)
-          if (item.kind === 'champ') {
-            const isSilver = item.placement === 'runner_up';
-            const tgid = isSilver ? `${gid}-silver` : gid;
-            const stroke = isSilver ? '#4a4e54' : '#5c4710';
-            const shine = isSilver ? '#ffffff' : '#fff5b8';
-            const label = isSilver ? 'Runner-Up' : 'Champion';
-            // Trophy is in 100x120 viewBox; row icon area is ~24px wide.
-            // Scale 0.2 fits and centers the cup vertically in the 24px row.
-            return (
-              <g key={i} transform={`translate(40 ${rowY})`}>
-                {grad}
-                <g transform="translate(0 -4) scale(0.22)">
-                  {/* Square base */}
-                  <rect x="28" y="108" width="44" height="10" rx="1.5" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
-                  <rect x="32" y="100" width="36" height="10" rx="1" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
-                  {/* Stem */}
-                  <rect x="44" y="86" width="12" height="16" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
-                  {/* Stem flare */}
-                  <path d="M 38 86 L 62 86 L 58 78 L 42 78 Z" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
-                  {/* Cup */}
-                  <path d="M 28 22 L 72 22 L 72 40 Q 72 70 50 78 Q 28 70 28 40 Z" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="1" />
-                  {/* Rim */}
-                  <rect x="25" y="18" width="50" height="6" rx="1" fill={`url(#${tgid})`} stroke={stroke} strokeWidth="0.8" />
-                  {/* Handles */}
-                  <path d="M 28 28 Q 12 28 12 42 Q 12 56 28 56" fill="none" stroke={`url(#${tgid})`} strokeWidth="5" strokeLinecap="round" />
-                  <path d="M 72 28 Q 88 28 88 42 Q 88 56 72 56" fill="none" stroke={`url(#${tgid})`} strokeWidth="5" strokeLinecap="round" />
-                  {/* Highlight */}
-                  <ellipse cx="42" cy="35" rx="6" ry="14" fill={shine} opacity="0.45" />
-                </g>
-                <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-                  fill="#ffffff" letterSpacing="0.5">
-                  {label}
-                </text>
-                {item.season && (
-                  <text x="240" y="13" fontFamily="JetBrains Mono, monospace" fontSize="10"
-                    fill={isSilver ? '#cdd3dc' : '#d4af37'} textAnchor="end">{item.season}</text>
-                )}
-              </g>
-            );
-          }
-
-          // INDIVIDUAL AWARD ROW (Golden Glove, Striker, Defender, Playmaker)
-          const renderIcon = () => {
-            if (item.awardId === 'striker') {
-              return (<g transform="translate(0 -3) scale(0.7)">{grad}
-                <path d="M 28 22 L 28 24 Q 28 25.5 26.5 25.5 L 5 25.5 Q 3.5 25.5 3.5 24 L 3.5 21 Q 3.5 19 6 18.5 Q 8 18 10 16.5 Q 11 15 11 13 Q 11 11.5 12.5 11.5 L 15 11.5 Q 16.5 11.5 17 13 L 17.5 16 Q 18 17.5 19.5 17.5 L 25 17.5 Q 28 17.5 28 20 Z"
-                      fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.7" strokeLinejoin="round" />
-                <path d="M 12.5 12.5 Q 14 14 16.5 14 L 18 14" fill="none" stroke="#5c4710" strokeWidth="0.6" opacity="0.55" />
-                <path d="M 14 17 L 16.5 19" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
-                <path d="M 16 17.5 L 18.5 19.5" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
-                <path d="M 18 18 L 20.5 20" stroke="#5c4710" strokeWidth="0.7" strokeLinecap="round" opacity="0.75" />
-                <rect x="6" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
-                <rect x="12" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
-                <rect x="18" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
-                <rect x="24" y="25.5" width="2" height="2" rx="0.3" fill="#5c4710" />
-              </g>);
-            }
-            if (item.awardId === 'glove') {
-              return (<g transform="translate(0 -3) scale(0.7)">{grad}
-                <path d="M9 6 Q9 3 12 3 L20 3 Q23 3 23 6 L23 14 L25 14 Q27 14 27 16 L27 20 Q27 22 25 22 L23 22 L23 26 Q23 28 21 28 L11 28 Q9 28 9 26 Z" fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" />
-                <path d="M12 6 L12 14 M16 6 L16 14 M20 6 L20 14" stroke="#5c4710" strokeWidth="0.6" fill="none" opacity="0.5" />
-              </g>);
-            }
-            if (item.awardId === 'defender') {
-              return (<g transform="translate(0 -3) scale(0.7)">{grad}
-                <path d="M16 3 L26 6 L26 16 Q26 24 16 29 Q6 24 6 16 L6 6 Z" fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" />
-                <path d="M16 10 L19 14 L23 14 L20 17 L21 21 L16 19 L11 21 L12 17 L9 14 L13 14 Z" fill="#5c4710" opacity="0.7" />
-              </g>);
-            }
-            if (item.awardId === 'playmaker') {
-              return (<g transform="translate(0 -3) scale(0.7)">{grad}
-                <path d="M 16 3 L 19.5 12.2 L 29 12.6 L 21.5 18.6 L 24.2 28 L 16 22.7 L 7.8 28 L 10.5 18.6 L 3 12.6 L 12.5 12.2 Z"
-                      fill={`url(#${gid})`} stroke="#5c4710" strokeWidth="0.8" strokeLinejoin="round" />
-                <path d="M 16 3 L 19.5 12.2 L 16 12 L 12.5 12.2 Z" fill="#fce98a" opacity="0.55" />
-              </g>);
-            }
-            return null;
-          };
+        <text x="160" y="180" fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.text} textAnchor="middle" opacity="0.55" letterSpacing="1.5">NO TROPHIES YET</text>
+      ) : cabinetItems.map((item, i) => {
+        const y = 130 + i * 22;
+        if (item.kind === 'champ') {
+          const label = item.placement === 'runner_up' ? 'RUNNER-UP' : 'CHAMPION';
           return (
-            <g key={i} transform={`translate(40 ${rowY})`}>
-              {renderIcon()}
-              <text x="30" y="13" fontFamily="Barlow Condensed, sans-serif" fontSize="14"
-                fill="#ffffff" letterSpacing="0.5">
-                {AWARD_FULL_NAMES[item.awardId] || 'Award'}
-              </text>
+            <g key={`item-${i}`} transform={`translate(22 ${y})`}>
+              <text x="0" y="0" fontSize="14" fill={palette.awardText}>🏆</text>
+              <text x="22" y="0" fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fontSize="13" fill={palette.text}>{label}</text>
               {item.season && (
-                <text x="240" y="13" fontFamily="JetBrains Mono, monospace" fontSize="10"
-                  fill="#d4af37" textAnchor="end">{item.season}</text>
+                <text x="276" y="0" fontFamily="Russo One, sans-serif" fontSize="10" fill={palette.text} opacity="0.8" textAnchor="end">{item.season}</text>
               )}
             </g>
           );
-        })
-      )}
+        }
+        // award
+        const fullName = (AWARD_FULL_NAMES[item.awardId] || item.awardId || '').toUpperCase();
+        return (
+          <g key={`item-${i}`} transform={`translate(22 ${y})`}>
+            <circle cx="6" cy="-4" r="3" fill={palette.awardText} />
+            <text x="20" y="0" fontFamily="Barlow Condensed, sans-serif" fontWeight="600" fontSize="13" fill={palette.text}>{fullName}</text>
+            {item.season && (
+              <text x="276" y="0" fontFamily="Russo One, sans-serif" fontSize="10" fill={palette.text} opacity="0.65" textAnchor="end">{item.season}</text>
+            )}
+          </g>
+        );
+      })}
 
-      {/* JOIN DATE footer — raised so it sits cleanly inside the dark inset
-          rather than straddling the tier-colored chin of the card */}
-      <line x1="50" y1="425" x2="270" y2="425" stroke="#ffffff33" strokeWidth="1" />
-      <text x="160" y="443" fontFamily="JetBrains Mono, monospace" fontSize="9"
-        fill="#ffffff88" textAnchor="middle" letterSpacing="2">MEMBER SINCE</text>
-      <text x="160" y="460" fontFamily="Barlow Condensed, sans-serif" fontSize="13"
-        fill="#ffffff" textAnchor="middle">{joinDate}</text>
+      {/* CAREER TOTALS section */}
+      <line x1="22" y1="370" x2="298" y2="370" stroke={palette.shadow} strokeWidth="0.6" opacity="0.55" />
+      <text x="22" y="384" fontFamily="Russo One, sans-serif" fontSize="10" fill={palette.text} letterSpacing="2.5" opacity="0.85">CAREER TOTALS</text>
+
+      <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
+        <text x="40" y="410" fontSize="16" textAnchor="middle">{displayStats.games || 0}</text>
+        <text x="40" y="424" fontSize="8" textAnchor="middle" opacity="0.75" letterSpacing="1">GAMES</text>
+
+        <text x="100" y="410" fontSize="16" textAnchor="middle">{displayStats.goals || 0}</text>
+        <text x="100" y="424" fontSize="8" textAnchor="middle" opacity="0.75" letterSpacing="1">GOALS</text>
+
+        <text x="160" y="410" fontSize="16" textAnchor="middle">{displayStats.assists || 0}</text>
+        <text x="160" y="424" fontSize="8" textAnchor="middle" opacity="0.75" letterSpacing="1">ASSISTS</text>
+
+        <text x="220" y="410" fontSize="16" textAnchor="middle">{awards.length}</text>
+        <text x="220" y="424" fontSize="8" textAnchor="middle" opacity="0.75" letterSpacing="1">AWARDS</text>
+
+        <text x="280" y="410" fontSize="16" textAnchor="middle">{(account.championships || []).length}</text>
+        <text x="280" y="424" fontSize="8" textAnchor="middle" opacity="0.75" letterSpacing="1">CUPS</text>
+      </g>
+
+      {/* MEMBER SINCE footer */}
+      <line x1="80" y1="445" x2="240" y2="445" stroke={palette.shadow} strokeWidth="0.5" opacity="0.4" />
+      <text x="160" y="460" fontFamily="Russo One, sans-serif" fontSize="9" fill={palette.text} textAnchor="middle" opacity="0.65" letterSpacing="2">MEMBER SINCE</text>
+      <text x="160" y="476" fontFamily="Anton, sans-serif" fontSize="14" fill={palette.text} textAnchor="middle" letterSpacing="2">{joinDate}</text>
+
+      {/* Outer + inner edge */}
+      <path d={cardPath} fill="none" stroke={palette.shadow} strokeWidth="1.8" strokeOpacity="0.8" />
+      <path d={cardPath} fill="none" stroke={palette.lightest} strokeWidth="0.5" strokeOpacity="0.8" transform="translate(0 -0.5)" />
     </svg>
   );
 
@@ -3100,6 +2893,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
         {[
           { id: 'stats',   label: 'STATS',   icon: BarChart3 },
           { id: 'teams',   label: 'TEAMS',   icon: Users },
+          { id: 'totw',    label: 'TOTW',    icon: Trophy },
           { id: 'players', label: 'PLAYERS', icon: User },
           { id: 'pictures',label: 'PICTURES',icon: User },
           { id: 'awards',  label: 'AWARDS',  icon: Trophy },
@@ -3143,6 +2937,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
 
       {section === 'players' && (
         <PlayersManager allPlayers={allPlayers} allTeams={allTeams} onRefresh={refresh} />
+      )}
+
+      {section === 'totw' && (
+        <TotwManager allTeams={allTeams} onRefresh={refresh} />
       )}
 
       {section === 'season' && (
@@ -4796,6 +4594,151 @@ const StatLine = ({ label, value }) => (
     <span className="font-display text-sm" style={{ color: C.cream }}>{value}</span>
   </div>
 );
+
+
+// ============ TOTW MANAGER (admin: select Team of the Week) ============
+// Picks one approved team to flag as Team of the Week. Every player on that
+// team gets a TOTW marker on their card. Selecting a new team automatically
+// unflags the previous one — only one TOTW at a time. Stays until manually
+// changed (no auto-expiry).
+const TotwManager = ({ allTeams = [], onRefresh }) => {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState('');
+
+  const approvedTeams = allTeams.filter(t => t.status === 'approved');
+  const currentTotw = allTeams.find(t => t.totw);
+
+  const setTotw = async (teamId) => {
+    setError(''); setInfo(''); setBusy(true);
+    try {
+      // Clear any existing TOTW team first
+      for (const t of allTeams) {
+        if (t.totw && t.id !== teamId) {
+          await db.saveTeam({ ...t, totw: false, totwSetAt: null });
+        }
+      }
+      // Flag the new team (if teamId is empty, we just cleared above)
+      if (teamId) {
+        const target = allTeams.find(t => t.id === teamId);
+        if (target) {
+          await db.saveTeam({ ...target, totw: true, totwSetAt: Date.now() });
+          setInfo(`✓ ${target.name} is now Team of the Week`);
+        }
+      } else {
+        setInfo('✓ Team of the Week cleared');
+      }
+      setPickerOpen(false);
+      setSelectedId('');
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 4000);
+    } catch (e) {
+      setError('Could not update TOTW: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl p-4" style={{
+        background: `linear-gradient(135deg, #2196f322 0%, ${C.white} 100%)`,
+        border: `1px solid #2196f355`,
+      }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Trophy size={14} style={{ color: '#2196f3' }} />
+          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>TEAM OF THE WEEK</span>
+        </div>
+        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
+          Pick one team — every player on that team gets a blue "TOTW" marker on their card. Only one team can be TOTW at a time. Stays until you change it.
+        </p>
+      </div>
+
+      {info && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
+      )}
+      {error && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
+      )}
+
+      {/* CURRENT TOTW */}
+      <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+        <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>CURRENT TOTW</div>
+        {currentTotw ? (
+          <div className="flex items-center gap-3">
+            {currentTotw.logoUrl ? (
+              <img src={currentTotw.logoUrl} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: `2px solid #2196f3` }} />
+            ) : (
+              <div className="w-12 h-12 rounded-full flex items-center justify-center font-display text-lg" style={{
+                background: currentTotw.color || C.green, color: '#fff', border: `2px solid #2196f3`,
+              }}>{currentTotw.tag}</div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="font-heading tracking-wider" style={{ color: C.brandNavy }}>{currentTotw.name.toUpperCase()}</div>
+              <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
+                {(currentTotw.members || []).length} PLAYER{(currentTotw.members || []).length === 1 ? '' : 'S'}
+                {currentTotw.totwSetAt && <> · SET {new Date(currentTotw.totwSetAt).toLocaleDateString()}</>}
+              </div>
+            </div>
+            <button
+              onClick={() => setTotw('')}
+              disabled={busy}
+              className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+              style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}55` }}
+            >REMOVE</button>
+          </div>
+        ) : (
+          <div className="font-mono text-xs tracking-wider" style={{ color: `${C.brandNavy}66` }}>
+            NO TEAM OF THE WEEK SET
+          </div>
+        )}
+      </div>
+
+      {/* PICKER */}
+      <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+        <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>
+          {currentTotw ? 'CHANGE TOTW' : 'PICK TOTW'}
+        </div>
+        {!pickerOpen ? (
+          <button
+            onClick={() => setPickerOpen(true)}
+            disabled={approvedTeams.length === 0}
+            className="w-full py-2 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+            style={{ background: '#2196f3', color: '#fff' }}
+          >{approvedTeams.length === 0 ? 'NO APPROVED TEAMS YET' : (currentTotw ? 'PICK A DIFFERENT TEAM' : 'PICK A TEAM')}</button>
+        ) : (
+          <div className="space-y-2">
+            <select
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+              className="w-full rounded px-3 py-2 font-body text-sm"
+              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
+            >
+              <option value="">— Choose a team —</option>
+              {approvedTeams.map(t => (
+                <option key={t.id} value={t.id}>{t.name} ({t.tag}) · {(t.members || []).length} players</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setPickerOpen(false); setSelectedId(''); }}
+                className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+              >CANCEL</button>
+              <button
+                onClick={() => selectedId && setTotw(selectedId)}
+                disabled={!selectedId || busy}
+                className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                style={{ background: '#2196f3', color: '#fff' }}
+              >{busy ? 'SAVING…' : 'SET AS TOTW'}</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 
 // ============ PLAYERS MANAGER (admin: rename players, change teams) ============

@@ -79,6 +79,18 @@ export const auth = {
     await supabase.auth.signOut();
   },
 
+  // Update the current user's password. Used during the password-recovery
+  // flow after the user clicks the reset email link. Returns { ok } or
+  // { ok:false, reason }.
+  async updatePassword(newPassword) {
+    if (!newPassword || newPassword.length < 6) {
+      return { ok: false, reason: 'Password must be at least 6 characters.' };
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) return { ok: false, reason: error.message };
+    return { ok: true };
+  },
+
   // Returns the currently logged-in account (or null).
   // Looks up by the permanent auth user id, so username changes never break the session.
   async getCurrent() {

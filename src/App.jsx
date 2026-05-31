@@ -114,7 +114,7 @@ const COUNTRIES = [
   'Germany', 'Spain', 'Portugal', 'Italy', 'Netherlands', 'Belgium',
   'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Bosnia and Herzegovina',
   'Brazil', 'Argentina', 'Colombia', 'Chile', 'Australia', 'New Zealand', 'Japan',
-  'South Korea', 'China', 'Nigeria', 'South Africa', 'India', 'Other',
+  'South Korea', 'China', 'Russia', 'Nigeria', 'South Africa', 'India', 'Other',
 ];
 const COUNTRY_CODES = {
   'Canada': 'ca', 'United States': 'us', 'Mexico': 'mx', 'El Salvador': 'sv',
@@ -125,7 +125,7 @@ const COUNTRY_CODES = {
   'Bosnia and Herzegovina': 'ba',
   'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Chile': 'cl',
   'Australia': 'au', 'New Zealand': 'nz', 'Japan': 'jp',
-  'South Korea': 'kr', 'China': 'cn', 'Nigeria': 'ng', 'South Africa': 'za',
+  'South Korea': 'kr', 'China': 'cn', 'Russia': 'ru', 'Nigeria': 'ng', 'South Africa': 'za',
   'India': 'in',
 };
 // Returns a flag image URL for a country, or null (e.g. for "Other")

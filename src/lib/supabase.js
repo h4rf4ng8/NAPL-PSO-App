@@ -61,18 +61,26 @@ export const auth = {
   },
 
   // Send a password-reset email. Only works for accounts that have a real
-  // email on file. Returns { ok } or { ok:false, reason }.
+  // email on file. Uses a SECURITY DEFINER function to look up the email
+  // since the accounts table itself is read-only to authenticated users
+  // (and the user is signed out when triggering this flow).
+  // Returns { ok } or { ok:false, reason }.
   async sendPasswordReset(username) {
-    const account = await db.getAccount(username);
-    if (!account) return { ok: false, reason: 'No account with that username.' };
-    if (!account.email) {
-      return { ok: false, reason: 'This account has no email on file. Add one from the Home page after logging in, or ask an admin.' };
+    if (!username || !username.trim()) return { ok: false, reason: 'Please enter your username.' };
+    const { data: email, error: lookupError } = await supabase
+      .rpc('get_email_for_password_reset', { p_username: username.trim() });
+    if (lookupError) {
+      console.error('Password reset lookup error:', lookupError);
+      return { ok: false, reason: 'Could not look up account. Please try again.' };
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(account.email, {
+    if (!email) {
+      return { ok: false, reason: 'No account with that username, or that account has no email on file. Ask an admin if you forgot which email you registered with.' };
+    }
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: window.location.origin,
     });
     if (error) return { ok: false, reason: error.message };
-    return { ok: true, email: account.email };
+    return { ok: true, email };
   },
 
   async signOut() {

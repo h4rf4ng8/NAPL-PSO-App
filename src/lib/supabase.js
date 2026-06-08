@@ -398,4 +398,108 @@ export const db = {
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToNews);
   },
+
+  // ============ TOTW VOTING ============
+  // List all voting periods (most recent first). Used by both admin (to manage
+  // periods) and players (to see if a voting period is currently open).
+  async listTotwPeriods() {
+    const { data, error } = await supabase
+      .from('totw_voting_periods')
+      .select('*')
+      .order('opens_at', { ascending: false });
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => ({
+      id: r.id,
+      opensAt: new Date(r.opens_at).getTime(),
+      closesAt: new Date(r.closes_at).getTime(),
+      status: r.status,
+      eligiblePlayers: r.eligible_players || [],
+      winners: r.winners,
+      createdBy: r.created_by,
+      createdAt: new Date(r.created_at).getTime(),
+      resolvedAt: r.resolved_at ? new Date(r.resolved_at).getTime() : null,
+    }));
+  },
+
+  async createTotwPeriod({ closesAt, eligiblePlayers, createdBy }) {
+    const { data, error } = await supabase
+      .from('totw_voting_periods')
+      .insert({
+        closes_at: new Date(closesAt).toISOString(),
+        eligible_players: eligiblePlayers || [],
+        created_by: createdBy,
+        status: 'open',
+      })
+      .select()
+      .single();
+    if (error) { console.error(error); throw error; }
+    return data;
+  },
+
+  async updateTotwPeriod(periodId, fields) {
+    const payload = {};
+    if (fields.status !== undefined) payload.status = fields.status;
+    if (fields.winners !== undefined) payload.winners = fields.winners;
+    if (fields.resolvedAt !== undefined) payload.resolved_at = new Date(fields.resolvedAt).toISOString();
+    if (fields.eligiblePlayers !== undefined) payload.eligible_players = fields.eligiblePlayers;
+    if (fields.closesAt !== undefined) payload.closes_at = new Date(fields.closesAt).toISOString();
+    const { error } = await supabase
+      .from('totw_voting_periods')
+      .update(payload)
+      .eq('id', periodId);
+    if (error) { console.error(error); throw error; }
+  },
+
+  async deleteTotwPeriod(periodId) {
+    // Votes cascade-delete via the FK
+    const { error } = await supabase
+      .from('totw_voting_periods')
+      .delete()
+      .eq('id', periodId);
+    if (error) { console.error(error); throw error; }
+  },
+
+  // List all votes for a period. Admin needs this to see tallies and pick
+  // the winners. Players need it to (a) see who they've already voted for in
+  // the current period, and (b) see live results once voting closes.
+  async listTotwVotes(periodId) {
+    const { data, error } = await supabase
+      .from('totw_votes')
+      .select('*')
+      .eq('period_id', periodId);
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => ({
+      id: r.id,
+      periodId: r.period_id,
+      voterUsername: r.voter_username,
+      position: r.position,
+      votedForUsername: r.voted_for_username,
+      votedAt: new Date(r.voted_at).getTime(),
+    }));
+  },
+
+  // Submit all 4 votes (1 GK, 1 DEF, 1 CM, 1 ST) for the current period.
+  // Wipes any prior votes by this voter in this period first so re-submission
+  // is idempotent. Returns { ok } or { ok:false, reason }.
+  async submitTotwVotes(periodId, voterUsername, votes) {
+    if (!votes || !votes.gk || !votes.def || !votes.cm || !votes.st) {
+      return { ok: false, reason: 'You need to pick one player per position.' };
+    }
+    // Wipe any prior votes for this voter+period
+    await supabase
+      .from('totw_votes')
+      .delete()
+      .eq('period_id', periodId)
+      .eq('voter_username', voterUsername);
+    // Insert the new four
+    const rows = [
+      { period_id: periodId, voter_username: voterUsername, position: 'GK',  voted_for_username: votes.gk },
+      { period_id: periodId, voter_username: voterUsername, position: 'DEF', voted_for_username: votes.def },
+      { period_id: periodId, voter_username: voterUsername, position: 'CM',  voted_for_username: votes.cm },
+      { period_id: periodId, voter_username: voterUsername, position: 'ST',  voted_for_username: votes.st },
+    ];
+    const { error } = await supabase.from('totw_votes').insert(rows);
+    if (error) { console.error(error); return { ok: false, reason: error.message }; }
+    return { ok: true };
+  },
 };

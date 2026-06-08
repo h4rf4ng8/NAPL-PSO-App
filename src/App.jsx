@@ -2954,7 +2954,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
       )}
 
       {section === 'totw' && (
-        <TotwManager allTeams={allTeams} onRefresh={refresh} />
+        <TotwManager allPlayers={allPlayers} onRefresh={refresh} />
       )}
 
       {section === 'season' && (
@@ -4628,44 +4628,129 @@ const StatLine = ({ label, value }) => (
 // team gets a TOTW marker on their card. Selecting a new team automatically
 // unflags the previous one — only one TOTW at a time. Stays until manually
 // changed (no auto-expiry).
-const TotwManager = ({ allTeams = [], onRefresh }) => {
+// ============ TOTW MANAGER (admin: manage voting periods) ============
+// Admin opens a voting period, picks eligible players, players vote, admin
+// resolves the winners after voting closes. Each period auto-closes at
+// midnight the day after it opens.
+const TotwManager = ({ allPlayers = [], onRefresh }) => {
+  const [periods, setPeriods] = useState([]);
+  const [votes, setVotes] = useState([]);   // votes for the current open period
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [selectedPlayers, setSelectedPlayers] = useState([]); // usernames
+  const [filter, setFilter] = useState('');
 
-  const approvedTeams = allTeams.filter(t => t.status === 'approved');
-  const currentTotw = allTeams.find(t => t.totw);
-
-  const setTotw = async (teamId) => {
-    setError(''); setInfo(''); setBusy(true);
+  const refresh = async () => {
     try {
-      // Clear any existing TOTW team first
-      for (const t of allTeams) {
-        if (t.totw && t.id !== teamId) {
-          await db.saveTeam({ ...t, totw: false, totwSetAt: null });
-        }
-      }
-      // Flag the new team (if teamId is empty, we just cleared above)
-      if (teamId) {
-        const target = allTeams.find(t => t.id === teamId);
-        if (target) {
-          await db.saveTeam({ ...target, totw: true, totwSetAt: Date.now() });
-          setInfo(`✓ ${target.name} is now Team of the Week`);
-        }
+      const p = await db.listTotwPeriods();
+      setPeriods(p);
+      const open = p.find(x => x.status === 'open');
+      if (open) {
+        const v = await db.listTotwVotes(open.id);
+        setVotes(v);
       } else {
-        setInfo('✓ Team of the Week cleared');
+        setVotes([]);
       }
-      setPickerOpen(false);
-      setSelectedId('');
+    } catch (e) {
+      setError('Could not load voting data: ' + (e?.message || e));
+    }
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  const currentPeriod = periods.find(p => p.status === 'open');
+  const pastPeriods = periods.filter(p => p.status !== 'open').slice(0, 8);
+
+  // Helper: midnight the day after opens_at
+  const computeCloseTime = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
+
+  // Vote tally for current period, grouped by position
+  const tally = useMemo(() => {
+    const counts = { GK: {}, DEF: {}, CM: {}, ST: {} };
+    for (const v of votes) {
+      if (!counts[v.position]) continue;
+      counts[v.position][v.votedForUsername] = (counts[v.position][v.votedForUsername] || 0) + 1;
+    }
+    const sortPos = (obj) => Object.entries(obj).sort((a, b) => b[1] - a[1]);
+    return {
+      GK: sortPos(counts.GK),
+      DEF: sortPos(counts.DEF),
+      CM: sortPos(counts.CM),
+      ST: sortPos(counts.ST),
+    };
+  }, [votes]);
+
+  const togglePlayer = (username) => {
+    setSelectedPlayers(prev =>
+      prev.includes(username) ? prev.filter(u => u !== username) : [...prev, username]
+    );
+  };
+
+  const handleCreate = async () => {
+    setError(''); setBusy(true);
+    try {
+      if (selectedPlayers.length < 8) {
+        setError('Pick at least 8 eligible players (1 GK + 3 DEF + 2 CM + 2 ST minimum).');
+        setBusy(false); return;
+      }
+      await db.createTotwPeriod({
+        closesAt: computeCloseTime(),
+        eligiblePlayers: selectedPlayers,
+        createdBy: 'admin',
+      });
+      setInfo('✓ Voting period opened');
+      setCreating(false);
+      setSelectedPlayers([]);
+      await refresh();
       onRefresh && onRefresh();
       setTimeout(() => setInfo(''), 4000);
     } catch (e) {
-      setError('Could not update TOTW: ' + (e?.message || e));
+      setError('Could not create period: ' + (e?.message || e));
     }
     setBusy(false);
   };
+
+  const handleClose = async () => {
+    if (!currentPeriod) return;
+    if (!window.confirm('Close voting now? Voters won\'t be able to submit any more votes.')) return;
+    setBusy(true);
+    try {
+      await db.updateTotwPeriod(currentPeriod.id, { status: 'closed' });
+      setInfo('✓ Voting closed. Winners can be picked in Deploy 2.');
+      await refresh();
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 4000);
+    } catch (e) {
+      setError('Could not close period: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const handleDelete = async (periodId) => {
+    if (!window.confirm('Delete this voting period? All votes will be lost.')) return;
+    setBusy(true);
+    try {
+      await db.deleteTotwPeriod(periodId);
+      setInfo('✓ Period deleted');
+      await refresh();
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) {
+      setError('Could not delete: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const approvedPlayers = allPlayers
+    .filter(p => !filter || p.username.toLowerCase().includes(filter.toLowerCase()))
+    .sort((a, b) => a.username.localeCompare(b.username));
 
   return (
     <div className="space-y-4">
@@ -4675,10 +4760,10 @@ const TotwManager = ({ allTeams = [], onRefresh }) => {
       }}>
         <div className="flex items-center gap-2 mb-1">
           <Trophy size={14} style={{ color: '#2196f3' }} />
-          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>TEAM OF THE WEEK</span>
+          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>TEAM OF THE WEEK VOTING</span>
         </div>
         <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          Pick one team — every player on that team gets a blue "TOTW" marker on their card. Only one team can be TOTW at a time. Stays until you change it.
+          Open a voting period each week. Pick eligible players (anyone who played that week). Players vote 1 GK + 1 DEF + 1 CM + 1 ST. Voting auto-closes at midnight the next day. Admin picks the winners after voting closes.
         </p>
       </div>
 
@@ -4689,80 +4774,139 @@ const TotwManager = ({ allTeams = [], onRefresh }) => {
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
       )}
 
-      {/* CURRENT TOTW */}
+      {/* CURRENT PERIOD */}
       <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-        <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>CURRENT TOTW</div>
-        {currentTotw ? (
-          <div className="flex items-center gap-3">
-            {currentTotw.logoUrl ? (
-              <img src={currentTotw.logoUrl} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: `2px solid #2196f3` }} />
-            ) : (
-              <div className="w-12 h-12 rounded-full flex items-center justify-center font-display text-lg" style={{
-                background: currentTotw.color || C.green, color: '#fff', border: `2px solid #2196f3`,
-              }}>{currentTotw.tag}</div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="font-heading tracking-wider" style={{ color: C.brandNavy }}>{currentTotw.name.toUpperCase()}</div>
-              <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
-                {(currentTotw.members || []).length} PLAYER{(currentTotw.members || []).length === 1 ? '' : 'S'}
-                {currentTotw.totwSetAt && <> · SET {new Date(currentTotw.totwSetAt).toLocaleDateString()}</>}
+        <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>CURRENT VOTING PERIOD</div>
+        {currentPeriod ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
+                  OPEN · CLOSES {new Date(currentPeriod.closesAt).toLocaleString()}
+                </div>
+                <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
+                  {currentPeriod.eligiblePlayers.length} ELIGIBLE PLAYERS · {votes.length} VOTES CAST
+                </div>
               </div>
+              <button
+                onClick={handleClose}
+                disabled={busy}
+                className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                style={{ background: `${C.red}33`, color: C.redLight, border: `1px solid ${C.red}66` }}
+              >CLOSE NOW</button>
             </div>
-            <button
-              onClick={() => setTotw('')}
-              disabled={busy}
-              className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
-              style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}55` }}
-            >REMOVE</button>
+
+            {/* Live tally per position */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {['GK', 'DEF', 'CM', 'ST'].map(pos => (
+                <div key={pos} className="rounded p-2" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}44` }}>
+                  <div className="font-display text-xs tracking-wider mb-1" style={{ color: '#2196f3' }}>{pos}</div>
+                  {tally[pos].length === 0 ? (
+                    <div className="font-mono text-[9px]" style={{ color: `${C.cream}55` }}>NO VOTES YET</div>
+                  ) : (
+                    tally[pos].slice(0, 5).map(([username, count]) => (
+                      <div key={username} className="flex justify-between gap-2 font-mono text-[10px] py-0.5" style={{ color: C.cream }}>
+                        <span className="truncate">{username}</span>
+                        <span style={{ color: `${C.cream}99` }}>{count}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="font-mono text-xs tracking-wider" style={{ color: `${C.brandNavy}66` }}>
-            NO TEAM OF THE WEEK SET
+          <div className="space-y-3">
+            <div className="font-mono text-xs tracking-wider" style={{ color: `${C.brandNavy}66` }}>NO ACTIVE VOTING PERIOD</div>
+            {!creating ? (
+              <button
+                onClick={() => { setCreating(true); setSelectedPlayers([]); }}
+                className="w-full py-2 font-heading tracking-wider text-[11px] rounded"
+                style={{ background: '#2196f3', color: '#fff' }}
+              >OPEN NEW VOTING PERIOD</button>
+            ) : (
+              <div className="space-y-3">
+                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
+                  PICK ELIGIBLE PLAYERS · {selectedPlayers.length} SELECTED
+                </div>
+                <input
+                  type="text"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Search players…"
+                  className="w-full rounded px-3 py-2 text-sm"
+                  style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
+                />
+                <div className="rounded max-h-64 overflow-y-auto" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66` }}>
+                  {approvedPlayers.map(p => {
+                    const checked = selectedPlayers.includes(p.username);
+                    return (
+                      <button
+                        key={p.username}
+                        type="button"
+                        onClick={() => togglePlayer(p.username)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                        style={{
+                          borderBottom: `1px solid ${C.navyLight}33`,
+                          background: checked ? `#2196f322` : 'transparent',
+                        }}
+                      >
+                        <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
+                          border: `1.5px solid ${checked ? '#2196f3' : `${C.cream}55`}`,
+                          background: checked ? '#2196f3' : 'transparent',
+                        }}>
+                          {checked && <Check size={11} style={{ color: '#fff' }} />}
+                        </div>
+                        <span className="font-heading tracking-wider text-sm flex-1" style={{ color: C.cream }}>{p.username}</span>
+                        <span className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}66` }}>{p.position}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setCreating(false); setSelectedPlayers([]); }}
+                    className="px-3 py-2 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                  >CANCEL</button>
+                  <button
+                    onClick={handleCreate}
+                    disabled={busy || selectedPlayers.length < 8}
+                    className="flex-1 py-2 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: '#2196f3', color: '#fff' }}
+                  >{busy ? 'OPENING…' : `OPEN PERIOD (${selectedPlayers.length} PLAYERS)`}</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
 
-      {/* PICKER */}
-      <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-        <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>
-          {currentTotw ? 'CHANGE TOTW' : 'PICK TOTW'}
-        </div>
-        {!pickerOpen ? (
-          <button
-            onClick={() => setPickerOpen(true)}
-            disabled={approvedTeams.length === 0}
-            className="w-full py-2 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
-            style={{ background: '#2196f3', color: '#fff' }}
-          >{approvedTeams.length === 0 ? 'NO APPROVED TEAMS YET' : (currentTotw ? 'PICK A DIFFERENT TEAM' : 'PICK A TEAM')}</button>
-        ) : (
-          <div className="space-y-2">
-            <select
-              value={selectedId}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="w-full rounded px-3 py-2 font-body text-sm"
-              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
-            >
-              <option value="">— Choose a team —</option>
-              {approvedTeams.map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.tag}) · {(t.members || []).length} players</option>
-              ))}
-            </select>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setPickerOpen(false); setSelectedId(''); }}
-                className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
-                style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-              >CANCEL</button>
-              <button
-                onClick={() => selectedId && setTotw(selectedId)}
-                disabled={!selectedId || busy}
-                className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
-                style={{ background: '#2196f3', color: '#fff' }}
-              >{busy ? 'SAVING…' : 'SET AS TOTW'}</button>
-            </div>
+      {/* PAST PERIODS */}
+      {pastPeriods.length > 0 && (
+        <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+          <div className="font-mono text-[10px] tracking-[0.25em] mb-2" style={{ color: `${C.brandNavy}77` }}>PAST PERIODS</div>
+          <div className="space-y-1">
+            {pastPeriods.map(p => (
+              <div key={p.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded" style={{ background: C.navyDeep }}>
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono text-[10px] tracking-wider" style={{ color: C.cream }}>
+                    {p.status.toUpperCase()} · {new Date(p.opensAt).toLocaleDateString()}
+                  </div>
+                  <div className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>
+                    {p.eligiblePlayers.length} ELIGIBLE{p.winners ? ' · RESOLVED' : ''}
+                  </div>
+                </div>
+                <button
+                  onClick={() => handleDelete(p.id)}
+                  className="px-2 py-1 font-mono text-[9px] rounded"
+                  style={{ background: `${C.red}33`, color: C.redLight, border: `1px solid ${C.red}55` }}
+                >DELETE</button>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -6699,6 +6843,203 @@ const HallOfFameView = ({ allPlayers, allTeams, onPlayerClick }) => {
 };
 
 // ============ DASHBOARD ============
+// ============ VOTING TAB (player-facing) ============
+// Shown only when there's an open voting period. Players pick 1 player per
+// position (GK, DEF, CM, ST) from the eligible pool, then submit. Once
+// submitted, the tab shows what they voted for and lets them change votes
+// until the period closes.
+const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
+  const [myVotes, setMyVotes] = useState({ gk: '', def: '', cm: '', st: '' });
+  const [submitted, setSubmitted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  // Build candidate list per position from the eligible_players list.
+  // Each candidate gets their season stats attached for the voter to inspect.
+  // Excludes the voter themselves (can't vote for yourself).
+  const candidates = useMemo(() => {
+    const result = { GK: [], DEF: [], CM: [], ST: [] };
+    for (const username of (period.eligiblePlayers || [])) {
+      if (username.toLowerCase() === account.username.toLowerCase()) continue;
+      const p = allPlayers.find(x => x.username.toLowerCase() === username.toLowerCase());
+      if (!p) continue;
+      if (!result[p.position]) continue;
+      result[p.position].push(p);
+    }
+    // Sort each list by overall rating (highest first) so star players show on top
+    const sortFn = (a, b) => {
+      const ra = rankings?.[a.username]?.overall || 0;
+      const rb = rankings?.[b.username]?.overall || 0;
+      return rb - ra;
+    };
+    Object.keys(result).forEach(pos => result[pos].sort(sortFn));
+    return result;
+  }, [period, allPlayers, account.username, rankings]);
+
+  // Check if the voter has already submitted votes for this period
+  useEffect(() => {
+    (async () => {
+      try {
+        const allVotes = await db.listTotwVotes(period.id);
+        const mine = allVotes.filter(v => v.voterUsername.toLowerCase() === account.username.toLowerCase());
+        if (mine.length > 0) {
+          const prev = { gk: '', def: '', cm: '', st: '' };
+          for (const v of mine) {
+            if (v.position === 'GK')  prev.gk  = v.votedForUsername;
+            if (v.position === 'DEF') prev.def = v.votedForUsername;
+            if (v.position === 'CM')  prev.cm  = v.votedForUsername;
+            if (v.position === 'ST')  prev.st  = v.votedForUsername;
+          }
+          setMyVotes(prev);
+          setSubmitted(mine.length === 4);
+        }
+      } catch (e) {
+        console.error('Could not load prior votes:', e);
+      }
+    })();
+  }, [period.id, account.username]);
+
+  const pickFor = (pos, username) => {
+    setError(''); setInfo('');
+    setSubmitted(false);
+    setMyVotes(prev => ({ ...prev, [pos]: username }));
+  };
+
+  const handleSubmit = async () => {
+    setError(''); setInfo('');
+    if (!myVotes.gk || !myVotes.def || !myVotes.cm || !myVotes.st) {
+      setError('Pick one player for every position before submitting.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await db.submitTotwVotes(period.id, account.username, myVotes);
+      if (!res.ok) { setError(res.reason || 'Could not submit votes.'); setBusy(false); return; }
+      setSubmitted(true);
+      setInfo('✓ Your votes are in. You can change them until voting closes.');
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 4000);
+    } catch (e) {
+      setError('Could not submit: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const closesIn = useMemo(() => {
+    const ms = period.closesAt - Date.now();
+    if (ms <= 0) return 'CLOSED';
+    const hours = Math.floor(ms / 3_600_000);
+    const mins = Math.floor((ms % 3_600_000) / 60_000);
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+  }, [period.closesAt]);
+
+  const POSITIONS = [
+    { key: 'gk',  label: 'GOALKEEPER',  pos: 'GK',  needed: 1 },
+    { key: 'def', label: 'DEFENDER',    pos: 'DEF', needed: 3 },
+    { key: 'cm',  label: 'MIDFIELDER',  pos: 'CM',  needed: 2 },
+    { key: 'st',  label: 'STRIKER',     pos: 'ST',  needed: 2 },
+  ];
+
+  return (
+    <div className="max-w-4xl mx-auto p-4 space-y-4">
+      {/* HEADER */}
+      <div className="rounded-xl p-4 fade-in" style={{
+        background: `linear-gradient(135deg, #2196f322 0%, ${C.white} 100%)`,
+        border: `1px solid #2196f355`,
+      }}>
+        <div className="flex items-center gap-2 mb-1">
+          <Trophy size={16} style={{ color: '#2196f3' }} />
+          <span className="font-display text-2xl tracking-wider" style={{ color: C.brandNavy }}>VOTE TOTW</span>
+        </div>
+        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
+          Pick the best player at each position. The TOTW XI will have 1 goalkeeper, 3 defenders, 2 midfielders, and 2 strikers — but you only vote for one per position. Admin picks the final winners after voting closes.
+        </p>
+        <div className="mt-3 flex items-center gap-2 flex-wrap">
+          <span className="font-mono text-[10px] tracking-[0.2em] px-2 py-1 rounded" style={{ background: `#2196f322`, color: '#2196f3' }}>
+            CLOSES IN {closesIn}
+          </span>
+          {submitted && (
+            <span className="font-mono text-[10px] tracking-[0.2em] px-2 py-1 rounded" style={{ background: `${C.green}22`, color: C.green }}>
+              ✓ YOUR VOTES SUBMITTED
+            </span>
+          )}
+        </div>
+      </div>
+
+      {info && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
+      )}
+      {error && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
+      )}
+
+      {/* POSITION COLUMNS */}
+      {POSITIONS.map(({ key, label, pos, needed }) => {
+        const list = candidates[pos] || [];
+        const picked = myVotes[key];
+        return (
+          <div key={key} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
+            <div className="flex items-baseline justify-between mb-2">
+              <div className="font-display text-base tracking-wider" style={{ color: C.brandNavy }}>{label}</div>
+              <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.brandNavy}66` }}>
+                TOTW NEEDS {needed} · YOU PICK 1
+              </div>
+            </div>
+            {list.length === 0 ? (
+              <div className="font-mono text-xs py-3 text-center" style={{ color: `${C.brandNavy}66` }}>
+                NO ELIGIBLE {label}S
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {list.map(p => {
+                  const isPicked = picked === p.username;
+                  const ov = rankings?.[p.username]?.overall || 0;
+                  const s = p.stats || {};
+                  return (
+                    <button
+                      key={p.username}
+                      type="button"
+                      onClick={() => pickFor(key, p.username)}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-colors"
+                      style={{
+                        background: isPicked ? `#2196f322` : C.navyDeep,
+                        border: `1px solid ${isPicked ? '#2196f3' : `${C.navyLight}44`}`,
+                      }}
+                    >
+                      <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0" style={{
+                        border: `1.5px solid ${isPicked ? '#2196f3' : `${C.cream}55`}`,
+                        background: isPicked ? '#2196f3' : 'transparent',
+                      }}>
+                        {isPicked && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.cream }}>{p.username}</div>
+                        <div className="font-mono text-[9px]" style={{ color: `${C.cream}88` }}>
+                          OVR {ov} · {s.games || 0}G · {s.goals || 0}gls · {s.assists || 0}a
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* SUBMIT */}
+      <button
+        onClick={handleSubmit}
+        disabled={busy || !myVotes.gk || !myVotes.def || !myVotes.cm || !myVotes.st}
+        className="w-full py-3 font-display text-lg tracking-wider rounded disabled:opacity-50"
+        style={{ background: '#2196f3', color: '#fff' }}
+      >{busy ? 'SUBMITTING…' : submitted ? 'UPDATE VOTES' : 'SUBMIT VOTES'}</button>
+    </div>
+  );
+};
+
 const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [view, setView] = useState('home');
   const [showLog, setShowLog] = useState(false);
@@ -6713,6 +7054,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [selectedPlayer, setSelectedPlayer] = useState(null);
   const [season, setSeason] = useState('all');
   const [currentSeason, setCurrentSeason] = useState('S1');
+  const [currentVotingPeriod, setCurrentVotingPeriod] = useState(null);
 
   const refresh = async () => {
     setAllPlayers(await db.listAccounts());
@@ -6720,6 +7062,10 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     setCurrentSeason(await db.getSeason());
     setDynamicAdmins(await db.getAdminList());
     setWeightings(await db.getWeightings());
+    // Load the current open voting period (if any) so the VOTE tab shows
+    const periods = await db.listTotwPeriods();
+    const open = periods.find(p => p.status === 'open' && Date.now() < p.closesAt);
+    setCurrentVotingPeriod(open || null);
   };
   useEffect(() => { refresh(); }, [account]);
 
@@ -6774,6 +7120,10 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
   ];
+  // VOTE tab appears only while a voting period is open
+  if (currentVotingPeriod) {
+    tabs.splice(4, 0, { id: 'vote', label: 'VOTE TOTW', icon: Trophy });
+  }
   if (isAdmin(account, dynamicAdmins)) tabs.push({ id: 'admin', label: 'ADMIN', icon: Crown });
 
   return (
@@ -7114,6 +7464,17 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         {view === 'tiers' && <TierPreview />}
 
         {view === 'news' && <NewsView account={account} allTeams={allTeams} dynamicAdmins={dynamicAdmins} />}
+
+        {/* VOTE TAB — only renders when a voting period is open */}
+        {view === 'vote' && currentVotingPeriod && (
+          <VotingTab
+            account={account}
+            period={currentVotingPeriod}
+            allPlayers={allPlayers}
+            rankings={rankings}
+            onRefresh={refresh}
+          />
+        )}
 
         {/* ADMIN */}
         {view === 'admin' && isAdmin(account, dynamicAdmins) && <AdminPanel account={account} dynamicAdmins={dynamicAdmins} onRefreshAdmins={refresh} />}

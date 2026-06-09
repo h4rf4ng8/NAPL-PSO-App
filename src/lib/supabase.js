@@ -126,6 +126,8 @@ const rowToAccount = (row) => row ? ({
   awards: row.awards || [],
   // Team championships earned. Each entry: { season, placement: 'winner'|'runner_up', teamId, awardedAt }
   championships: row.championships || [],
+  totwUntil: row.totw_until ? new Date(row.totw_until).getTime() : null,
+  cheater: !!row.cheater,
   createdAt: new Date(row.created_at).getTime(),
 }) : null;
 
@@ -213,6 +215,8 @@ export const db = {
       matches: account.matches,
       awards: account.awards,
       championships: account.championships || [],
+      totw_until: account.totwUntil ? new Date(account.totwUntil).toISOString() : null,
+      cheater: !!account.cheater,
     });
     const { error } = account.id
       ? await query.eq('id', account.id)

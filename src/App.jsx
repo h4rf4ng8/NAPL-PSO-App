@@ -1179,21 +1179,28 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
           centers vertically on the rotation point. */}
       {isCheater && (
         <g clipPath={`url(#cc-${uid})`}>
-          {/* dark dimming layer so the red pops */}
-          <rect width="320" height="510" fill="#000" opacity="0.35" />
-          {/* the stamp itself: drop shadow + main text */}
+          {/* darker dimming layer so the red really pops */}
+          <rect width="320" height="510" fill="#000" opacity="0.5" />
           <g transform="translate(160 255) rotate(-32)">
+            {/* outer red glow halo for prominence */}
             <text x="0" y="0" textAnchor="middle" dominantBaseline="central"
               fontFamily="Anton, sans-serif"
-              fontSize="84" letterSpacing="6"
-              fill="#cc0000" opacity="0.94"
-              style={{ paintOrder: 'stroke', stroke: '#600000', strokeWidth: 3 }}
+              fontSize="72" letterSpacing="4"
+              fill="#ff0000" opacity="0.35"
+              style={{ filter: 'blur(4px)' }}
             >CHEATER</text>
-            {/* subtle inner highlight for the stamp look */}
+            {/* main stamp text — thick dark stroke for stamped-on look */}
             <text x="0" y="0" textAnchor="middle" dominantBaseline="central"
               fontFamily="Anton, sans-serif"
-              fontSize="84" letterSpacing="6"
-              fill="none" stroke="#ff6666" strokeWidth="0.6" opacity="0.7"
+              fontSize="72" letterSpacing="4"
+              fill="#e60000"
+              style={{ paintOrder: 'stroke', stroke: '#400000', strokeWidth: 4 }}
+            >CHEATER</text>
+            {/* inner highlight stroke for definition */}
+            <text x="0" y="0" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Anton, sans-serif"
+              fontSize="72" letterSpacing="4"
+              fill="none" stroke="#ff8888" strokeWidth="0.8" opacity="0.85"
             >CHEATER</text>
           </g>
         </g>

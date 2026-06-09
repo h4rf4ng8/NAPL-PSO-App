@@ -1009,6 +1009,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
 
   // TOTW flag flows from the team to all its members.
   const isTotw = !!(team && team.totw);
+  const isCheater = !!account.cheater;
 
   // Award winners get a black label across the name; TOTW marker (above OVR)
   // is independent of awards, so a player can have both.
@@ -1171,6 +1172,32 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
 
       {/* 8. NAPL CREST at bottom center */}
       <image href={NAPL_LOGO_SRC} x="146" y="438" width="28" height="28" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+
+      {/* CHEATER STAMP — giant diagonal red text overlaying the whole card,
+          bottom-left to top-right. Clipped to the card shape so it doesn't
+          escape the outline. Uses dominantBaseline="central" so the text
+          centers vertically on the rotation point. */}
+      {isCheater && (
+        <g clipPath={`url(#cc-${uid})`}>
+          {/* dark dimming layer so the red pops */}
+          <rect width="320" height="510" fill="#000" opacity="0.35" />
+          {/* the stamp itself: drop shadow + main text */}
+          <g transform="translate(160 255) rotate(-32)">
+            <text x="0" y="0" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Anton, sans-serif"
+              fontSize="84" letterSpacing="6"
+              fill="#cc0000" opacity="0.94"
+              style={{ paintOrder: 'stroke', stroke: '#600000', strokeWidth: 3 }}
+            >CHEATER</text>
+            {/* subtle inner highlight for the stamp look */}
+            <text x="0" y="0" textAnchor="middle" dominantBaseline="central"
+              fontFamily="Anton, sans-serif"
+              fontSize="84" letterSpacing="6"
+              fill="none" stroke="#ff6666" strokeWidth="0.6" opacity="0.7"
+            >CHEATER</text>
+          </g>
+        </g>
+      )}
 
       {/* 9. Outer stroke + inner highlight */}
       <path d={cardPath} fill="none" stroke={palette.shadow} strokeWidth="1.8" strokeOpacity="0.8" />
@@ -4958,6 +4985,22 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
 
   // Reassign (or remove) a player's team. newTeamId === '' means make them a
   // free agent. Keeps both the old and new teams' member arrays in sync.
+  // Flag/unflag a player as a cheater. Just toggles the boolean — the visual
+  // CHEATER stamp on their card appears wherever PlayerCard renders.
+  const toggleCheater = async (player) => {
+    const wasCheater = !!player.cheater;
+    const label = wasCheater ? `Remove CHEATER flag from ${player.username}?` : `Flag ${player.username} as CHEATER? Their card will show a red diagonal CHEATER stamp.`;
+    if (!window.confirm(label)) return;
+    setError(''); setBusy(true);
+    try {
+      await db.saveAccount({ ...player, cheater: !wasCheater });
+      onRefresh && onRefresh();
+    } catch (e) {
+      setError('Could not toggle cheater: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
   const changeTeam = async (player, newTeamId) => {
     setError('');
     setBusy(true);
@@ -5113,6 +5156,14 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 ><Edit3 size={11} /> RENAME</button>
+                <button
+                  onClick={() => toggleCheater(p)}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
+                  style={p.cheater
+                    ? { background: '#cc0000', color: '#fff', border: '1px solid #800000' }
+                    : { background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}55` }
+                  }
+                >{p.cheater ? 'UNFLAG' : 'CHEATER'}</button>
               </div>
             )}
           </div>

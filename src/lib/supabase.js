@@ -1,18 +1,18 @@
 // Supabase client + db API
 // This replaces the in-memory _mem.kv storage from the prototype.
 // The shape of every method matches what the React code expects.
-
+ 
 import { createClient } from '@supabase/supabase-js';
-
+ 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
+ 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase env vars. Copy .env.example to .env and fill in your project credentials.');
 }
-
+ 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
+ 
 // =====================================================================
 // AUTH
 // =====================================================================
@@ -28,7 +28,7 @@ export const auth = {
     });
     if (authErr) throw authErr;
     if (!authData.user) throw new Error('Signup failed');
-
+ 
     // Create the player profile row
     const { error: profileErr } = await supabase.from('accounts').insert({
       id: authData.user.id,
@@ -46,7 +46,7 @@ export const auth = {
     if (profileErr) throw profileErr;
     return await db.getAccount(username);
   },
-
+ 
   // Sign in — users type their username. We look up the account to find
   // the email Supabase auth needs. Older accounts created before the
   // real-email change still use the username@napl.local pseudo-email.
@@ -59,7 +59,7 @@ export const auth = {
     if (error) throw new Error('Invalid credentials');
     return await db.getAccount(username);
   },
-
+ 
   // Send a password-reset email. Only works for accounts that have a real
   // email on file. Uses a SECURITY DEFINER function to look up the email
   // since the accounts table itself is read-only to authenticated users
@@ -82,11 +82,27 @@ export const auth = {
     if (error) return { ok: false, reason: error.message };
     return { ok: true, email };
   },
-
+ 
   async signOut() {
     await supabase.auth.signOut();
   },
-
+ 
+  // OAuth sign-in via Discord. Redirects the user to Discord's auth screen,
+  // then back to the app with a session token. If it's the user's first
+  // sign-in, we create a fresh NAPL account row in the SIGNED_IN handler
+  // in App.jsx using their Discord username.
+  async signInWithDiscord() {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: window.location.origin,
+        scopes: 'identify email',
+      },
+    });
+    if (error) return { ok: false, reason: error.message };
+    return { ok: true };
+  },
+ 
   // Update the current user's password. Used during the password-recovery
   // flow after the user clicks the reset email link. Returns { ok } or
   // { ok:false, reason }.
@@ -98,7 +114,7 @@ export const auth = {
     if (error) return { ok: false, reason: error.message };
     return { ok: true };
   },
-
+ 
   // Returns the currently logged-in account (or null).
   // Looks up by the permanent auth user id, so username changes never break the session.
   async getCurrent() {
@@ -107,11 +123,11 @@ export const auth = {
     return await db.getAccountById(data.session.user.id);
   },
 };
-
+ 
 // =====================================================================
 // DB API — same shape as the prototype's `db` object
 // =====================================================================
-
+ 
 const rowToAccount = (row) => row ? ({
   id: row.id,
   username: row.username,
@@ -130,7 +146,7 @@ const rowToAccount = (row) => row ? ({
   cheater: !!row.cheater,
   createdAt: new Date(row.created_at).getTime(),
 }) : null;
-
+ 
 const rowToTeam = (row) => row ? ({
   id: row.id,
   name: row.name,
@@ -149,7 +165,7 @@ const rowToTeam = (row) => row ? ({
   reviewedBy: row.reviewed_by,
   rejectionReason: row.rejection_reason,
 }) : null;
-
+ 
 const rowToNews = (row) => row ? ({
   id: row.id,
   type: row.type,
@@ -166,7 +182,7 @@ const rowToNews = (row) => row ? ({
   createdAt: new Date(row.created_at).getTime(),
   autoFromSubmission: row.auto_from_submission,
 }) : null;
-
+ 
 const rowToSubmission = (row) => row ? ({
   id: row.id,
   status: row.status,
@@ -179,7 +195,7 @@ const rowToSubmission = (row) => row ? ({
   playerStats: row.player_stats || [],
   edits: row.edits || [],
 }) : null;
-
+ 
 export const db = {
   // ====== ACCOUNTS ======
   async getAccount(username) {
@@ -191,7 +207,7 @@ export const db = {
     if (error) { console.error(error); return null; }
     return rowToAccount(data);
   },
-
+ 
   async getAccountById(id) {
     const { data, error } = await supabase
       .from('accounts')
@@ -201,7 +217,7 @@ export const db = {
     if (error) { console.error(error); return null; }
     return rowToAccount(data);
   },
-
+ 
   async saveAccount(account) {
     // Update by stable id when we have it, else fall back to username
     const query = supabase.from('accounts').update({
@@ -223,7 +239,7 @@ export const db = {
       : await query.eq('username_lower', account.username.toLowerCase());
     if (error) throw error;
   },
-
+ 
   // Change a player's username. Checks uniqueness first.
   // Returns { ok: true } or { ok: false, reason: '...' }
   async renameAccount(accountId, newUsername) {
@@ -252,20 +268,20 @@ export const db = {
     } catch (e) { /* metadata sync is best-effort */ }
     return { ok: true };
   },
-
+ 
   async listAccounts() {
     const { data, error } = await supabase.from('accounts').select('*');
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToAccount);
   },
-
+ 
   // ====== TEAMS ======
   async getTeam(id) {
     const { data, error } = await supabase.from('teams').select('*').eq('id', id).maybeSingle();
     if (error) { console.error(error); return null; }
     return rowToTeam(data);
   },
-
+ 
   async saveTeam(team) {
     const row = {
       id: team.id,
@@ -287,28 +303,28 @@ export const db = {
     const { error } = await supabase.from('teams').upsert(row);
     if (error) throw error;
   },
-
+ 
   async deleteTeam(id) {
     const { error } = await supabase.from('teams').delete().eq('id', id);
     if (error) throw error;
   },
-
+ 
   async listTeams() {
     const { data, error } = await supabase.from('teams').select('*');
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToTeam);
   },
-
+ 
   // ====== SEASON ======
   async getSeason() {
     const { data } = await supabase.from('settings').select('value').eq('key', 'current_season').maybeSingle();
     return data?.value || 'S1';
   },
-
+ 
   async setSeason(s) {
     await supabase.from('settings').upsert({ key: 'current_season', value: s });
   },
-
+ 
   // ====== SEASON CHAMPIONS ======
   // Stored as a JSON string under settings.key = 'season_champions'.
   // Shape: { "S1": { winnerTeamId: "t_xxx", runnerUpTeamId: "t_yyy", setAt: 1700000000000 }, ... }
@@ -320,14 +336,14 @@ export const db = {
   async setChampions(championsObj) {
     await supabase.from('settings').upsert({ key: 'season_champions', value: JSON.stringify(championsObj) });
   },
-
+ 
   // ====== SESSION (handled by Supabase Auth — these are stubs for compat) ======
   async getSession() {
     const cur = await auth.getCurrent();
     return cur?.username || null;
   },
   async setSession() { /* handled by auth.signIn / signOut */ },
-
+ 
   // ====== ADMIN LIST ======
   async getAdminList() {
     const { data } = await supabase.from('settings').select('value').eq('key', 'admin_list').maybeSingle();
@@ -337,7 +353,7 @@ export const db = {
   async setAdminList(usernames) {
     await supabase.from('settings').upsert({ key: 'admin_list', value: JSON.stringify(usernames) });
   },
-
+ 
   // ====== STAT WEIGHTINGS (custom ranking weights, set by super admins) ======
   async getWeightings() {
     const { data } = await supabase.from('settings').select('value').eq('key', 'position_weights').maybeSingle();
@@ -347,7 +363,7 @@ export const db = {
   async setWeightings(weights) {
     await supabase.from('settings').upsert({ key: 'position_weights', value: JSON.stringify(weights) });
   },
-
+ 
   // ====== SUBMISSIONS ======
   async saveSubmission(sub) {
     const row = {
@@ -373,7 +389,7 @@ export const db = {
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToSubmission);
   },
-
+ 
   // ====== NEWS ======
   async saveNews(item) {
     const row = {
@@ -402,7 +418,7 @@ export const db = {
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToNews);
   },
-
+ 
   // ============ TOTW VOTING ============
   // List all voting periods (most recent first). Used by both admin (to manage
   // periods) and players (to see if a voting period is currently open).
@@ -424,7 +440,7 @@ export const db = {
       resolvedAt: r.resolved_at ? new Date(r.resolved_at).getTime() : null,
     }));
   },
-
+ 
   async createTotwPeriod({ closesAt, eligiblePlayers, createdBy }) {
     const { data, error } = await supabase
       .from('totw_voting_periods')
@@ -439,7 +455,7 @@ export const db = {
     if (error) { console.error(error); throw error; }
     return data;
   },
-
+ 
   async updateTotwPeriod(periodId, fields) {
     const payload = {};
     if (fields.status !== undefined) payload.status = fields.status;
@@ -453,7 +469,7 @@ export const db = {
       .eq('id', periodId);
     if (error) { console.error(error); throw error; }
   },
-
+ 
   async deleteTotwPeriod(periodId) {
     // Votes cascade-delete via the FK
     const { error } = await supabase
@@ -462,7 +478,7 @@ export const db = {
       .eq('id', periodId);
     if (error) { console.error(error); throw error; }
   },
-
+ 
   // List all votes for a period. Admin needs this to see tallies and pick
   // the winners. Players need it to (a) see who they've already voted for in
   // the current period, and (b) see live results once voting closes.
@@ -481,7 +497,7 @@ export const db = {
       votedAt: new Date(r.voted_at).getTime(),
     }));
   },
-
+ 
   // Submit all 4 votes (1 GK, 1 DEF, 1 CM, 1 ST) for the current period.
   // Wipes any prior votes by this voter in this period first so re-submission
   // is idempotent. Returns { ok } or { ok:false, reason }.

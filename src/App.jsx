@@ -112,7 +112,7 @@ const checkUsernameProfanity = (username) => {
 const COUNTRIES = [
   'Canada', 'United States', 'Mexico', 'El Salvador', 'United Kingdom', 'Ireland', 'France',
   'Germany', 'Spain', 'Portugal', 'Italy', 'Netherlands', 'Belgium',
-  'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Bosnia and Herzegovina',
+  'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Poland', 'Albania', 'Bosnia and Herzegovina',
   'Brazil', 'Argentina', 'Colombia', 'Chile', 'Australia', 'New Zealand', 'Japan',
   'South Korea', 'China', 'Russia', 'Nigeria', 'South Africa', 'India', 'Other',
 ];
@@ -122,7 +122,7 @@ const COUNTRY_CODES = {
   'Germany': 'de', 'Spain': 'es', 'Portugal': 'pt', 'Italy': 'it',
   'Netherlands': 'nl', 'Belgium': 'be', 'Switzerland': 'ch',
   'Sweden': 'se', 'Norway': 'no', 'Denmark': 'dk', 'Poland': 'pl',
-  'Bosnia and Herzegovina': 'ba',
+  'Albania': 'al', 'Bosnia and Herzegovina': 'ba',
   'Brazil': 'br', 'Argentina': 'ar', 'Colombia': 'co', 'Chile': 'cl',
   'Australia': 'au', 'New Zealand': 'nz', 'Japan': 'jp',
   'South Korea': 'kr', 'China': 'cn', 'Russia': 'ru', 'Nigeria': 'ng', 'South Africa': 'za',
@@ -279,7 +279,7 @@ const getPlayerAwards = (account) => account?.awards || [];
 const hasAnyAward = (account) => (account?.awards?.length || 0) > 0;
 
 // ============ STAT CALCS ============
-const POSITIONS = ['ST', 'CM', 'DEF', 'GK'];
+const POSITIONS = ['ST', 'CM', 'DEF', 'GK', 'FLEX'];
 
 const emptyStats = () => ({
   games: 0, goals: 0, assists: 0, tackles: 0, interceptions: 0,
@@ -377,10 +377,12 @@ const MIN_GAMES_FOR_RANKING = 3;
 // Per-position stat weights (must sum to 1.0 each). These are the DEFAULTS —
 // super admins can override them via ADMIN → WEIGHTINGS, stored in the DB.
 const DEFAULT_POSITION_WEIGHTS = {
-  ST:  { goalsPerGame: 0.40, shotPct: 0.25, assistsPerGame: 0.15, passesPerGame: 0.10, tacklesPerGame: 0.05, interceptionsPerGame: 0.05 },
-  CM:  { assistsPerGame: 0.30, passesPerGame: 0.25, goalsPerGame: 0.15, tacklesPerGame: 0.15, interceptionsPerGame: 0.10, shotPct: 0.05 },
-  DEF: { tacklesPerGame: 0.35, interceptionsPerGame: 0.35, assistsPerGame: 0.15, passesPerGame: 0.10, goalsPerGame: 0.05 },
-  GK:  { savesPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
+  ST:   { goalsPerGame: 0.40, shotPct: 0.25, assistsPerGame: 0.15, passesPerGame: 0.10, tacklesPerGame: 0.05, interceptionsPerGame: 0.05 },
+  CM:   { assistsPerGame: 0.30, passesPerGame: 0.25, goalsPerGame: 0.15, tacklesPerGame: 0.15, interceptionsPerGame: 0.10, shotPct: 0.05 },
+  DEF:  { tacklesPerGame: 0.35, interceptionsPerGame: 0.35, assistsPerGame: 0.15, passesPerGame: 0.10, goalsPerGame: 0.05 },
+  GK:   { savesPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
+  // FLEX: equal blend of attack and defense for players who play multiple roles
+  FLEX: { goalsPerGame: 0.20, assistsPerGame: 0.20, tacklesPerGame: 0.20, interceptionsPerGame: 0.15, passesPerGame: 0.15, shotPct: 0.10 },
 };
 
 // Human-readable labels for each stat key (used in the weightings editor UI)
@@ -1598,6 +1600,37 @@ const AuthScreen = ({ onLogin }) => {
             >
               {loading ? 'LOADING...' : mode === 'login' ? 'ENTER LEAGUE' : 'JOIN THE LEAGUE'}
             </button>
+
+            {/* DIVIDER + DISCORD OAUTH */}
+            <div className="flex items-center gap-3 my-2">
+              <div className="flex-1 h-px" style={{ background: `${C.cream}22` }} />
+              <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}55` }}>OR</span>
+              <div className="flex-1 h-px" style={{ background: `${C.cream}22` }} />
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setError(''); setInfo(''); setLoading(true);
+                const res = await auth.signInWithDiscord();
+                if (!res.ok) { setError(res.reason || 'Could not start Discord sign-in.'); setLoading(false); }
+                // On success, Supabase redirects the browser to Discord, then back.
+                // The SIGNED_IN handler in App.jsx picks it up from there.
+              }}
+              disabled={loading}
+              className="w-full py-3 font-display tracking-[0.15em] text-lg rounded disabled:opacity-50 flex items-center justify-center gap-2"
+              style={{
+                background: '#5865F2',
+                color: '#ffffff',
+                boxShadow: '0 4px 16px #5865F266, inset 0 1px 0 #ffffff30',
+              }}
+            >
+              {/* Discord logo (inline SVG) */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"/>
+              </svg>
+              SIGN IN WITH DISCORD
+            </button>
+
             {mode === 'login' && (
               <button
                 onClick={handleForgotPassword}
@@ -7678,12 +7711,63 @@ export default function App() {
         return;
       }
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-        const username = session?.user?.user_metadata?.username;
-        if (!username) return;
-        // Defer the DB call outside the auth callback to avoid the lock deadlock
+        const user = session?.user;
+        if (!user) return;
+        // Two sign-in paths:
+        // 1. Classic email/password: user_metadata.username is set at signup
+        // 2. Discord OAuth: user_metadata comes from Discord (name, full_name,
+        //    user_name, preferred_username, avatar_url). No username field.
+        //    First-time Discord login = no accounts row yet, we create one.
+        const metadata = user.user_metadata || {};
         setTimeout(async () => {
           try {
-            const acc = await db.getAccount(username);
+            // Path 1: try classic username lookup first (fast path for existing users)
+            let acc = null;
+            if (metadata.username) {
+              acc = await db.getAccount(metadata.username);
+            }
+            // Path 2: look up by auth id (works for both classic + Discord users)
+            if (!acc) {
+              acc = await db.getAccountById(user.id);
+            }
+            // Path 3: this must be a first-time Discord sign-in. Create the profile.
+            if (!acc && user.app_metadata?.provider === 'discord') {
+              const rawName = metadata.full_name || metadata.name
+                || metadata.user_name || metadata.preferred_username
+                || metadata.custom_claims?.global_name
+                || (user.email ? user.email.split('@')[0] : 'Player');
+              // Sanitize: strip non-alphanumeric to make a valid username
+              let candidate = rawName.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 20);
+              if (!candidate) candidate = 'Player' + Math.floor(Math.random() * 10000);
+              // Make sure it's unique
+              let finalUsername = candidate;
+              let suffix = 1;
+              while (await db.getAccount(finalUsername)) {
+                finalUsername = `${candidate}${suffix}`;
+                suffix += 1;
+                if (suffix > 99) break;
+              }
+              // Insert new accounts row
+              const { error: insertErr } = await supabase.from('accounts').insert({
+                id: user.id,
+                username: finalUsername,
+                username_lower: finalUsername.toLowerCase(),
+                position: 'CM',
+                email: user.email || null,
+                country: null,
+                image_url: metadata.avatar_url || null,
+                stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, passes: 0, passAccuracy: 0, tackles: 0, interceptions: 0, saves: 0, catches: 0, cleanSheets: 0 },
+                matches: [],
+                awards: [],
+                championships: [],
+                created_at: new Date().toISOString(),
+              });
+              if (insertErr) {
+                console.error('Could not create Discord account:', insertErr);
+                return;
+              }
+              acc = await db.getAccountById(user.id);
+            }
             if (mounted && acc) setAccount(acc);
           } catch (e) {
             console.error('Profile load failed:', e);

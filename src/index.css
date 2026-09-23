@@ -13,3 +13,122 @@ body {
   -webkit-font-smoothing: antialiased;
   background: #f4f6fa;
 }
+
+/* ============ ASL 2006-STYLE UI PRIMITIVES ============
+   These classes are used by the Header, Nav, and Ticker components
+   to give the app the glossy sports-broadcast look. */
+
+/* GLOSSY BLUE HEADER BAR */
+.asl-header {
+  background:
+    linear-gradient(180deg, #4a86d0 0%, #3068b0 30%, #245aa0 70%, #1a4890 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.35),
+    inset 0 -1px 0 rgba(0,0,0,0.35),
+    0 4px 14px rgba(0,0,0,0.25);
+  border-bottom: 1px solid rgba(0,0,0,0.4);
+  position: relative;
+}
+.asl-header::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0; height: 50%;
+  background: linear-gradient(180deg, rgba(255,255,255,0.18), transparent);
+  pointer-events: none;
+}
+
+.asl-logo-plate {
+  background: linear-gradient(180deg, #fff, #e6ebf3);
+  padding: 6px 8px;
+  border: 1px solid rgba(0,0,0,0.35);
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.9);
+}
+
+.asl-wordmark {
+  font-family: 'Oswald', 'Impact', sans-serif;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.4);
+  line-height: 1;
+}
+.asl-sublabel {
+  font-family: 'Rajdhani', 'Barlow Condensed', sans-serif;
+  font-weight: 500;
+  letter-spacing: 5px;
+  color: #d8b858;
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.4);
+}
+.asl-user-chip {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #fff;
+  background: linear-gradient(180deg, rgba(255,255,255,0.15), rgba(0,0,0,0.1));
+  border: 1px solid rgba(0,0,0,0.35);
+  border-radius: 3px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.2),
+    0 1px 3px rgba(0,0,0,0.3);
+  text-transform: uppercase;
+}
+
+/* GOLD SCROLLING NEWS TICKER */
+.asl-ticker {
+  background: linear-gradient(180deg, #d8b858, #c0a038);
+  border-bottom: 1px solid #7a6520;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -1px 0 rgba(0,0,0,0.2);
+  overflow: hidden;
+  padding: 5px 0;
+}
+.asl-ticker-track {
+  display: flex;
+  gap: 40px;
+  white-space: nowrap;
+  animation: asl-ticker-scroll 45s linear infinite;
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  color: #0e2451;
+  text-transform: uppercase;
+  padding-left: 40px;
+  width: max-content;
+}
+.asl-ticker-track > span::before {
+  content: "◆ ";
+  color: rgba(14, 36, 81, 0.5);
+  margin-right: 8px;
+}
+@keyframes asl-ticker-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+/* NAV BAR WITH GOLD UNDERLINE */
+.asl-nav-bar {
+  background: linear-gradient(180deg, #1a3266 0%, #0e2451 100%);
+  border-bottom: 2px solid #d8b858;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+.asl-nav-tab {
+  font-family: 'Oswald', 'Impact', sans-serif;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.7);
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  transition: color 0.15s, background 0.15s;
+  margin-bottom: -2px;
+}
+.asl-nav-tab:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.06);
+}
+.asl-nav-tab.active {
+  color: #d8b858 !important;
+  background: linear-gradient(180deg, transparent, rgba(216,184,88,0.12)) !important;
+  border-bottom: 2px solid #d8b858 !important;
+}

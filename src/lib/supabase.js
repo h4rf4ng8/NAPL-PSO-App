@@ -13,16 +13,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    // Use implicit flow: OAuth token comes back in the URL fragment (#access_token=...)
-    // rather than through a PKCE code exchange. Matches the /# redirect Supabase sends.
-    flowType: 'implicit',
-    // Automatically parse the URL fragment on page load and persist the session.
+    // PKCE flow is the modern default for new Supabase projects. Token exchange
+    // happens via a code in the URL query string (?code=...) instead of a fragment.
+    flowType: 'pkce',
     detectSessionInUrl: true,
     persistSession: true,
     autoRefreshToken: true,
     storage: window.localStorage,
   },
 });
+
+// Diagnostic: log any auth state changes so we can see what's happening in the console
+if (typeof window !== 'undefined') {
+  supabase.auth.onAuthStateChange((event, session) => {
+    console.log('[supabase auth]', event, session ? `session=${session.user?.id}` : 'no session');
+  });
+}
 
 // =====================================================================
 // AUTH

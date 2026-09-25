@@ -1,5 +1,5 @@
 -- =============================================================
--- NAPL Stats Hub — Supabase Database Schema
+-- ASL — Alliance Strikers League — Supabase Database Schema
 -- =============================================================
 -- Run this entire file in the Supabase SQL Editor
 -- (Dashboard → SQL Editor → New Query → paste this → click "Run")
@@ -16,9 +16,15 @@ CREATE TABLE IF NOT EXISTS public.accounts (
   position        TEXT NOT NULL DEFAULT 'CM',
   team_id         TEXT,
   image_url       TEXT,
+  pending_image_url TEXT,
+  email           TEXT,
+  country         TEXT,
   stats           JSONB NOT NULL DEFAULT '{}'::jsonb,
   matches         JSONB NOT NULL DEFAULT '[]'::jsonb,
   awards          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  championships   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  totw_until      TIMESTAMPTZ,
+  cheater         BOOLEAN NOT NULL DEFAULT false,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -33,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.teams (
   description       TEXT,
   owner_username    TEXT NOT NULL,
   members           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  pending_members   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  totw              BOOLEAN NOT NULL DEFAULT false,
+  totw_set_at       TIMESTAMPTZ,
   status            TEXT NOT NULL DEFAULT 'pending',
   logo_url          TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -102,13 +111,14 @@ ALTER TABLE public.settings    ENABLE ROW LEVEL SECURITY;
 
 -- ACCOUNTS:
 -- Anyone logged in can read all accounts (needed for leaderboard, rankings, etc.)
--- A user can only update their own row.
+-- Any authenticated user can update any account row — admin-only actions
+-- (approving pictures, renaming, editing stats) are gated in the app UI.
 CREATE POLICY "accounts_read_all" ON public.accounts
   FOR SELECT TO authenticated USING (true);
 CREATE POLICY "accounts_insert_self" ON public.accounts
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
-CREATE POLICY "accounts_update_self" ON public.accounts
-  FOR UPDATE TO authenticated USING (auth.uid() = id);
+CREATE POLICY "accounts_update_all" ON public.accounts
+  FOR UPDATE TO authenticated USING (true);
 
 -- TEAMS: anyone logged in can read all teams, anyone can insert/update
 -- (admin checks happen in the app — Supabase doesn't know who's an admin)
@@ -138,6 +148,6 @@ CREATE POLICY "settings_update" ON public.settings FOR UPDATE TO authenticated U
 -- STORAGE — for player and team images
 -- =============================================================
 -- After running this SQL, go to: Dashboard → Storage → New Bucket
--- Create a bucket named: napl-images
+-- Create a bucket named: asl-images
 -- Set it to PUBLIC (so image URLs work without auth)
 -- =============================================================

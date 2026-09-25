@@ -284,9 +284,9 @@ const hasAnyAward = (account) => (account?.awards?.length || 0) > 0;
 const POSITIONS = ['ST', 'CM', 'DEF', 'GK', 'FLEX'];
 
 const emptyStats = () => ({
-  games: 0, goals: 0, assists: 0, tackles: 0, interceptions: 0,
-  passes: 0, passAccuracy: 0, shots: 0, shotsOnTarget: 0,
-  cleanSheets: 0, saves: 0, motm: 0, wins: 0, losses: 0, draws: 0,
+  games: 0, goals: 0, assists: 0, tackles: 0,
+  passes: 0, cleanSheets: 0, deflects: 0, catches: 0,
+  motm: 0, wins: 0, losses: 0, draws: 0,
 });
 
 const getStatsForSeason = (account, season) => {
@@ -294,26 +294,22 @@ const getStatsForSeason = (account, season) => {
   const matches = (account.matches || []).filter(m => (m.season || 'S1') === season);
   if (matches.length === 0) return emptyStats();
   const s = emptyStats();
-  let totalAcc = 0, totalPasses = 0;
+  let totalPasses = 0;
   for (const m of matches) {
     s.games += 1;
     s.goals += m.goals || 0;
     s.assists += m.assists || 0;
     s.tackles += m.tackles || 0;
-    s.interceptions += m.interceptions || 0;
-    s.shots += m.shots || 0;
-    s.shotsOnTarget += m.shotsOnTarget || 0;
-    s.saves += m.saves || 0;
+    s.deflects += m.deflects || 0;
+    s.catches += m.catches || 0;
     if (m.cleanSheet) s.cleanSheets += 1;
     if (m.motm) s.motm += 1;
     if (m.result === 'W') s.wins += 1;
     else if (m.result === 'L') s.losses += 1;
     else s.draws += 1;
     totalPasses += m.passes || 0;
-    totalAcc += m.passAccuracy || 0;
   }
   s.passes = Math.round(totalPasses / s.games);
-  s.passAccuracy = Math.round(totalAcc / s.games);
   return s;
 };
 
@@ -322,34 +318,32 @@ const calcAttributes = (stats, position) => {
   const goals = stats.goals || 0;
   const assists = stats.assists || 0;
   const tackles = stats.tackles || 0;
-  const interceptions = stats.interceptions || 0;
   const passes = stats.passes || 0;
-  const passAcc = stats.passAccuracy || 0;
-  const shots = stats.shots || 0;
-  const shotsOnTarget = stats.shotsOnTarget || 0;
   const cleanSheets = stats.cleanSheets || 0;
-  const saves = stats.saves || 0;
+  const deflects = stats.deflects || 0;
+  const catches = stats.catches || 0;
   const motm = stats.motm || 0;
 
   const clamp = (n) => Math.min(99, Math.max(40, Math.round(n)));
 
+  // Rewritten to use only Strikers-Club-tracked stats. Numeric weights are
+  // starting values — super admins can dial them via ADMIN → WEIGHTINGS.
   const pace = clamp(55 + (assists / games) * 12 + (motm / games) * 10 + (['ST','DEF'].includes(position) ? 8 : 0));
-  const shotAcc = shots > 0 ? (shotsOnTarget / shots) : 0.5;
-  const shooting = clamp(50 + (goals / games) * 20 + shotAcc * 20 + (position === 'ST' ? 12 : 0));
-  const passing = clamp(50 + (assists / games) * 15 + passAcc * 0.35 + Math.min(passes / games, 50) * 0.3 + (position === 'CM' ? 10 : 0));
+  const shooting = clamp(50 + (goals / games) * 25 + (position === 'ST' ? 12 : 0));
+  const passing = clamp(50 + (assists / games) * 15 + Math.min(passes / games, 50) * 0.5 + (position === 'CM' ? 10 : 0));
   const dribbling = clamp(55 + ((goals + assists) / games) * 10 + (motm / games) * 8 + (['ST','CM'].includes(position) ? 8 : 0));
-  const defending = clamp(45 + (tackles / games) * 8 + (interceptions / games) * 8 + (cleanSheets / games) * 20 + (position === 'DEF' ? 14 : 0));
-  const physical = clamp(60 + ((tackles + interceptions) / games) * 4 + (motm / games) * 8 + (['DEF','ST'].includes(position) ? 6 : 0));
+  const defending = clamp(45 + (tackles / games) * 10 + (cleanSheets / games) * 20 + (position === 'DEF' ? 14 : 0));
+  const physical = clamp(60 + (tackles / games) * 5 + (motm / games) * 8 + (['DEF','ST'].includes(position) ? 6 : 0));
 
   if (position === 'GK') {
-    const gkRating = clamp(55 + (cleanSheets / games) * 25 + (saves / games) * 4 + (motm / games) * 10);
+    const gkRating = clamp(55 + (cleanSheets / games) * 25 + (deflects / games) * 4 + (catches / games) * 3 + (motm / games) * 10);
     return {
-      pace: clamp(50 + (saves / games) * 2),
+      pace: clamp(50 + (deflects / games) * 2),
       shooting: clamp(40 + (cleanSheets / games) * 10),
-      passing: clamp(50 + passAcc * 0.4),
-      dribbling: clamp(45 + (saves / games) * 1.5),
+      passing: clamp(50 + Math.min(passes / games, 40) * 0.5),
+      dribbling: clamp(45 + (deflects / games) * 1.5),
       defending: gkRating,
-      physical: clamp(60 + (saves / games) * 3),
+      physical: clamp(60 + (deflects / games) * 3 + (catches / games) * 2),
     };
   }
   return { pace, shooting, passing, dribbling, defending, physical };
@@ -378,13 +372,14 @@ const MIN_GAMES_FOR_RANKING = 3;
 
 // Per-position stat weights (must sum to 1.0 each). These are the DEFAULTS —
 // super admins can override them via ADMIN → WEIGHTINGS, stored in the DB.
+// Only Strikers-Club-tracked stats — no shot%, interceptions, or pass accuracy.
 const DEFAULT_POSITION_WEIGHTS = {
-  ST:   { goalsPerGame: 0.40, shotPct: 0.25, assistsPerGame: 0.15, passesPerGame: 0.10, tacklesPerGame: 0.05, interceptionsPerGame: 0.05 },
-  CM:   { assistsPerGame: 0.30, passesPerGame: 0.25, goalsPerGame: 0.15, tacklesPerGame: 0.15, interceptionsPerGame: 0.10, shotPct: 0.05 },
-  DEF:  { tacklesPerGame: 0.35, interceptionsPerGame: 0.35, assistsPerGame: 0.15, passesPerGame: 0.10, goalsPerGame: 0.05 },
-  GK:   { savesPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
+  ST:   { goalsPerGame: 0.55, assistsPerGame: 0.20, passesPerGame: 0.10, tacklesPerGame: 0.15 },
+  CM:   { assistsPerGame: 0.35, passesPerGame: 0.30, goalsPerGame: 0.15, tacklesPerGame: 0.20 },
+  DEF:  { tacklesPerGame: 0.55, assistsPerGame: 0.15, passesPerGame: 0.20, goalsPerGame: 0.10 },
+  GK:   { deflectsPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
   // FLEX: equal blend of attack and defense for players who play multiple roles
-  FLEX: { goalsPerGame: 0.20, assistsPerGame: 0.20, tacklesPerGame: 0.20, interceptionsPerGame: 0.15, passesPerGame: 0.15, shotPct: 0.10 },
+  FLEX: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.30, passesPerGame: 0.20 },
 };
 
 // Human-readable labels for each stat key (used in the weightings editor UI)
@@ -392,10 +387,8 @@ const STAT_KEY_LABELS = {
   goalsPerGame: 'Goals',
   assistsPerGame: 'Assists',
   tacklesPerGame: 'Tackles',
-  interceptionsPerGame: 'Interceptions',
   passesPerGame: 'Passes',
-  shotPct: 'Shot %',
-  savesPerGame: 'Saves',
+  deflectsPerGame: 'Deflects',
   catchesPerGame: 'Catches',
   cleanSheetPct: 'Clean Sheets',
 };
@@ -408,10 +401,8 @@ const playerStatValues = (account) => {
     goalsPerGame:        (s.goals || 0) / g,
     assistsPerGame:      (s.assists || 0) / g,
     tacklesPerGame:      (s.tackles || 0) / g,
-    interceptionsPerGame:(s.interceptions || 0) / g,
     passesPerGame:       (s.passes || 0) / g,
-    shotPct:             (s.shots || 0) > 0 ? (s.goals || 0) / s.shots : 0,
-    savesPerGame:        (s.saves || 0) / g,
+    deflectsPerGame:        (s.deflects || 0) / g,
     catchesPerGame:      (s.catches || 0) / g,
     cleanSheetPct:       (s.cleanSheets || 0) / g,
   };
@@ -998,8 +989,8 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   const showZeroStats = isUnranked;
   const displayOverall = showZeroStats ? 0 : overall;
   const emptyDisplayStats = {
-    goals: 0, assists: 0, passes: 0, shots: 0, tackles: 0,
-    interceptions: 0, saves: 0, catches: 0, cleanSheets: 0, games,
+    goals: 0, assists: 0, passes: 0, tackles: 0,
+    deflects: 0, catches: 0, cleanSheets: 0, games,
   };
   const displayStats = showZeroStats ? emptyDisplayStats : (account.stats || emptyDisplayStats);
 
@@ -1198,6 +1189,8 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       )}
 
       {/* 7. STATS GRID 3x2 — center-anchored numbers, symmetric around x=160 */}
+      {/* Only shows stats tracked by Strikers Club. For GK cards, right column
+          swaps to SAV/CAT/CS%; for field players it's TKL/W-L/GP. */}
       <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
         <text x="62" y="364" fontSize="20" textAnchor="middle">{displayStats.goals}</text>
         <text x="100" y="364" fontSize="11" letterSpacing="1.5">GOALS</text>
@@ -1206,17 +1199,30 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
         <text x="62" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.passes || 0).toFixed(1)}</text>
         <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS</text>
 
-        <text x="220" y="364" fontSize="20" textAnchor="middle">{displayStats.shots}</text>
-        <text x="256" y="364" fontSize="11" letterSpacing="1.5">SHO%</text>
-        <text x="220" y="390" fontSize="20" textAnchor="middle">{Number(displayStats.tackles || 0).toFixed(1)}</text>
-        <text x="256" y="390" fontSize="11" letterSpacing="1.5">TKL</text>
-        <text x="220" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.interceptions || 0).toFixed(1)}</text>
-        <text x="256" y="416" fontSize="11" letterSpacing="1.5">INT</text>
+        {position === 'GK' ? (
+          <>
+            <text x="220" y="364" fontSize="20" textAnchor="middle">{displayStats.deflects || 0}</text>
+            <text x="256" y="364" fontSize="11" letterSpacing="1.5">DFL</text>
+            <text x="220" y="390" fontSize="20" textAnchor="middle">{displayStats.catches || 0}</text>
+            <text x="256" y="390" fontSize="11" letterSpacing="1.5">CATCH</text>
+            <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.cleanSheets || 0}</text>
+            <text x="256" y="416" fontSize="11" letterSpacing="1.5">CS</text>
+          </>
+        ) : (
+          <>
+            <text x="220" y="364" fontSize="20" textAnchor="middle">{Number(displayStats.tackles || 0).toFixed(1)}</text>
+            <text x="256" y="364" fontSize="11" letterSpacing="1.5">TKL</text>
+            <text x="220" y="390" fontSize="20" textAnchor="middle">{(displayStats.wins || 0)}-{(displayStats.losses || 0)}</text>
+            <text x="256" y="390" fontSize="11" letterSpacing="1.5">W-L</text>
+            <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.games || 0}</text>
+            <text x="256" y="416" fontSize="11" letterSpacing="1.5">GP</text>
+          </>
+        )}
       </g>
       <line x1="160" y1="348" x2="160" y2="422" stroke={palette.shadow} strokeWidth="0.7" strokeOpacity="0.55" />
 
       {/* 8. ASL logo at bottom center */}
-      <image href={ASL_LOGO_DIAMOND} x="146" y="438" width="28" height="28" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
+      <image href={ASL_LOGO_DIAMOND} x="139" y="431" width="42" height="42" preserveAspectRatio="xMidYMid meet" opacity="0.9" />
 
       {/* CHEATER STAMP — giant diagonal red text overlaying the whole card,
           bottom-left to top-right. Clipped to the card shape so it doesn't
@@ -1264,8 +1270,10 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
     defender: 'Golden Defender',
     playmaker: 'Golden Playmaker',
   };
+  // Force en-US locale + short month so the label fits inside the card width
+  // regardless of the viewer's browser locale.
   const joinDate = account.createdAt
-    ? new Date(account.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+    ? new Date(account.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : 'Unknown';
   // Combined cabinet items: individual awards + team championships. Each is
   // tagged with a kind so the renderer picks the right icon.
@@ -1735,9 +1743,9 @@ const ModalShell = ({ onClose, title, children, maxWidth = 'max-w-2xl' }) => (
 const LogMatchModal = ({ account, allPlayers, currentSeason, onClose, onSave }) => {
   const [form, setForm] = useState({
     opponent: '', opponentTeamId: '', result: 'W',
-    goals: 0, assists: 0, tackles: 0, interceptions: 0,
-    passes: 0, passAccuracy: 0, shots: 0, shotsOnTarget: 0,
-    cleanSheet: false, saves: 0, motm: false,
+    goals: 0, assists: 0, tackles: 0,
+    passes: 0,
+    cleanSheet: false, deflects: 0, catches: 0, motm: false,
     teammates: [], season: currentSeason,
   });
   const [teams, setTeams] = useState([]);
@@ -1758,27 +1766,23 @@ const LogMatchModal = ({ account, allPlayers, currentSeason, onClose, onSave }) 
     const newMatch = { ...form, date: Date.now(), id: `m_${Date.now()}_${Math.random().toString(36).slice(2,8)}` };
     const updatedMatches = [newMatch, ...(account.matches || [])].slice(0, 200);
     const lifetime = emptyStats();
-    let totalPasses = 0, totalAcc = 0;
+    let totalPasses = 0;
     for (const m of updatedMatches) {
       lifetime.games += 1;
       lifetime.goals += m.goals || 0;
       lifetime.assists += m.assists || 0;
       lifetime.tackles += m.tackles || 0;
-      lifetime.interceptions += m.interceptions || 0;
-      lifetime.shots += m.shots || 0;
-      lifetime.shotsOnTarget += m.shotsOnTarget || 0;
-      lifetime.saves += m.saves || 0;
+      lifetime.deflects += m.deflects || 0;
+      lifetime.catches += m.catches || 0;
       if (m.cleanSheet) lifetime.cleanSheets += 1;
       if (m.motm) lifetime.motm += 1;
       if (m.result === 'W') lifetime.wins += 1;
       else if (m.result === 'L') lifetime.losses += 1;
       else lifetime.draws += 1;
       totalPasses += m.passes || 0;
-      totalAcc += m.passAccuracy || 0;
     }
     if (lifetime.games > 0) {
       lifetime.passes = Math.round(totalPasses / lifetime.games);
-      lifetime.passAccuracy = Math.round(totalAcc / lifetime.games);
     }
     const updated = { ...account, stats: lifetime, matches: updatedMatches };
     await db.saveAccount(updated);
@@ -1859,19 +1863,16 @@ const LogMatchModal = ({ account, allPlayers, currentSeason, onClose, onSave }) 
 
         <div className="rounded-lg p-3" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44` }}>
           <div className="font-heading text-xs tracking-widest mb-2" style={{ color: C.greenLight }}>ATTACKING</div>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <div><Lbl>GOALS</Lbl><input {...num('goals')} /></div>
             <div><Lbl>ASSISTS</Lbl><input {...num('assists')} /></div>
-            <div><Lbl>SHOTS</Lbl><input {...num('shots')} /></div>
-            <div><Lbl>ON TARGET</Lbl><input {...num('shotsOnTarget')} /></div>
           </div>
         </div>
 
         <div className="rounded-lg p-3" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44` }}>
           <div className="font-heading text-xs tracking-widest mb-2" style={{ color: C.goldLight }}>POSSESSION</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 gap-2">
             <div><Lbl>PASSES</Lbl><input {...num('passes')} /></div>
-            <div><Lbl>PASS ACC %</Lbl><input {...num('passAccuracy')} /></div>
           </div>
         </div>
 
@@ -1879,8 +1880,8 @@ const LogMatchModal = ({ account, allPlayers, currentSeason, onClose, onSave }) 
           <div className="font-heading text-xs tracking-widest mb-2" style={{ color: C.redLight }}>DEFENSIVE</div>
           <div className="grid grid-cols-3 gap-2">
             <div><Lbl>TACKLES</Lbl><input {...num('tackles')} /></div>
-            <div><Lbl>INTERCEPTS</Lbl><input {...num('interceptions')} /></div>
-            <div><Lbl>SAVES</Lbl><input {...num('saves')} /></div>
+            <div><Lbl>DEFLECTS</Lbl><input {...num('deflects')} /></div>
+            <div><Lbl>CATCHES</Lbl><input {...num('catches')} /></div>
           </div>
         </div>
 
@@ -2665,24 +2666,23 @@ const PositionBreakdown = ({ account, season }) => {
       {games === 0 && <div className="font-mono text-sm py-4" style={{ color: `${C.cream}55` }}>No matches in this season yet.</div>}
       {games > 0 && isGK && (
         <div className="grid grid-cols-2 gap-2">
-          <Metric icon={<Hand />} label="SAVES / GAME" value={safeAvg(stats.saves, games)} accent={C.greenLight} />
+          <Metric icon={<Hand />} label="DEFLECTS / GAME" value={safeAvg(stats.deflects, games)} accent={C.greenLight} />
           <Metric icon={<Shield />} label="CLEAN SHEET %" value={`${safeRate(stats.cleanSheets, games)}%`} accent={C.greenLight} />
-          <Metric icon={<Trophy />} label="TOTAL SAVES" value={stats.saves} accent={C.goldLight} />
+          <Metric icon={<Target />} label="CATCHES / GAME" value={safeAvg(stats.catches, games)} accent={C.greenLight} />
+          <Metric icon={<Trophy />} label="TOTAL DEFLECTS" value={stats.deflects} accent={C.goldLight} />
         </div>
       )}
       {games > 0 && isAttacker && !isGK && (
         <div className="grid grid-cols-2 gap-2">
           <Metric icon={<Target />} label="GOALS / GAME" value={safeAvg(stats.goals, games)} accent={C.redLight} />
           <Metric icon={<Zap />} label="ASSISTS / GAME" value={safeAvg(stats.assists, games)} accent={C.greenLight} />
-          <Metric icon={<Footprints />} label="SHOT ACCURACY" value={`${safeRate(stats.shotsOnTarget, stats.shots)}%`} accent={C.redLight} />
-          <Metric icon={<Flag />} label="CONVERSION" value={`${safeRate(stats.goals, stats.shots)}%`} accent={C.redLight} />
           <Metric icon={<TrendingUp />} label="G + A" value={stats.goals + stats.assists} accent={C.goldLight} />
+          <Metric icon={<Activity />} label="PASSES / GAME" value={safeAvg(stats.passes * games, games)} accent={C.greenLight} />
         </div>
       )}
       {games > 0 && isMidfielder && !isAttacker && !isDefender && !isGK && (
         <div className="grid grid-cols-2 gap-2">
           <Metric icon={<Zap />} label="ASSISTS / GAME" value={safeAvg(stats.assists, games)} accent={C.greenLight} />
-          <Metric icon={<Activity />} label="PASS ACCURACY" value={`${stats.passAccuracy}%`} accent={C.greenLight} />
           <Metric icon={<TrendingUp />} label="PASSES / GAME" value={stats.passes} accent={C.greenLight} />
           <Metric icon={<Shield />} label="TACKLES / GAME" value={safeAvg(stats.tackles, games)} accent={C.redLight} />
           <Metric icon={<Target />} label="GOALS" value={stats.goals} accent={C.redLight} />
@@ -2691,9 +2691,8 @@ const PositionBreakdown = ({ account, season }) => {
       {games > 0 && isDefender && !isGK && (
         <div className="grid grid-cols-2 gap-2">
           <Metric icon={<Shield />} label="TACKLES / GAME" value={safeAvg(stats.tackles, games)} accent={C.redLight} />
-          <Metric icon={<Swords />} label="INTERCEPTS / GAME" value={safeAvg(stats.interceptions, games)} accent={C.redLight} />
           <Metric icon={<Trophy />} label="CLEAN SHEET %" value={`${safeRate(stats.cleanSheets, games)}%`} accent={C.greenLight} />
-          <Metric icon={<Activity />} label="PASS ACCURACY" value={`${stats.passAccuracy}%`} accent={C.greenLight} />
+          <Metric icon={<Activity />} label="PASSES / GAME" value={stats.passes} accent={C.greenLight} />
           <Metric icon={<Target />} label="GOALS" value={stats.goals} accent={C.goldLight} />
         </div>
       )}
@@ -3386,6 +3385,501 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
   );
 };
 
+// ============ IMPORT MATCH MANAGER ============
+// Admin uploads a Strikers Club JSON match export. The app parses it, previews
+// each player with a dropdown to confirm the ASL account, and on confirm adds
+// the match to each mapped player's record.
+//
+// Auto-matching: if an ASL account has `strikersId` set, players in the file
+// with matching player_id are auto-mapped. Otherwise admin picks manually.
+// After a manual pick, that Strikers Player ID gets saved onto the ASL account
+// so future imports match automatically ("teach once, applies forever").
+//
+// Dedup: match_id from the file is stored on each match record. Uploading the
+// same file twice is a no-op (players who already have that match_id are skipped).
+//
+// Unmatched players (no ASL account exists yet): logged but skipped. If the
+// player later signs up, admin can retroactively add these stats from the
+// Skipped Log tab.
+const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRefresh }) => {
+  const [step, setStep] = useState(1); // 1=upload, 2=teams, 3=map, 4=confirm
+  const [matchData, setMatchData] = useState(null); // parsed JSON
+  const [homeTeamId, setHomeTeamId] = useState('');
+  const [awayTeamId, setAwayTeamId] = useState('');
+  // For each strikers player_id → ASL username picked (or '' for skip)
+  const [playerMap, setPlayerMap] = useState({});
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [importResult, setImportResult] = useState(null); // shown on success screen
+  const fileInputRef = useRef(null);
+
+  // Approved teams only
+  const approvedTeams = useMemo(
+    () => (allTeams || []).filter(t => t.status === 'approved'),
+    [allTeams]
+  );
+
+  // Build lookup: strikersId → ASL account
+  const aslByStrikersId = useMemo(() => {
+    const map = {};
+    (allPlayers || []).forEach(p => {
+      if (p.strikersId) map[String(p.strikersId)] = p;
+    });
+    return map;
+  }, [allPlayers]);
+
+  // ---------- STEP 1: parse uploaded file ----------
+  const handleFile = async (file) => {
+    setError('');
+    if (!file) return;
+    setBusy(true);
+    try {
+      let text;
+      const buf = await file.arrayBuffer();
+      const bytes = new Uint8Array(buf);
+      // Detect UTF-16 (Strikers Club exports are UTF-16 LE with BOM)
+      if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
+        text = new TextDecoder('utf-16le').decode(bytes.slice(2));
+      } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
+        text = new TextDecoder('utf-16be').decode(bytes.slice(2));
+      } else if (bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) {
+        text = new TextDecoder('utf-8').decode(bytes.slice(3));
+      } else {
+        text = new TextDecoder('utf-8').decode(bytes);
+      }
+      const data = JSON.parse(text);
+      if (!data.match_id || !Array.isArray(data.players)) {
+        throw new Error('File does not look like a Strikers Club match export (missing match_id or players).');
+      }
+      setMatchData(data);
+      // Pre-fill player map: auto-match by strikersId when possible
+      const initialMap = {};
+      for (const p of data.players) {
+        const asl = aslByStrikersId[String(p.player_id)];
+        initialMap[p.player_id] = asl ? asl.username : '';
+      }
+      setPlayerMap(initialMap);
+      setStep(2);
+    } catch (e) {
+      setError('Could not parse file: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  // ---------- STEP 4: commit the import ----------
+  const commit = async () => {
+    setError('');
+    if (!matchData) return;
+    if (!homeTeamId || !awayTeamId) { setError('Pick both home and away teams first.'); return; }
+    if (homeTeamId === awayTeamId) { setError('Home and away must be different teams.'); return; }
+    setBusy(true);
+    try {
+      const homeTeam = approvedTeams.find(t => t.id === homeTeamId);
+      const awayTeam = approvedTeams.find(t => t.id === awayTeamId);
+      const homeScore = matchData.score?.home ?? 0;
+      const awayScore = matchData.score?.away ?? 0;
+      const isDraw = homeScore === awayScore;
+
+      let updated = 0, skipped = 0, alreadyImported = 0;
+      const skippedList = []; // {strikers_name, player_id, reason}
+
+      for (const p of matchData.players) {
+        const aslUsername = playerMap[p.player_id];
+        if (!aslUsername) {
+          skipped++;
+          skippedList.push({ strikersName: p.username, playerId: p.player_id, reason: 'No ASL account' });
+          continue;
+        }
+        const player = (allPlayers || []).find(x => x.username === aslUsername);
+        if (!player) {
+          skipped++;
+          skippedList.push({ strikersName: p.username, playerId: p.player_id, reason: 'ASL account not found' });
+          continue;
+        }
+
+        // Dedup: skip if this match_id already recorded for this player
+        const already = (player.matches || []).some(m => m.strikersMatchId === matchData.match_id);
+        if (already) { alreadyImported++; continue; }
+
+        // Map Strikers stats → ASL stats
+        const s = p.stats || {};
+        const isHome = p.team === 'home';
+        const goalsFor = isHome ? homeScore : awayScore;
+        const goalsAgainst = isHome ? awayScore : homeScore;
+        const opponent = isHome ? awayTeam : homeTeam;
+        const ownTeam = isHome ? homeTeam : awayTeam;
+        const result = goalsFor > goalsAgainst ? 'W' : (goalsFor < goalsAgainst ? 'L' : 'D');
+        // Tackles = poke_tackles_won + slide_tackles_performed (Q1 = B)
+        const tackles = (s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0);
+        // Clean sheet: derived. If your team allowed 0, it's a clean sheet for
+        // the whole defense. We apply it to every player on the shutout team.
+        const cleanSheet = goalsAgainst === 0;
+
+        const matchRecord = {
+          id: `sc_${matchData.match_id}_${p.player_id}`,
+          strikersMatchId: matchData.match_id, // dedup key
+          date: Date.now(),
+          season: currentSeason,
+          opponent: opponent?.name || (isHome ? 'AWAY' : 'HOME'),
+          opponentTeamId: opponent?.id || null,
+          ownTeamId: ownTeam?.id || null,
+          result,
+          goalsFor,
+          goalsAgainst,
+          stadium: matchData.stadium || '',
+          matchLength: matchData.match_length || 0,
+          goals: s.goals || 0,
+          assists: s.assists || 0,
+          passes: s.passes || 0,
+          tackles,
+          deflects: s.deflects || 0,
+          catches: s.catches || 0,
+          cleanSheet,
+          motm: false,
+          source: 'strikers-club-import',
+        };
+
+        // Aggregate lifetime totals for this player. We recompute from
+        // matches[] to keep everything in sync (safer than incrementing).
+        const updatedMatches = [...(player.matches || []), matchRecord];
+        const lifetime = emptyStats();
+        let totalPasses = 0;
+        for (const m of updatedMatches) {
+          lifetime.games += 1;
+          lifetime.goals += m.goals || 0;
+          lifetime.assists += m.assists || 0;
+          lifetime.tackles += m.tackles || 0;
+          lifetime.deflects += m.deflects || 0;
+          lifetime.catches += m.catches || 0;
+          if (m.cleanSheet) lifetime.cleanSheets += 1;
+          if (m.motm) lifetime.motm += 1;
+          if (m.result === 'W') lifetime.wins += 1;
+          else if (m.result === 'L') lifetime.losses += 1;
+          else lifetime.draws += 1;
+          totalPasses += m.passes || 0;
+        }
+        if (lifetime.games > 0) lifetime.passes = Math.round(totalPasses / lifetime.games);
+
+        // Persist strikersId if the player didn't have one yet (teach once)
+        const patch = { ...player, matches: updatedMatches, stats: lifetime };
+        if (!player.strikersId) patch.strikersId = String(p.player_id);
+        await db.saveAccount(patch);
+        updated++;
+      }
+
+      setImportResult({
+        matchId: matchData.match_id,
+        updated,
+        skipped,
+        alreadyImported,
+        skippedList,
+        homeTeam: homeTeam?.name,
+        awayTeam: awayTeam?.name,
+        score: `${homeScore} - ${awayScore}`,
+      });
+      setStep(5); // success screen
+      if (onRefresh) onRefresh();
+    } catch (e) {
+      setError('Import failed: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  // Reset for another import
+  const startOver = () => {
+    setStep(1);
+    setMatchData(null);
+    setHomeTeamId('');
+    setAwayTeamId('');
+    setPlayerMap({});
+    setImportResult(null);
+    setError('');
+  };
+
+  // ---------- RENDER HELPERS ----------
+  const StepBadge = ({ n, label, active, done }) => (
+    <div className="flex-1 text-center px-2 py-1.5 rounded flex items-center justify-center gap-1.5" style={{
+      background: active ? `${C.goldLight}22` : done ? `${C.green}22` : 'transparent',
+      border: `1px solid ${active ? C.goldLight : done ? C.green : C.navyLight}44`,
+    }}>
+      <span className="font-mono text-[10px] tracking-wider" style={{
+        color: active ? C.goldLight : done ? C.greenLight : `${C.cream}55`,
+      }}>
+        {done ? '✓' : n}. {label}
+      </span>
+    </div>
+  );
+
+  const H = ({ children }) => (
+    <div className="font-heading tracking-wider text-xs mb-2" style={{ color: C.goldLight, letterSpacing: '0.2em' }}>{children}</div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Header + step tracker */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <StepBadge n={1} label="UPLOAD"  active={step === 1} done={step > 1} />
+        <StepBadge n={2} label="TEAMS"   active={step === 2} done={step > 2} />
+        <StepBadge n={3} label="MAP"     active={step === 3} done={step > 3} />
+        <StepBadge n={4} label="CONFIRM" active={step === 4} done={step > 4} />
+      </div>
+
+      {error && (
+        <div className="p-3 rounded font-mono text-xs" style={{ background: `${C.red}22`, color: C.redLight, border: `1px solid ${C.red}44` }}>
+          {error}
+        </div>
+      )}
+
+      {/* ---------- STEP 1: UPLOAD ---------- */}
+      {step === 1 && (
+        <div className="p-6 rounded-lg text-center" style={{
+          background: `${C.goldLight}08`,
+          border: `2px dashed ${C.goldLight}55`,
+        }}>
+          <div className="text-4xl mb-3" style={{ color: C.goldLight }}>⬆</div>
+          <div className="font-heading tracking-wider text-lg mb-1" style={{ color: C.goldLight }}>UPLOAD STRIKERS CLUB MATCH FILE</div>
+          <div className="font-mono text-xs mb-4" style={{ color: `${C.cream}77` }}>
+            .JSON export from Strikers Club (UTF-16 or UTF-8)
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => handleFile(e.target.files?.[0])}
+            style={{ display: 'none' }}
+          />
+          <button
+            disabled={busy}
+            onClick={() => fileInputRef.current?.click()}
+            className="px-6 py-2.5 rounded font-heading tracking-wider text-sm"
+            style={{
+              background: C.goldLight, color: C.navyDeep,
+              border: `1px solid ${C.gold}`,
+              cursor: busy ? 'wait' : 'pointer',
+            }}
+          >{busy ? 'PARSING…' : 'CHOOSE FILE'}</button>
+        </div>
+      )}
+
+      {/* ---------- STEP 2: MATCH INFO + TEAMS ---------- */}
+      {step === 2 && matchData && (
+        <>
+          <div className="p-4 rounded" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44` }}>
+            <H>MATCH INFO FROM FILE</H>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}55` }}>MATCH ID</div>
+                <div className="font-mono text-[10px] break-all" style={{ color: C.cream }}>{matchData.match_id.slice(0, 12)}…</div>
+              </div>
+              <div>
+                <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}55` }}>STADIUM</div>
+                <div className="font-heading text-sm tracking-wider" style={{ color: C.cream }}>{matchData.stadium || '—'}</div>
+              </div>
+              <div>
+                <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}55` }}>LENGTH</div>
+                <div className="font-heading text-sm tracking-wider" style={{ color: C.cream }}>{Math.floor((matchData.match_length || 0) / 60)}:00</div>
+              </div>
+              <div>
+                <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}55` }}>SCORE</div>
+                <div className="font-heading text-lg tracking-wider" style={{ color: C.goldLight }}>
+                  {matchData.score?.home ?? 0} - {matchData.score?.away ?? 0}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-4 rounded" style={{ background: `${C.brandNavy}15`, border: `1px solid ${C.brandNavy}44` }}>
+            <H>ASSIGN ASL TEAMS</H>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <div className="font-mono text-[9px] tracking-wider mb-1" style={{ color: `${C.cream}77` }}>HOME (SCORE {matchData.score?.home ?? 0})</div>
+                <select
+                  value={homeTeamId}
+                  onChange={(e) => setHomeTeamId(e.target.value)}
+                  className="w-full px-3 py-2 rounded font-heading text-sm"
+                  style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
+                >
+                  <option value="">— pick team —</option>
+                  {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>)}
+                </select>
+              </div>
+              <div>
+                <div className="font-mono text-[9px] tracking-wider mb-1" style={{ color: `${C.cream}77` }}>AWAY (SCORE {matchData.score?.away ?? 0})</div>
+                <select
+                  value={awayTeamId}
+                  onChange={(e) => setAwayTeamId(e.target.value)}
+                  className="w-full px-3 py-2 rounded font-heading text-sm"
+                  style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
+                >
+                  <option value="">— pick team —</option>
+                  {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>)}
+                </select>
+              </div>
+            </div>
+            {approvedTeams.length < 2 && (
+              <div className="mt-2 font-mono text-[10px]" style={{ color: C.redLight }}>
+                You need at least 2 approved teams to import a match.
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={startOver} className="px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: `${C.navyLight}33`, color: `${C.cream}88` }}>← BACK</button>
+            <button
+              onClick={() => setStep(3)}
+              disabled={!homeTeamId || !awayTeamId}
+              className="flex-1 px-4 py-2 rounded font-heading text-xs tracking-wider"
+              style={{
+                background: (homeTeamId && awayTeamId) ? C.goldLight : `${C.navyLight}22`,
+                color: (homeTeamId && awayTeamId) ? C.navyDeep : `${C.cream}44`,
+                cursor: (homeTeamId && awayTeamId) ? 'pointer' : 'not-allowed',
+              }}
+            >NEXT: MAP PLAYERS →</button>
+          </div>
+        </>
+      )}
+
+      {/* ---------- STEP 3: MAP PLAYERS ---------- */}
+      {step === 3 && matchData && (
+        <>
+          <div className="p-4 rounded" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44` }}>
+            <H>MAP STRIKERS CLUB PLAYERS → ASL ACCOUNTS</H>
+            <div className="font-mono text-[10px] mb-3" style={{ color: `${C.cream}77` }}>
+              Auto-matched by Strikers Player ID when linked. Manually pick for anyone unmatched. Players with no ASL account will be skipped.
+            </div>
+
+            <div className="space-y-2">
+              {matchData.players.map(p => {
+                const teamBadge = p.team === 'home' ? 'HOME' : 'AWAY';
+                const teamBadgeColor = p.team === 'home' ? C.brandNavy : C.red;
+                const currentPick = playerMap[p.player_id] || '';
+                const autoMatched = aslByStrikersId[String(p.player_id)];
+                const isAuto = autoMatched && currentPick === autoMatched.username;
+                const s = p.stats || {};
+                const summary = [
+                  s.goals ? `${s.goals}G` : null,
+                  s.assists ? `${s.assists}A` : null,
+                  s.passes ? `${s.passes}p` : null,
+                  ((s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0)) > 0 ? `${(s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0)}T` : null,
+                  s.deflects ? `${s.deflects}D` : null,
+                  s.catches ? `${s.catches}C` : null,
+                ].filter(Boolean).join(' · ') || 'no stats';
+
+                return (
+                  <div key={p.player_id} className="p-2 rounded flex items-center gap-2 flex-wrap sm:flex-nowrap" style={{
+                    background: currentPick ? `${C.green}11` : `${C.red}11`,
+                    border: `1px solid ${currentPick ? C.green : C.red}33`,
+                  }}>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-heading text-sm tracking-wider truncate" style={{ color: C.cream }}>{p.username}</div>
+                      <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}55` }}>ID: {p.player_id}</div>
+                    </div>
+                    <div className="font-mono text-[9px] tracking-wider px-1.5 py-0.5 rounded" style={{
+                      background: `${teamBadgeColor}33`, color: teamBadgeColor === C.red ? C.redLight : `${C.brandNavy}`,
+                    }}>{teamBadge}</div>
+                    <div className="font-mono text-[9px] hidden sm:block" style={{ color: `${C.cream}66` }}>{summary}</div>
+                    <select
+                      value={currentPick}
+                      onChange={(e) => setPlayerMap(m => ({ ...m, [p.player_id]: e.target.value }))}
+                      className="px-2 py-1.5 rounded font-heading text-xs w-full sm:w-52"
+                      style={{
+                        background: C.navyDeep,
+                        color: currentPick ? C.cream : `${C.cream}55`,
+                        border: `1px solid ${isAuto ? C.green : currentPick ? C.navyLight : C.red}66`,
+                      }}
+                    >
+                      <option value="">— skip (no ASL account) —</option>
+                      {(allPlayers || []).map(a => (
+                        <option key={a.username} value={a.username}>{a.username}</option>
+                      ))}
+                    </select>
+                    {isAuto && <span className="font-mono text-[9px] tracking-wider" style={{ color: C.greenLight }}>AUTO</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-3 font-mono text-[10px]" style={{ color: `${C.cream}77` }}>
+              <b style={{ color: C.greenLight }}>{Object.values(playerMap).filter(Boolean).length}</b> matched · <b style={{ color: C.redLight }}>{Object.values(playerMap).filter(v => !v).length}</b> will be skipped
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => setStep(2)} className="px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: `${C.navyLight}33`, color: `${C.cream}88` }}>← BACK</button>
+            <button
+              onClick={() => setStep(4)}
+              className="flex-1 px-4 py-2 rounded font-heading text-xs tracking-wider"
+              style={{ background: C.goldLight, color: C.navyDeep }}
+            >NEXT: CONFIRM →</button>
+          </div>
+        </>
+      )}
+
+      {/* ---------- STEP 4: CONFIRM ---------- */}
+      {step === 4 && matchData && (
+        <>
+          <div className="p-4 rounded" style={{ background: `${C.goldLight}11`, border: `1px solid ${C.goldLight}44` }}>
+            <H>REVIEW & CONFIRM</H>
+            <div className="font-mono text-xs space-y-1" style={{ color: C.cream }}>
+              <div><b style={{ color: C.goldLight }}>Match:</b> {approvedTeams.find(t => t.id === homeTeamId)?.name} <b>{matchData.score?.home ?? 0} - {matchData.score?.away ?? 0}</b> {approvedTeams.find(t => t.id === awayTeamId)?.name}</div>
+              <div><b style={{ color: C.goldLight }}>Season:</b> {currentSeason}</div>
+              <div><b style={{ color: C.goldLight }}>Stadium:</b> {matchData.stadium || '—'}</div>
+              <div><b style={{ color: C.goldLight }}>Will update:</b> {Object.values(playerMap).filter(Boolean).length} players</div>
+              <div><b style={{ color: C.goldLight }}>Will skip:</b> {Object.values(playerMap).filter(v => !v).length} players (no ASL account)</div>
+            </div>
+            <div className="mt-3 font-mono text-[10px]" style={{ color: `${C.cream}77` }}>
+              Stats will be added to each matched player's record. Uploading the same match again is a no-op (deduped by match_id).
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={() => setStep(3)} className="px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: `${C.navyLight}33`, color: `${C.cream}88` }}>← BACK</button>
+            <button
+              onClick={commit}
+              disabled={busy}
+              className="flex-1 px-4 py-2 rounded font-heading text-xs tracking-wider"
+              style={{
+                background: C.greenLight, color: C.onColor,
+                cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1,
+              }}
+            >{busy ? 'IMPORTING…' : `✓ CONFIRM IMPORT (${Object.values(playerMap).filter(Boolean).length} PLAYERS)`}</button>
+          </div>
+        </>
+      )}
+
+      {/* ---------- STEP 5: SUCCESS ---------- */}
+      {step === 5 && importResult && (
+        <div className="p-4 rounded" style={{ background: `${C.green}15`, border: `1px solid ${C.green}44` }}>
+          <div className="font-heading tracking-wider text-lg mb-2" style={{ color: C.greenLight }}>✓ IMPORT COMPLETE</div>
+          <div className="font-mono text-xs space-y-1 mb-3" style={{ color: C.cream }}>
+            <div><b>{importResult.homeTeam}</b> {importResult.score} <b>{importResult.awayTeam}</b></div>
+            <div>Updated: <b style={{ color: C.greenLight }}>{importResult.updated}</b> players</div>
+            {importResult.alreadyImported > 0 && (
+              <div>Already had this match: <b style={{ color: C.goldLight }}>{importResult.alreadyImported}</b></div>
+            )}
+            {importResult.skipped > 0 && (
+              <div>Skipped: <b style={{ color: C.redLight }}>{importResult.skipped}</b> players (no ASL account)</div>
+            )}
+          </div>
+          {importResult.skippedList.length > 0 && (
+            <div className="mt-2 p-2 rounded" style={{ background: `${C.red}11`, border: `1px dashed ${C.red}44` }}>
+              <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: C.redLight }}>SKIPPED PLAYERS (need ASL account):</div>
+              <div className="font-mono text-[10px] space-y-0.5" style={{ color: `${C.cream}88` }}>
+                {importResult.skippedList.map(s => (
+                  <div key={s.playerId}>· {s.strikersName} (id {s.playerId}) — {s.reason}</div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button onClick={startOver} className="mt-3 px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: C.goldLight, color: C.navyDeep }}>
+            IMPORT ANOTHER MATCH
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============ ADMIN PANEL ============
 const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
   const [section, setSection] = useState('stats');
@@ -3483,6 +3977,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
           { id: 'teams',   label: 'TEAMS',   icon: Users },
           { id: 'totw',    label: 'TOTW',    icon: Trophy },
           { id: 'players', label: 'PLAYERS', icon: User },
+          { id: 'import',  label: 'IMPORT',  icon: TrendingUp },
           { id: 'pictures',label: 'PICTURES',icon: User },
           { id: 'awards',  label: 'AWARDS',  icon: Trophy },
           { id: 'season',  label: 'SEASON',  icon: Calendar },
@@ -3517,6 +4012,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
 
       {section === 'stats' && (
         <StatsManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
+      )}
+
+      {section === 'import' && (
+        <ImportMatchManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
       )}
 
       {section === 'pictures' && (
@@ -4589,8 +5088,8 @@ const SubmitMatchStats = ({ account, allPlayers, allTeams, currentSeason, existi
       if (!map.has(lc)) {
         const player = allPlayers.find(p => p.username.toLowerCase() === lc);
         const baseStats = player?.position === 'GK'
-          ? { saves: 0, catches: 0, passes: 0, cleanSheet: false }
-          : { goals: 0, shots: 0, assists: 0, passes: 0, tackles: 0, interceptions: 0 };
+          ? { deflects: 0, catches: 0, passes: 0, cleanSheet: false }
+          : { goals: 0, assists: 0, passes: 0, tackles: 0 };
         map.set(lc, { username: player.username, position: player.position, ...baseStats });
       }
     }
@@ -4807,7 +5306,7 @@ const SubmitMatchStats = ({ account, allPlayers, allTeams, currentSeason, existi
                 </div>
                 {isGK ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <StatField label="SAVES"   value={stat.saves}      onChange={(v) => updatePlayerStat(stat.username, 'saves', v)} />
+                    <StatField label="DEFLECTS"   value={stat.deflects}      onChange={(v) => updatePlayerStat(stat.username, 'deflects', v)} />
                     <StatField label="CATCHES" value={stat.catches}    onChange={(v) => updatePlayerStat(stat.username, 'catches', v)} />
                     <StatField label="PASSES"  value={stat.passes}     onChange={(v) => updatePlayerStat(stat.username, 'passes', v)} />
                     <ToggleField label="CLEAN SHEET" value={stat.cleanSheet} onChange={(v) => updatePlayerStat(stat.username, 'cleanSheet', v)} />
@@ -4815,11 +5314,9 @@ const SubmitMatchStats = ({ account, allPlayers, allTeams, currentSeason, existi
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <StatField label="GOALS"    value={stat.goals}         onChange={(v) => updatePlayerStat(stat.username, 'goals', v)} />
-                    <StatField label="SHOTS"    value={stat.shots}         onChange={(v) => updatePlayerStat(stat.username, 'shots', v)} hint="(total shots taken)" />
                     <StatField label="ASSISTS"  value={stat.assists}       onChange={(v) => updatePlayerStat(stat.username, 'assists', v)} />
                     <StatField label="PASSES"   value={stat.passes}        onChange={(v) => updatePlayerStat(stat.username, 'passes', v)} />
                     <StatField label="TACKLES"  value={stat.tackles}       onChange={(v) => updatePlayerStat(stat.username, 'tackles', v)} />
-                    <StatField label="INT"      value={stat.interceptions} onChange={(v) => updatePlayerStat(stat.username, 'interceptions', v)} hint="(interceptions)" />
                   </div>
                 )}
               </div>
@@ -4961,13 +5458,9 @@ const ReviewMatchStats = ({ account, allPlayers, allTeams, submission, onBack })
           goalsAgainst: oppScore,
           goals: ps.goals || 0,
           assists: ps.assists || 0,
-          shots: ps.shots || 0,
-          shotsOnTarget: ps.shots || 0, // we no longer track separately
           passes: ps.passes || 0,
-          passAccuracy: 0,
           tackles: ps.tackles || 0,
-          interceptions: ps.interceptions || 0,
-          saves: ps.saves || 0,
+          deflects: ps.deflects || 0,
           catches: ps.catches || 0,
           cleanSheet: !!ps.cleanSheet,
           motm: 0,
@@ -4982,12 +5475,9 @@ const ReviewMatchStats = ({ account, allPlayers, allTeams, submission, onBack })
           losses: (oldStats.losses || 0) + (result === 'L' ? 1 : 0),
           goals: (oldStats.goals || 0) + (ps.goals || 0),
           assists: (oldStats.assists || 0) + (ps.assists || 0),
-          shots: (oldStats.shots || 0) + (ps.shots || 0),
-          shotsOnTarget: (oldStats.shotsOnTarget || 0) + (ps.shots || 0),
           passes: (oldStats.passes || 0) + (ps.passes || 0),
           tackles: (oldStats.tackles || 0) + (ps.tackles || 0),
-          interceptions: (oldStats.interceptions || 0) + (ps.interceptions || 0),
-          saves: (oldStats.saves || 0) + (ps.saves || 0),
+          deflects: (oldStats.deflects || 0) + (ps.deflects || 0),
           catches: (oldStats.catches || 0) + (ps.catches || 0),
           cleanSheets: (oldStats.cleanSheets || 0) + (ps.cleanSheet ? 1 : 0),
         };
@@ -5102,7 +5592,7 @@ const ReviewMatchStats = ({ account, allPlayers, allTeams, submission, onBack })
                 {editing ? (
                   isGK ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <StatField label="SAVES"   value={ps.saves}   onChange={(v) => updateStat(ps.username, 'saves', v)} />
+                      <StatField label="DEFLECTS"   value={ps.deflects}   onChange={(v) => updateStat(ps.username, 'deflects', v)} />
                       <StatField label="CATCHES" value={ps.catches} onChange={(v) => updateStat(ps.username, 'catches', v)} />
                       <StatField label="PASSES"  value={ps.passes}  onChange={(v) => updateStat(ps.username, 'passes', v)} />
                       <ToggleField label="CLEAN SHEET" value={ps.cleanSheet} onChange={(v) => updateStat(ps.username, 'cleanSheet', v)} />
@@ -5110,18 +5600,16 @@ const ReviewMatchStats = ({ account, allPlayers, allTeams, submission, onBack })
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <StatField label="GOALS"   value={ps.goals}         onChange={(v) => updateStat(ps.username, 'goals', v)} />
-                      <StatField label="SHOTS"   value={ps.shots}         onChange={(v) => updateStat(ps.username, 'shots', v)} />
                       <StatField label="ASSISTS" value={ps.assists}       onChange={(v) => updateStat(ps.username, 'assists', v)} />
                       <StatField label="PASSES"  value={ps.passes}        onChange={(v) => updateStat(ps.username, 'passes', v)} />
                       <StatField label="TACKLES" value={ps.tackles}       onChange={(v) => updateStat(ps.username, 'tackles', v)} />
-                      <StatField label="INT"     value={ps.interceptions} onChange={(v) => updateStat(ps.username, 'interceptions', v)} />
                     </div>
                   )
                 ) : (
                   <div className="grid grid-cols-3 gap-2 font-mono text-xs">
                     {isGK ? (
                       <>
-                        <StatLine label="SAVES" value={ps.saves} />
+                        <StatLine label="DFL" value={ps.deflects} />
                         <StatLine label="CATCH" value={ps.catches} />
                         <StatLine label="PASS"  value={ps.passes} />
                         <StatLine label="CS"    value={ps.cleanSheet ? '✓' : '—'} />
@@ -5129,11 +5617,9 @@ const ReviewMatchStats = ({ account, allPlayers, allTeams, submission, onBack })
                     ) : (
                       <>
                         <StatLine label="GOAL" value={ps.goals} />
-                        <StatLine label="SHOT" value={ps.shots} />
                         <StatLine label="AST"  value={ps.assists} />
                         <StatLine label="PASS" value={ps.passes} />
                         <StatLine label="TKL"  value={ps.tackles} />
-                        <StatLine label="INT"  value={ps.interceptions} />
                       </>
                     )}
                   </div>
@@ -5862,11 +6348,12 @@ const PicturesManager = ({ allPlayers, onRefresh }) => {
 // Lets super admins tune the per-position stat weights used for rankings.
 const WeightingsManager = ({ onRefresh }) => {
   // Which stats apply to which position (must match DEFAULT_POSITION_WEIGHTS keys)
+  // Strikers-Club stat set only — no shot%, interceptions, or pass accuracy.
   const POSITION_STATS = {
-    ST:  ['goalsPerGame', 'shotPct', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame', 'interceptionsPerGame'],
-    CM:  ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame', 'interceptionsPerGame', 'shotPct'],
-    DEF: ['tacklesPerGame', 'interceptionsPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
-    GK:  ['savesPerGame', 'cleanSheetPct', 'catchesPerGame'],
+    ST:  ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
+    CM:  ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
+    DEF: ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
+    GK:  ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
   };
   const POSITION_NAMES = { ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE' };
 
@@ -6412,14 +6899,14 @@ const TierPreview = () => {
     let stats;
     if (targetOverall >= 87) {
       stats = isGK
-        ? { games, wins: 13, draws: 2, losses: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, passes: 240, passAccuracy: 92, tackles: 0, interceptions: 0, saves: 95, cleanSheets: 13, catches: 30, motm: 0 }
-        : { games, wins: 12, draws: 2, losses: 1, goals: 38, assists: 22, shots: 75, shotsOnTarget: 60, passes: 540, passAccuracy: 92, tackles: 22, interceptions: 14, saves: 0, cleanSheets: 0, catches: 0, motm: 0 };
+        ? { games, wins: 13, draws: 2, losses: 0, goals: 0, assists: 0, passes: 16, tackles: 0, deflects: 95, cleanSheets: 13, catches: 30, motm: 0 }
+        : { games, wins: 12, draws: 2, losses: 1, goals: 38, assists: 22, passes: 36, tackles: 22, deflects: 0, cleanSheets: 0, catches: 0, motm: 0 };
     } else if (targetOverall >= 78) {
-      stats = { games, wins: 9, draws: 3, losses: 3, goals: 18, assists: 11, shots: 48, shotsOnTarget: 32, passes: 480, passAccuracy: 84, tackles: 38, interceptions: 22, saves: 0, cleanSheets: 4, catches: 0, motm: 0 };
+      stats = { games, wins: 9, draws: 3, losses: 3, goals: 18, assists: 11, passes: 32, tackles: 38, deflects: 0, cleanSheets: 4, catches: 0, motm: 0 };
     } else if (targetOverall >= 68) {
-      stats = { games, wins: 7, draws: 3, losses: 5, goals: 8, assists: 6, shots: 30, shotsOnTarget: 16, passes: 360, passAccuracy: 76, tackles: 22, interceptions: 14, saves: 0, cleanSheets: 2, catches: 0, motm: 0 };
+      stats = { games, wins: 7, draws: 3, losses: 5, goals: 8, assists: 6, passes: 24, tackles: 22, deflects: 0, cleanSheets: 2, catches: 0, motm: 0 };
     } else {
-      stats = { games, wins: 4, draws: 3, losses: 8, goals: 3, assists: 2, shots: 18, shotsOnTarget: 6, passes: 270, passAccuracy: 64, tackles: 12, interceptions: 8, saves: 0, cleanSheets: 1, catches: 0, motm: 0 };
+      stats = { games, wins: 4, draws: 3, losses: 8, goals: 3, assists: 2, passes: 18, tackles: 12, deflects: 0, cleanSheets: 1, catches: 0, motm: 0 };
     }
     return { username, position, stats, awards, matches: [], imageUrl: null, country: null };
   };
@@ -8296,7 +8783,7 @@ export default function App() {
                 email: user.email || null,
                 country: null,
                 image_url: metadata.avatar_url || null,
-                stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, passes: 0, passAccuracy: 0, tackles: 0, interceptions: 0, saves: 0, catches: 0, cleanSheets: 0 },
+                stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0 },
                 matches: [],
                 awards: [],
                 championships: [],

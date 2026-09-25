@@ -172,7 +172,18 @@ const rowToTeam = (row) => row ? ({
   description: row.description,
   ownerUsername: row.owner_username,
   members: row.members || [],
-  pendingMembers: row.pending_members || [],
+  // `pending_members` stores invitation records: [{username, status, respondedAt}].
+  // Legacy: older rows may hold plain strings (usernames). Normalize on read so
+  // the app always sees the object shape.
+  invitations: (row.pending_members || []).map(entry =>
+    typeof entry === 'string'
+      ? { username: entry, status: 'pending', respondedAt: null }
+      : entry
+  ),
+  // Legacy alias — some places still read `pendingMembers` as a username list
+  pendingMembers: (row.pending_members || []).map(entry =>
+    typeof entry === 'string' ? entry : entry.username
+  ),
   totw: row.totw || false,
   totwSetAt: row.totw_set_at ? new Date(row.totw_set_at).getTime() : null,
   status: row.status,

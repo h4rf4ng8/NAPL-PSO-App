@@ -54,7 +54,7 @@ export const auth = {
       position: position || 'CM',
       email: realEmail,
       country: country || null,
-      stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, shots: 0, shotsOnTarget: 0, passes: 0, passAccuracy: 0, tackles: 0, interceptions: 0, saves: 0, catches: 0, cleanSheets: 0 },
+      stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0 },
       matches: [],
       awards: [],
       championships: [],
@@ -161,6 +161,9 @@ const rowToAccount = (row) => row ? ({
   championships: row.championships || [],
   totwUntil: row.totw_until ? new Date(row.totw_until).getTime() : null,
   cheater: !!row.cheater,
+  // Strikers Club player ID (set once on first successful match import; used
+  // to auto-match players on future imports).
+  strikersId: row.strikers_id || null,
   createdAt: new Date(row.created_at).getTime(),
 }) : null;
 
@@ -261,6 +264,7 @@ export const db = {
       championships: account.championships || [],
       totw_until: account.totwUntil ? new Date(account.totwUntil).toISOString() : null,
       cheater: !!account.cheater,
+      strikers_id: account.strikersId || null,
     });
     const { error } = account.id
       ? await query.eq('id', account.id)

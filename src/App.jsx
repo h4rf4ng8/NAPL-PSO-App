@@ -3142,7 +3142,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           background: '#1e6a30',
           border: `2px solid ${C.brandNavyDeep}`,
           boxShadow: `inset 0 0 40px rgba(0,0,0,0.35), 0 4px 20px rgba(0,0,0,0.4)`,
-          maxWidth: 360,
+          maxWidth: 440,
         }}
       >
         {/* Grass stripes — alternating horizontal bands like a mown pitch */}

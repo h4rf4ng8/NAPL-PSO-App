@@ -3882,7 +3882,7 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
 
 // ============ ADMIN PANEL ============
 const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
-  const [section, setSection] = useState('stats');
+  const [section, setSection] = useState('teams');
   const [teams, setTeams] = useState([]);
   const [allPlayers, setAllPlayers] = useState([]);
   const [tab, setTab] = useState('pending');
@@ -3973,7 +3973,9 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
       {/* TOP-LEVEL ADMIN SECTION TABS */}
       <div className="flex gap-1 mb-5 p-1 rounded flex-wrap" style={{ background: `${C.navyDeep}88` }}>
         {[
-          { id: 'stats',   label: 'STATS',   icon: BarChart3 },
+          // STATS tab hidden — JSON import handles match stats now.
+          // The StatsManager component is kept in the code in case admins need
+          // to manually enter a match that wasn't exported (rare edge case).
           { id: 'teams',   label: 'TEAMS',   icon: Users },
           { id: 'totw',    label: 'TOTW',    icon: Trophy },
           { id: 'players', label: 'PLAYERS', icon: User },

@@ -3047,94 +3047,46 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
     ...buckets.FLEX,
   ];
 
-  // A single slot in the formation — compact circular avatar with a name +
-  // OVR badge below. Hover scales up and lifts (subtle "pop" effect). Click
-  // opens the full PlayerCardModal to see front + back. Empty slots stay as
-  // small dashed circles labeled with the position.
+  // A single slot in the formation — renders a mini PlayerCard scaled down
+  // by default; on hover it grows back to standard sm size (175×280). Empty
+  // slots stay as compact placeholders labeled with the position.
+  const SLOT_W = 96;   // 175 * ~0.55
+  const SLOT_H = 154;  // 280 * ~0.55
   const Slot = ({ player, positionLabel }) => {
     if (!player) {
       return (
-        <div className="flex flex-col items-center" style={{ width: 90 }}>
-          <div
-            className="rounded-full flex items-center justify-center"
-            style={{
-              width: 64, height: 64,
-              background: `${C.navyDeep}88`,
-              border: `2px dashed ${C.navyLight}66`,
-              color: `${C.cream}55`,
-            }}
-          >
-            <div className="font-display text-sm tracking-wider">{positionLabel}</div>
-          </div>
-          <div className="font-mono text-[9px] tracking-widest mt-1.5" style={{
+        <div
+          className="flex flex-col items-center justify-center rounded"
+          style={{
+            width: SLOT_W, height: SLOT_H,
+            background: `${C.navyDeep}88`,
+            border: `2px dashed ${C.navyLight}66`,
+          }}
+        >
+          <div className="font-display text-2xl tracking-wider" style={{
+            color: 'rgba(255,255,255,0.7)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+          }}>{positionLabel}</div>
+          <div className="font-mono text-[9px] tracking-widest mt-1" style={{
             color: 'rgba(255,255,255,0.55)',
             textShadow: '0 1px 2px rgba(0,0,0,0.8)',
           }}>EMPTY</div>
         </div>
       );
     }
-    const ranking = getPlayerRanking(player, rankings);
-    const ovr = ranking?.score || 0;
-    const tierName = ranking?.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
-    const tier = cardTier(tierName);
-    // Ring uses the tier's mid tone; OVR badge text uses the tier's dark accent
-    // so it's readable on the light ring color.
-    const ringColor = tier.from || C.goldLight;
-    const ovrTextColor = tier.accent || C.navyDeep;
-    const captain = isTeamCaptain(player, team);
     return (
       <button
         type="button"
         onClick={() => onCardClick && onCardClick(player)}
-        className="asl-formation-slot flex flex-col items-center focus:outline-none"
-        style={{ width: 90, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+        className="asl-formation-slot focus:outline-none"
+        style={{
+          width: SLOT_W, height: SLOT_H,
+          background: 'transparent', border: 'none', padding: 0,
+          cursor: 'pointer', position: 'relative',
+        }}
       >
-        <div className="asl-formation-avatar" style={{ position: 'relative' }}>
-          {/* Circular avatar */}
-          <div
-            className="rounded-full overflow-hidden flex items-center justify-center"
-            style={{
-              width: 64, height: 64,
-              background: `${C.navyDeep}`,
-              border: `3px solid ${ringColor}`,
-              boxShadow: `0 3px 10px rgba(0,0,0,0.4)`,
-            }}
-          >
-            {player.imageUrl ? (
-              <img src={player.imageUrl} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <div className="font-display text-2xl" style={{ color: ringColor }}>
-                {(player.username || '?').slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-          {/* OVR badge — top-right corner */}
-          <div
-            className="absolute rounded-full flex items-center justify-center"
-            style={{
-              top: -4, right: -6,
-              width: 26, height: 26,
-              background: ringColor,
-              color: ovrTextColor,
-              border: `2px solid ${C.navyDeep}`,
-              fontFamily: 'Anton, sans-serif',
-              fontSize: 13,
-              lineHeight: 1,
-            }}
-          >{ovr}</div>
-        </div>
-        <div className="mt-1.5 text-center" style={{ width: 90 }}>
-          <div className="font-heading text-[11px] tracking-wider flex items-center justify-center gap-1 truncate" style={{
-            color: '#ffffff',
-            textShadow: '0 1px 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)',
-          }}>
-            {captain && <CaptainStar size={10} />}
-            <span className="truncate">{(player.username || '').toUpperCase()}</span>
-          </div>
-          <div className="font-mono text-[9px] tracking-widest" style={{
-            color: 'rgba(255,255,255,0.75)',
-            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-          }}>{player.position}</div>
+        <div className="asl-formation-card-scaler">
+          <PlayerCard account={player} size="sm" team={team} rankings={rankings} hideTeam={true} />
         </div>
       </button>
     );
@@ -3146,7 +3098,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           keep it from dominating the viewport (used to be 2:3 = too tall to
           fit without scrolling on mobile). */}
       <div
-        className="rounded-xl overflow-hidden relative mx-auto"
+        className="rounded-xl relative mx-auto"
         style={{
           background: '#1e6a30',
           border: `2px solid ${C.brandNavyDeep}`,
@@ -3154,52 +3106,53 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           maxWidth: 440,
         }}
       >
-        {/* Grass stripes — alternating horizontal bands like a mown pitch */}
-        <div className="absolute inset-0 pointer-events-none" style={{
-          backgroundImage: `repeating-linear-gradient(
-            180deg,
-            #1c6a2e 0px,
-            #1c6a2e 32px,
-            #1e7332 32px,
-            #1e7332 64px
-          )`,
-        }} />
-
-        {/* Pitch markings — SVG overlay for own-half view. Halfway line at top,
-            own goal at bottom. All lines white. ViewBox is 400×500 to match
-            the container's 4:5 aspect so markings render without distortion. */}
-        <svg
-          viewBox="0 0 400 500"
-          preserveAspectRatio="none"
-          className="absolute inset-0 w-full h-full pointer-events-none"
-          style={{ opacity: 0.75 }}
-        >
-          {/* Sidelines + goal line at bottom */}
-          <line x1="10" y1="0" x2="10" y2="492" stroke="#fff" strokeWidth="2" />
-          <line x1="390" y1="0" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
-          <line x1="10" y1="492" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
-          {/* Halfway line at very top */}
-          <line x1="10" y1="8" x2="390" y2="8" stroke="#fff" strokeWidth="2" />
-          {/* Bottom half of the center circle sitting on the halfway line */}
-          <path d="M 142 8 A 58 58 0 0 0 258 8" fill="none" stroke="#fff" strokeWidth="2" />
-          <circle cx="200" cy="8" r="3" fill="#fff" />
-          {/* Own penalty box (18-yard) + 6-yard box + penalty spot + arc */}
-          <rect x="90" y="417" width="220" height="75" fill="none" stroke="#fff" strokeWidth="2" />
-          <rect x="140" y="460" width="120" height="32" fill="none" stroke="#fff" strokeWidth="2" />
-          <circle cx="200" cy="440" r="2.5" fill="#fff" />
-          {/* Goal (small rectangle poking down past goal line) */}
-          <rect x="180" y="490" width="40" height="7" fill="none" stroke="#fff" strokeWidth="2" />
-          {/* Penalty arc — the D outside the 18-yard box */}
-          <path d="M 168 417 A 35 35 0 0 1 232 417" fill="none" stroke="#fff" strokeWidth="2" />
-          {/* Corner arcs — bottom two (own corners) */}
-          <path d="M 10 482 A 10 10 0 0 1 20 492" fill="none" stroke="#fff" strokeWidth="2" />
-          <path d="M 390 482 A 10 10 0 0 0 380 492" fill="none" stroke="#fff" strokeWidth="2" />
-        </svg>
-
-        {/* Vignette for depth */}
-        <div className="absolute inset-0 pointer-events-none" style={{
-          background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.35) 100%)',
-        }} />
+        {/* Grass + markings + vignette clipped to the rounded pitch shape.
+            Hover-scaled cards live in the row layer above (unclipped) so they
+            can overflow the pitch bounds when hovered without being cut off. */}
+        <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
+          {/* Grass stripes — alternating horizontal bands like a mown pitch */}
+          <div className="absolute inset-0" style={{
+            backgroundImage: `repeating-linear-gradient(
+              180deg,
+              #1c6a2e 0px,
+              #1c6a2e 32px,
+              #1e7332 32px,
+              #1e7332 64px
+            )`,
+          }} />
+          {/* Pitch markings — SVG overlay for own-half view. */}
+          <svg
+            viewBox="0 0 400 500"
+            preserveAspectRatio="none"
+            className="absolute inset-0 w-full h-full"
+            style={{ opacity: 0.75 }}
+          >
+            {/* Sidelines + goal line at bottom */}
+            <line x1="10" y1="0" x2="10" y2="492" stroke="#fff" strokeWidth="2" />
+            <line x1="390" y1="0" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
+            <line x1="10" y1="492" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
+            {/* Halfway line at very top */}
+            <line x1="10" y1="8" x2="390" y2="8" stroke="#fff" strokeWidth="2" />
+            {/* Bottom half of the center circle sitting on the halfway line */}
+            <path d="M 142 8 A 58 58 0 0 0 258 8" fill="none" stroke="#fff" strokeWidth="2" />
+            <circle cx="200" cy="8" r="3" fill="#fff" />
+            {/* Own penalty box (18-yard) + 6-yard box + penalty spot + arc */}
+            <rect x="90" y="417" width="220" height="75" fill="none" stroke="#fff" strokeWidth="2" />
+            <rect x="140" y="460" width="120" height="32" fill="none" stroke="#fff" strokeWidth="2" />
+            <circle cx="200" cy="440" r="2.5" fill="#fff" />
+            {/* Goal (small rectangle poking down past goal line) */}
+            <rect x="180" y="490" width="40" height="7" fill="none" stroke="#fff" strokeWidth="2" />
+            {/* Penalty arc — the D outside the 18-yard box */}
+            <path d="M 168 417 A 35 35 0 0 1 232 417" fill="none" stroke="#fff" strokeWidth="2" />
+            {/* Corner arcs — bottom two (own corners) */}
+            <path d="M 10 482 A 10 10 0 0 1 20 492" fill="none" stroke="#fff" strokeWidth="2" />
+            <path d="M 390 482 A 10 10 0 0 0 380 492" fill="none" stroke="#fff" strokeWidth="2" />
+          </svg>
+          {/* Vignette for depth */}
+          <div className="absolute inset-0" style={{
+            background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.35) 100%)',
+          }} />
+        </div>
 
         {/* Player rows anchored to the pitch. Container is 4:5 aspect so the
             percentages line up with the pitch markings above. */}
@@ -3229,7 +3182,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           <h4 className="font-display text-lg tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
             <Users size={14} /> BENCH ({bench.length})
           </h4>
-          <div className="flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start">
+          <div className="flex flex-wrap gap-x-3 gap-y-8 sm:gap-x-4 justify-center sm:justify-start" style={{ paddingTop: 20 }}>
             {bench.map(p => (
               <Slot key={p.username} player={p} positionLabel={p.position} />
             ))}

@@ -3133,15 +3133,16 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
 
   return (
     <div className="space-y-6">
-      {/* FORMATION — proper soccer pitch: grass stripes + full markings.
-          Attackers push up toward opponent's half at the top; keeper defends
-          the goal at the bottom. Layout is a full-length top-down view. */}
+      {/* FORMATION — soccer pitch, own half only. 4:5 aspect and capped width
+          keep it from dominating the viewport (used to be 2:3 = too tall to
+          fit without scrolling on mobile). */}
       <div
-        className="rounded-xl overflow-hidden relative"
+        className="rounded-xl overflow-hidden relative mx-auto"
         style={{
-          background: '#1e6a30', // fallback grass color
+          background: '#1e6a30',
           border: `2px solid ${C.brandNavyDeep}`,
           boxShadow: `inset 0 0 40px rgba(0,0,0,0.35), 0 4px 20px rgba(0,0,0,0.4)`,
+          maxWidth: 360,
         }}
       >
         {/* Grass stripes — alternating horizontal bands like a mown pitch */}
@@ -3149,40 +3150,41 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           backgroundImage: `repeating-linear-gradient(
             180deg,
             #1c6a2e 0px,
-            #1c6a2e 40px,
-            #1e7332 40px,
-            #1e7332 80px
+            #1c6a2e 32px,
+            #1e7332 32px,
+            #1e7332 64px
           )`,
         }} />
 
-        {/* Pitch markings — SVG overlay showing ONLY the team's own half.
-            Halfway line is at the top, own goal is at the bottom. All lines white. */}
+        {/* Pitch markings — SVG overlay for own-half view. Halfway line at top,
+            own goal at bottom. All lines white. ViewBox is 400×500 to match
+            the container's 4:5 aspect so markings render without distortion. */}
         <svg
-          viewBox="0 0 400 600"
+          viewBox="0 0 400 500"
           preserveAspectRatio="none"
           className="absolute inset-0 w-full h-full pointer-events-none"
           style={{ opacity: 0.75 }}
         >
-          {/* Sidelines (left + right) + goal line at bottom */}
-          <line x1="10" y1="0" x2="10" y2="590" stroke="#fff" strokeWidth="2" />
-          <line x1="390" y1="0" x2="390" y2="590" stroke="#fff" strokeWidth="2" />
-          <line x1="10" y1="590" x2="390" y2="590" stroke="#fff" strokeWidth="2" />
+          {/* Sidelines + goal line at bottom */}
+          <line x1="10" y1="0" x2="10" y2="492" stroke="#fff" strokeWidth="2" />
+          <line x1="390" y1="0" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
+          <line x1="10" y1="492" x2="390" y2="492" stroke="#fff" strokeWidth="2" />
           {/* Halfway line at very top */}
           <line x1="10" y1="8" x2="390" y2="8" stroke="#fff" strokeWidth="2" />
-          {/* Half of the center circle — visible bottom half, top edge on halfway line */}
-          <path d="M 130 8 A 70 70 0 0 0 270 8" fill="none" stroke="#fff" strokeWidth="2" />
+          {/* Bottom half of the center circle sitting on the halfway line */}
+          <path d="M 142 8 A 58 58 0 0 0 258 8" fill="none" stroke="#fff" strokeWidth="2" />
           <circle cx="200" cy="8" r="3" fill="#fff" />
           {/* Own penalty box (18-yard) + 6-yard box + penalty spot + arc */}
-          <rect x="90" y="500" width="220" height="90" fill="none" stroke="#fff" strokeWidth="2" />
-          <rect x="140" y="552" width="120" height="38" fill="none" stroke="#fff" strokeWidth="2" />
-          <circle cx="200" cy="528" r="2.5" fill="#fff" />
+          <rect x="90" y="417" width="220" height="75" fill="none" stroke="#fff" strokeWidth="2" />
+          <rect x="140" y="460" width="120" height="32" fill="none" stroke="#fff" strokeWidth="2" />
+          <circle cx="200" cy="440" r="2.5" fill="#fff" />
           {/* Goal (small rectangle poking down past goal line) */}
-          <rect x="180" y="588" width="40" height="8" fill="none" stroke="#fff" strokeWidth="2" />
+          <rect x="180" y="490" width="40" height="7" fill="none" stroke="#fff" strokeWidth="2" />
           {/* Penalty arc — the D outside the 18-yard box */}
-          <path d="M 165 500 A 42 42 0 0 1 235 500" fill="none" stroke="#fff" strokeWidth="2" />
-          {/* Corner arcs — only the bottom two (own corners) */}
-          <path d="M 10 580 A 10 10 0 0 1 20 590" fill="none" stroke="#fff" strokeWidth="2" />
-          <path d="M 390 580 A 10 10 0 0 0 380 590" fill="none" stroke="#fff" strokeWidth="2" />
+          <path d="M 168 417 A 35 35 0 0 1 232 417" fill="none" stroke="#fff" strokeWidth="2" />
+          {/* Corner arcs — bottom two (own corners) */}
+          <path d="M 10 482 A 10 10 0 0 1 20 492" fill="none" stroke="#fff" strokeWidth="2" />
+          <path d="M 390 482 A 10 10 0 0 0 380 492" fill="none" stroke="#fff" strokeWidth="2" />
         </svg>
 
         {/* Vignette for depth */}
@@ -3190,24 +3192,23 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           background: 'radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.35) 100%)',
         }} />
 
-        {/* Player rows anchored to specific spots in the OWN HALF pitch.
-            STs at the top (halfway line, pushing forward); GK in the penalty
-            box near the goal at the bottom. Container aspect stays 2:3. */}
-        <div className="relative w-full" style={{ aspectRatio: '2 / 3' }}>
+        {/* Player rows anchored to the pitch. Container is 4:5 aspect so the
+            percentages line up with the pitch markings above. */}
+        <div className="relative w-full" style={{ aspectRatio: '4 / 5' }}>
           {/* Row 1: STs — right below halfway line, top of own half */}
-          <div className="absolute left-0 right-0 flex justify-center gap-8 sm:gap-16" style={{ top: '10%' }}>
+          <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '9%' }}>
             {[0, 1].map(i => <Slot key={`st${i}`} player={starters.ST[i]} positionLabel="ST" />)}
           </div>
           {/* Row 2: CM — center of own half */}
-          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '38%' }}>
+          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '36%' }}>
             <Slot player={starters.CM[0]} positionLabel="CM" />
           </div>
-          {/* Row 3: DEFs — defensive third (in front of the penalty box) */}
-          <div className="absolute left-0 right-0 flex justify-center gap-8 sm:gap-16" style={{ top: '62%' }}>
+          {/* Row 3: DEFs — defensive third */}
+          <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '60%' }}>
             {[0, 1].map(i => <Slot key={`def${i}`} player={starters.DEF[i]} positionLabel="DEF" />)}
           </div>
-          {/* Row 4: GK — inside own penalty area right in front of the goal */}
-          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '86%' }}>
+          {/* Row 4: GK — inside own penalty area */}
+          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '82%' }}>
             <Slot player={starters.GK[0]} positionLabel="GK" />
           </div>
         </div>

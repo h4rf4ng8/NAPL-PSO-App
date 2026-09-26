@@ -165,16 +165,32 @@ body {
   transform: rotateY(180deg);
 }
 
-/* ============ FORMATION SLOT HOVER "POP" ============
-   Each avatar tile in the roster formation scales up and lifts on hover,
-   with the OVR ring glowing. Click still routes to the full-card modal. */
-.asl-formation-slot .asl-formation-avatar {
-  transition: transform 0.18s cubic-bezier(0.4, 0.1, 0.2, 1),
-              filter 0.18s ease;
-  transform-origin: center;
+/* ============ FORMATION SLOT — SCALED PLAYER CARD ============
+   Each slot in the pitch renders a size="sm" PlayerCard scaled down by
+   default; on hover it scales up to standard size and pops above siblings.
+   The wrapper stays at the smaller footprint so layout doesn't shift. */
+.asl-formation-slot {
+  transition: z-index 0s;
 }
-.asl-formation-slot:hover .asl-formation-avatar,
-.asl-formation-slot:focus-visible .asl-formation-avatar {
-  transform: translateY(-4px) scale(1.15);
-  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.45));
+.asl-formation-card-scaler {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: scale(0.55);
+  transform-origin: center center;
+  transition: transform 0.2s cubic-bezier(0.4, 0.1, 0.2, 1),
+              filter 0.2s ease;
+  will-change: transform;
+  pointer-events: none;
+}
+.asl-formation-slot:hover,
+.asl-formation-slot:focus-visible {
+  z-index: 30;
+}
+.asl-formation-slot:hover .asl-formation-card-scaler,
+.asl-formation-slot:focus-visible .asl-formation-card-scaler {
+  transform: scale(1.0);
+  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.55));
 }

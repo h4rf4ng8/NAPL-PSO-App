@@ -3074,8 +3074,10 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
     const ovr = ranking?.score || 0;
     const tierName = ranking?.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
     const tier = cardTier(tierName);
-    // Tier ring color: match the card's mid tone so the tile reads at a glance
-    const ringColor = tier.palette.mid;
+    // Ring uses the tier's mid tone; OVR badge text uses the tier's dark accent
+    // so it's readable on the light ring color.
+    const ringColor = tier.from || C.goldLight;
+    const ovrTextColor = tier.accent || C.navyDeep;
     const captain = isTeamCaptain(player, team);
     return (
       <button
@@ -3110,7 +3112,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
               top: -4, right: -6,
               width: 26, height: 26,
               background: ringColor,
-              color: tier.palette.text,
+              color: ovrTextColor,
               border: `2px solid ${C.navyDeep}`,
               fontFamily: 'Anton, sans-serif',
               fontSize: 13,

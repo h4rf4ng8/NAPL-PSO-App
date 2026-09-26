@@ -3066,7 +3066,10 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           >
             <div className="font-display text-sm tracking-wider">{positionLabel}</div>
           </div>
-          <div className="font-mono text-[9px] tracking-widest mt-1.5" style={{ color: `${C.cream}55` }}>EMPTY</div>
+          <div className="font-mono text-[9px] tracking-widest mt-1.5" style={{
+            color: 'rgba(255,255,255,0.55)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+          }}>EMPTY</div>
         </div>
       );
     }
@@ -3121,11 +3124,17 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           >{ovr}</div>
         </div>
         <div className="mt-1.5 text-center" style={{ width: 90 }}>
-          <div className="font-heading text-[11px] tracking-wider flex items-center justify-center gap-1 truncate" style={{ color: C.cream }}>
+          <div className="font-heading text-[11px] tracking-wider flex items-center justify-center gap-1 truncate" style={{
+            color: '#ffffff',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9), 0 0 4px rgba(0,0,0,0.5)',
+          }}>
             {captain && <CaptainStar size={10} />}
             <span className="truncate">{(player.username || '').toUpperCase()}</span>
           </div>
-          <div className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}77` }}>{player.position}</div>
+          <div className="font-mono text-[9px] tracking-widest" style={{
+            color: 'rgba(255,255,255,0.75)',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+          }}>{player.position}</div>
         </div>
       </button>
     );

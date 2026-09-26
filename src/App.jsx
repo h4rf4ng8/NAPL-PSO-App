@@ -1199,7 +1199,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
         <text x="62" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.passes || 0).toFixed(1)}</text>
         <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS</text>
 
-        {position === 'GK' ? (
+        {account.position === 'GK' ? (
           <>
             <text x="220" y="364" fontSize="20" textAnchor="middle">{displayStats.deflects || 0}</text>
             <text x="256" y="364" fontSize="11" letterSpacing="1.5">DFL</text>

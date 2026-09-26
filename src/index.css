@@ -132,3 +132,35 @@ body {
   background: linear-gradient(180deg, transparent, rgba(216,184,88,0.12)) !important;
   border-bottom: 2px solid #d8b858 !important;
 }
+
+/* ============ PLAYER CARD FLIP (large cards only) ============
+   Toggling `.flipped` on `.flip-card` rotates the inner 3D container so the
+   back face swings into view. Requires perspective on the parent + backface
+   hidden on each face so only the front-facing one is drawn. Missing this
+   causes the card to appear blank on click. */
+.flip-card {
+  perspective: 1200px;
+  cursor: pointer;
+}
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.4, 0.1, 0.2, 1);
+  transform-style: preserve-3d;
+}
+.flip-card.flipped .flip-card-inner {
+  transform: rotateY(180deg);
+}
+.flip-card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.flip-card-back {
+  transform: rotateY(180deg);
+}

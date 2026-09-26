@@ -3028,8 +3028,8 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
     return b;
   }, [members, rankings]);
 
-  // Formation needs: 1 GK, 3 DEF, 2 CM, 2 ST
-  const needs = { GK: 1, DEF: 3, CM: 2, ST: 2 };
+  // Formation needs: 1 GK, 2 DEF, 1 CM, 2 ST (Strikers Club 6v6)
+  const needs = { GK: 1, DEF: 2, CM: 1, ST: 2 };
 
   // Starters (formation slots) — take up to N per position
   const starters = {
@@ -3047,34 +3047,87 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
     ...buckets.FLEX,
   ];
 
-  // A single slot in the formation — shows either a player card or an empty placeholder
-  const Slot = ({ player, positionLabel }) => (
-    <div className="flex flex-col items-center">
-      {player ? (
-        <button
-          type="button"
-          onClick={() => onCardClick && onCardClick(player)}
-          className="transition-transform hover:scale-105 focus:outline-none"
-          style={{ cursor: 'pointer' }}
-        >
-          <PlayerCard account={player} size="sm" team={team} rankings={rankings} hideTeam={true} />
-        </button>
-      ) : (
-        <div
-          className="flex flex-col items-center justify-center rounded"
-          style={{
-            width: 175, height: 280,
-            background: `${C.navyDeep}88`,
-            border: `2px dashed ${C.navyLight}66`,
-            color: `${C.cream}55`,
-          }}
-        >
-          <div className="font-display text-3xl tracking-wider">{positionLabel}</div>
-          <div className="font-mono text-[10px] tracking-widest mt-1">EMPTY</div>
+  // A single slot in the formation — compact circular avatar with a name +
+  // OVR badge below. Hover scales up and lifts (subtle "pop" effect). Click
+  // opens the full PlayerCardModal to see front + back. Empty slots stay as
+  // small dashed circles labeled with the position.
+  const Slot = ({ player, positionLabel }) => {
+    if (!player) {
+      return (
+        <div className="flex flex-col items-center" style={{ width: 90 }}>
+          <div
+            className="rounded-full flex items-center justify-center"
+            style={{
+              width: 64, height: 64,
+              background: `${C.navyDeep}88`,
+              border: `2px dashed ${C.navyLight}66`,
+              color: `${C.cream}55`,
+            }}
+          >
+            <div className="font-display text-sm tracking-wider">{positionLabel}</div>
+          </div>
+          <div className="font-mono text-[9px] tracking-widest mt-1.5" style={{ color: `${C.cream}55` }}>EMPTY</div>
         </div>
-      )}
-    </div>
-  );
+      );
+    }
+    const ranking = getPlayerRanking(player, rankings);
+    const ovr = ranking?.score || 0;
+    const tierName = ranking?.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
+    const tier = cardTier(tierName);
+    // Tier ring color: match the card's mid tone so the tile reads at a glance
+    const ringColor = tier.palette.mid;
+    const captain = isTeamCaptain(player, team);
+    return (
+      <button
+        type="button"
+        onClick={() => onCardClick && onCardClick(player)}
+        className="asl-formation-slot flex flex-col items-center focus:outline-none"
+        style={{ width: 90, background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
+        <div className="asl-formation-avatar" style={{ position: 'relative' }}>
+          {/* Circular avatar */}
+          <div
+            className="rounded-full overflow-hidden flex items-center justify-center"
+            style={{
+              width: 64, height: 64,
+              background: `${C.navyDeep}`,
+              border: `3px solid ${ringColor}`,
+              boxShadow: `0 3px 10px rgba(0,0,0,0.4)`,
+            }}
+          >
+            {player.imageUrl ? (
+              <img src={player.imageUrl} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <div className="font-display text-2xl" style={{ color: ringColor }}>
+                {(player.username || '?').slice(0, 1).toUpperCase()}
+              </div>
+            )}
+          </div>
+          {/* OVR badge — top-right corner */}
+          <div
+            className="absolute rounded-full flex items-center justify-center"
+            style={{
+              top: -4, right: -6,
+              width: 26, height: 26,
+              background: ringColor,
+              color: tier.palette.text,
+              border: `2px solid ${C.navyDeep}`,
+              fontFamily: 'Anton, sans-serif',
+              fontSize: 13,
+              lineHeight: 1,
+            }}
+          >{ovr}</div>
+        </div>
+        <div className="mt-1.5 text-center" style={{ width: 90 }}>
+          <div className="font-heading text-[11px] tracking-wider flex items-center justify-center gap-1 truncate" style={{ color: C.cream }}>
+            {captain && <CaptainStar size={10} />}
+            <span className="truncate">{(player.username || '').toUpperCase()}</span>
+          </div>
+          <div className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}77` }}>{player.position}</div>
+        </div>
+      </button>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -3095,42 +3148,34 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
               linear-gradient(180deg, transparent 49%, rgba(255,255,255,0.2) 49%, rgba(255,255,255,0.2) 51%, transparent 51%)
             `,
           }} />
-          {/* Row 1: STs */}
+          {/* Row 1: STs (2) */}
           <div className="flex justify-center gap-3 sm:gap-6 relative">
             {[0, 1].map(i => <Slot key={`st${i}`} player={starters.ST[i]} positionLabel="ST" />)}
           </div>
-          {/* Row 2: CMs */}
+          {/* Row 2: CM (1) */}
           <div className="flex justify-center gap-3 sm:gap-6 mt-3 sm:mt-6 relative">
-            {[0, 1].map(i => <Slot key={`cm${i}`} player={starters.CM[i]} positionLabel="CM" />)}
+            <Slot player={starters.CM[0]} positionLabel="CM" />
           </div>
-          {/* Row 3: DEFs (3) */}
-          <div className="flex justify-center gap-3 sm:gap-6 mt-3 sm:mt-6 relative flex-wrap">
-            {[0, 1, 2].map(i => <Slot key={`def${i}`} player={starters.DEF[i]} positionLabel="DEF" />)}
+          {/* Row 3: DEFs (2) */}
+          <div className="flex justify-center gap-3 sm:gap-6 mt-3 sm:mt-6 relative">
+            {[0, 1].map(i => <Slot key={`def${i}`} player={starters.DEF[i]} positionLabel="DEF" />)}
           </div>
-          {/* Row 4: GK */}
+          {/* Row 4: GK (1) */}
           <div className="flex justify-center mt-3 sm:mt-6 relative">
             <Slot player={starters.GK[0]} positionLabel="GK" />
           </div>
         </div>
       </div>
 
-      {/* BENCH — extras + FLEX players */}
+      {/* BENCH — compact avatar tiles (same treatment as the pitch), denser grid */}
       {bench.length > 0 && (
         <div>
           <h4 className="font-display text-lg tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
             <Users size={14} /> BENCH ({bench.length})
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <div className="flex flex-wrap gap-3 sm:gap-4 justify-center sm:justify-start">
             {bench.map(p => (
-              <button
-                key={p.username}
-                type="button"
-                onClick={() => onCardClick && onCardClick(p)}
-                className="flex justify-center transition-transform hover:scale-105 focus:outline-none"
-                style={{ cursor: 'pointer' }}
-              >
-                <PlayerCard account={p} size="sm" team={team} rankings={rankings} hideTeam={true} />
-              </button>
+              <Slot key={p.username} player={p} positionLabel={p.position} />
             ))}
           </div>
         </div>
@@ -5758,8 +5803,8 @@ const TotwManager = ({ allPlayers = [], onRefresh }) => {
   const handleCreate = async () => {
     setError(''); setBusy(true);
     try {
-      if (selectedPlayers.length < 8) {
-        setError('Pick at least 8 eligible players (1 GK + 3 DEF + 2 CM + 2 ST minimum).');
+      if (selectedPlayers.length < 6) {
+        setError('Pick at least 6 eligible players (1 GK + 2 DEF + 1 CM + 2 ST minimum).');
         setBusy(false); return;
       }
       await db.createTotwPeriod({
@@ -8050,7 +8095,7 @@ const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
           <span className="font-display text-2xl tracking-wider" style={{ color: C.brandNavy }}>VOTE TOTW</span>
         </div>
         <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          Pick the best player at each position. The TOTW XI will have 1 goalkeeper, 3 defenders, 2 midfielders, and 2 strikers — but you only vote for one per position. Admin picks the final winners after voting closes.
+          Pick the best player at each position. The TOTW XI will have 1 goalkeeper, 2 defenders, 1 midfielder, and 2 strikers — but you only vote for one per position. Admin picks the final winners after voting closes.
         </p>
         <div className="mt-3 flex items-center gap-2 flex-wrap">
           <span className="font-mono text-[10px] tracking-[0.2em] px-2 py-1 rounded" style={{ background: `#2196f322`, color: '#2196f3' }}>

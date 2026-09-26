@@ -3047,33 +3047,36 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
     ...buckets.FLEX,
   ];
 
-  // A single slot in the formation — renders a mini PlayerCard scaled down
-  // by default; on hover it grows back to standard sm size (175×280). Empty
-  // slots stay as compact placeholders labeled with the position.
-  const SLOT_W = 96;   // 175 * ~0.55
-  const SLOT_H = 154;  // 280 * ~0.55
+  // A single slot in the formation — small avatar icon by default. On hover
+  // the FULL-size PlayerCard pops up as a floating overlay above the avatar.
+  // Click opens the PlayerCardModal for front + back view.
+  const SLOT_W = 76;
+  const SLOT_H = 100;
   const Slot = ({ player, positionLabel }) => {
     if (!player) {
       return (
         <div
-          className="flex flex-col items-center justify-center rounded"
+          className="flex flex-col items-center justify-center rounded-full"
           style={{
-            width: SLOT_W, height: SLOT_H,
+            width: 60, height: 60,
             background: `${C.navyDeep}88`,
             border: `2px dashed ${C.navyLight}66`,
           }}
         >
-          <div className="font-display text-2xl tracking-wider" style={{
-            color: 'rgba(255,255,255,0.7)',
+          <div className="font-mono text-[9px] tracking-widest" style={{
+            color: 'rgba(255,255,255,0.6)',
             textShadow: '0 1px 2px rgba(0,0,0,0.8)',
           }}>{positionLabel}</div>
-          <div className="font-mono text-[9px] tracking-widest mt-1" style={{
-            color: 'rgba(255,255,255,0.55)',
-            textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-          }}>EMPTY</div>
         </div>
       );
     }
+    const ranking = getPlayerRanking(player, rankings);
+    const ovr = ranking?.score || 0;
+    const tierName = ranking?.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
+    const tier = cardTier(tierName);
+    const ringColor = tier.from || C.goldLight;
+    const ovrTextColor = tier.accent || C.navyDeep;
+    const captain = isTeamCaptain(player, team);
     return (
       <button
         type="button"
@@ -3085,7 +3088,52 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
           cursor: 'pointer', position: 'relative',
         }}
       >
-        <div className="asl-formation-card-scaler">
+        {/* Default view: compact avatar icon */}
+        <div className="asl-formation-icon flex flex-col items-center">
+          <div style={{ position: 'relative' }}>
+            <div
+              className="rounded-full overflow-hidden flex items-center justify-center"
+              style={{
+                width: 56, height: 56,
+                background: C.navyDeep,
+                border: `2.5px solid ${ringColor}`,
+                boxShadow: `0 3px 8px rgba(0,0,0,0.5)`,
+              }}
+            >
+              {player.imageUrl ? (
+                <img src={player.imageUrl} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <div className="font-display text-xl" style={{ color: ringColor }}>
+                  {(player.username || '?').slice(0, 1).toUpperCase()}
+                </div>
+              )}
+            </div>
+            <div
+              className="absolute rounded-full flex items-center justify-center"
+              style={{
+                top: -3, right: -4,
+                width: 22, height: 22,
+                background: ringColor,
+                color: ovrTextColor,
+                border: `1.5px solid ${C.navyDeep}`,
+                fontFamily: 'Anton, sans-serif',
+                fontSize: 11,
+                lineHeight: 1,
+              }}
+            >{ovr}</div>
+          </div>
+          <div className="mt-1 font-heading text-[10px] tracking-wider flex items-center gap-0.5 truncate" style={{
+            color: '#ffffff',
+            textShadow: '0 1px 2px rgba(0,0,0,0.9)',
+            maxWidth: SLOT_W,
+          }}>
+            {captain && <CaptainStar size={9} />}
+            <span className="truncate">{(player.username || '').toUpperCase()}</span>
+          </div>
+        </div>
+
+        {/* Hover preview: full-size PlayerCard as floating overlay */}
+        <div className="asl-formation-preview" aria-hidden="true">
           <PlayerCard account={player} size="sm" team={team} rankings={rankings} hideTeam={true} />
         </div>
       </button>

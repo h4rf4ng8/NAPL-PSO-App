@@ -165,32 +165,40 @@ body {
   transform: rotateY(180deg);
 }
 
-/* ============ FORMATION SLOT — SCALED PLAYER CARD ============
-   Each slot in the pitch renders a size="sm" PlayerCard scaled down by
-   default; on hover it scales up to standard size and pops above siblings.
-   The wrapper stays at the smaller footprint so layout doesn't shift. */
+/* ============ FORMATION SLOT — ICON + HOVER POPUP ============
+   Default: small avatar icon. On hover: full-size PlayerCard fades in as a
+   floating overlay above the avatar. Click still opens the modal. */
 .asl-formation-slot {
-  transition: z-index 0s;
-}
-.asl-formation-card-scaler {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
+  display: inline-flex;
+  align-items: flex-start;
   justify-content: center;
-  transform: scale(0.55);
-  transform-origin: center center;
-  transition: transform 0.2s cubic-bezier(0.4, 0.1, 0.2, 1),
-              filter 0.2s ease;
-  will-change: transform;
+}
+.asl-formation-icon {
+  transition: transform 0.15s ease;
+}
+.asl-formation-preview {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.85);
+  transform-origin: bottom center;
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.4, 0.1, 0.2, 1);
+  z-index: 40;
+  filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.6));
+}
+.asl-formation-slot:hover .asl-formation-preview,
+.asl-formation-slot:focus-visible .asl-formation-preview {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+.asl-formation-slot:hover .asl-formation-icon,
+.asl-formation-slot:focus-visible .asl-formation-icon {
+  transform: translateY(2px);
+  opacity: 0.5;
 }
 .asl-formation-slot:hover,
 .asl-formation-slot:focus-visible {
-  z-index: 30;
-}
-.asl-formation-slot:hover .asl-formation-card-scaler,
-.asl-formation-slot:focus-visible .asl-formation-card-scaler {
-  transform: scale(1.0);
-  filter: drop-shadow(0 10px 20px rgba(0, 0, 0, 0.55));
+  z-index: 40;
 }

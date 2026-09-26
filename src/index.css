@@ -164,3 +164,17 @@ body {
 .flip-card-back {
   transform: rotateY(180deg);
 }
+
+/* ============ FORMATION SLOT HOVER "POP" ============
+   Each avatar tile in the roster formation scales up and lifts on hover,
+   with the OVR ring glowing. Click still routes to the full-card modal. */
+.asl-formation-slot .asl-formation-avatar {
+  transition: transform 0.18s cubic-bezier(0.4, 0.1, 0.2, 1),
+              filter 0.18s ease;
+  transform-origin: center;
+}
+.asl-formation-slot:hover .asl-formation-avatar,
+.asl-formation-slot:focus-visible .asl-formation-avatar {
+  transform: translateY(-4px) scale(1.15);
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.45));
+}

@@ -202,3 +202,12 @@ body {
 .asl-formation-slot:focus-visible {
   z-index: 40;
 }
+
+/* Pop-down variant: for slots near the top of the pitch (e.g. STs), the
+   hover preview drops down from the avatar instead of up, so it stays
+   visible inside the pitch/viewport. */
+.asl-formation-slot.pop-down .asl-formation-preview {
+  top: calc(100% + 6px);
+  bottom: auto;
+  transform-origin: top center;
+}

@@ -164,6 +164,8 @@ const rowToAccount = (row) => row ? ({
   // Strikers Club player ID (set once on first successful match import; used
   // to auto-match players on future imports).
   strikersId: row.strikers_id || null,
+  // Player's public Steam profile URL (display-only, no verification).
+  steamUrl: row.steam_url || null,
   createdAt: new Date(row.created_at).getTime(),
 }) : null;
 
@@ -265,6 +267,7 @@ export const db = {
       totw_until: account.totwUntil ? new Date(account.totwUntil).toISOString() : null,
       cheater: !!account.cheater,
       strikers_id: account.strikersId || null,
+      steam_url: account.steamUrl || null,
     });
     const { error } = account.id
       ? await query.eq('id', account.id)

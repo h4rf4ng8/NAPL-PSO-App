@@ -7064,6 +7064,11 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
   const [countryInput, setCountryInput] = useState('');
   const [countryBusy, setCountryBusy] = useState(false);
   const [countryMsg, setCountryMsg] = useState('');
+  const [editingLinks, setEditingLinks] = useState(false);
+  const [strikersIdInput, setStrikersIdInput] = useState(account.strikersId || '');
+  const [steamUrlInput, setSteamUrlInput] = useState(account.steamUrl || '');
+  const [linksBusy, setLinksBusy] = useState(false);
+  const [linksMsg, setLinksMsg] = useState('');
   useEffect(() => {
     db.listNews().then(setNews);
   }, []);
@@ -7089,6 +7094,35 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
 
   // Country picker — players who registered before the country field existed,
   // or who want to change theirs, can set it from here.
+  // Linked accounts — Strikers Club player ID (used to auto-match on match
+  // imports) + optional Steam profile URL (display-only). Both stored on the
+  // ASL account row. Set them once here and imports will find you.
+  const handleSaveLinks = async () => {
+    setLinksMsg('');
+    // Basic validation: Strikers Club ID is digits (usually 3-8 chars).
+    const sid = (strikersIdInput || '').trim();
+    if (sid && !/^\d{2,15}$/.test(sid)) {
+      setLinksMsg('Strikers Club Player ID should be a number (2-15 digits)');
+      return;
+    }
+    const surl = (steamUrlInput || '').trim();
+    if (surl && !/^https?:\/\/(www\.)?steamcommunity\.com\//i.test(surl)) {
+      setLinksMsg('Steam URL should start with https://steamcommunity.com/');
+      return;
+    }
+    setLinksBusy(true);
+    try {
+      const updated = { ...account, strikersId: sid || null, steamUrl: surl || null };
+      await db.saveAccount(updated);
+      onUpdate && onUpdate(updated);
+      setEditingLinks(false);
+      setLinksMsg('');
+    } catch (e) {
+      setLinksMsg('Could not save: ' + (e?.message || e));
+    }
+    setLinksBusy(false);
+  };
+
   const handleSaveCountry = async () => {
     setCountryMsg('');
     if (!countryInput) { setCountryMsg('Please pick a country'); return; }
@@ -7298,6 +7332,85 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
             )}
             {countryMsg && (
               <div className="font-mono text-[11px] mt-1" style={{ color: C.red }}>{countryMsg}</div>
+            )}
+          </div>
+          {/* LINKED ACCOUNTS — Strikers Club Player ID (used by match imports)
+              + Steam profile URL (display-only). Both optional but linking your
+              Strikers Club ID means imports will find your stats automatically. */}
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.brandNavy}88` }}>LINKED ACCOUNTS</div>
+            {!editingLinks ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap font-body text-sm" style={{ color: C.brandNavy }}>
+                  <span style={{ color: `${C.brandNavy}88` }}>Strikers Club ID:</span>
+                  {account.strikersId ? (
+                    <span className="font-mono" style={{ color: C.brandNavy }}>{account.strikersId}</span>
+                  ) : (
+                    <span className="italic" style={{ color: `${C.brandNavy}66` }}>not set</span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-wrap font-body text-sm" style={{ color: C.brandNavy }}>
+                  <span style={{ color: `${C.brandNavy}88` }}>Steam:</span>
+                  {account.steamUrl ? (
+                    <a href={account.steamUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs" style={{ color: C.brandNavy, textDecoration: 'underline' }}>
+                      {account.steamUrl.replace(/^https?:\/\/(www\.)?/, '').slice(0, 40)}
+                    </a>
+                  ) : (
+                    <span className="italic" style={{ color: `${C.brandNavy}66` }}>not set</span>
+                  )}
+                </div>
+                <button
+                  onClick={() => {
+                    setEditingLinks(true);
+                    setStrikersIdInput(account.strikersId || '');
+                    setSteamUrlInput(account.steamUrl || '');
+                  }}
+                  className="font-mono text-[11px] tracking-wider"
+                  style={{ color: C.green, textDecoration: 'underline' }}
+                >{(account.strikersId || account.steamUrl) ? 'CHANGE' : '+ Link accounts'}</button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div>
+                  <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STRIKERS CLUB PLAYER ID</div>
+                  <input
+                    type="text"
+                    value={strikersIdInput}
+                    onChange={(e) => setStrikersIdInput(e.target.value.replace(/\D/g, ''))}
+                    placeholder="e.g. 365702"
+                    className="w-full px-3 py-2 font-mono text-sm focus:outline-none rounded"
+                    style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                  />
+                  <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.brandNavy}66` }}>Numbers only. Find it in-game on your profile.</div>
+                </div>
+                <div>
+                  <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STEAM PROFILE URL (OPTIONAL)</div>
+                  <input
+                    type="url"
+                    value={steamUrlInput}
+                    onChange={(e) => setSteamUrlInput(e.target.value)}
+                    placeholder="https://steamcommunity.com/id/…"
+                    className="w-full px-3 py-2 font-body text-sm focus:outline-none rounded"
+                    style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveLinks}
+                    disabled={linksBusy}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: C.green, color: C.onColor }}
+                  >{linksBusy ? 'SAVING...' : 'SAVE'}</button>
+                  <button
+                    onClick={() => { setEditingLinks(false); setLinksMsg(''); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: 'transparent', color: `${C.brandNavy}99`, border: `1px solid ${C.navyLight}` }}
+                  >CANCEL</button>
+                </div>
+                {linksMsg && (
+                  <div className="font-mono text-[11px] mt-1" style={{ color: C.red }}>{linksMsg}</div>
+                )}
+              </div>
             )}
           </div>
         </div>

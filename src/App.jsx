@@ -3048,11 +3048,12 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
   ];
 
   // A single slot in the formation — small avatar icon by default. On hover
-  // the FULL-size PlayerCard pops up as a floating overlay above the avatar.
-  // Click opens the PlayerCardModal for front + back view.
+  // the FULL-size PlayerCard pops up as a floating overlay above the avatar
+  // (or below, for the top row so it doesn't get cut off). Click opens the
+  // PlayerCardModal for front + back view.
   const SLOT_W = 76;
   const SLOT_H = 100;
-  const Slot = ({ player, positionLabel }) => {
+  const Slot = ({ player, positionLabel, popDown = false }) => {
     if (!player) {
       return (
         <div
@@ -3081,7 +3082,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
       <button
         type="button"
         onClick={() => onCardClick && onCardClick(player)}
-        className="asl-formation-slot focus:outline-none"
+        className={`asl-formation-slot focus:outline-none ${popDown ? 'pop-down' : ''}`}
         style={{
           width: SLOT_W, height: SLOT_H,
           background: 'transparent', border: 'none', padding: 0,
@@ -3205,9 +3206,10 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
         {/* Player rows anchored to the pitch. Container is 4:5 aspect so the
             percentages line up with the pitch markings above. */}
         <div className="relative w-full" style={{ aspectRatio: '4 / 5' }}>
-          {/* Row 1: STs — right below halfway line, top of own half */}
+          {/* Row 1: STs — right below halfway line, top of own half.
+              popDown so hover preview drops downward (avatar is near top edge). */}
           <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '9%' }}>
-            {[0, 1].map(i => <Slot key={`st${i}`} player={starters.ST[i]} positionLabel="ST" />)}
+            {[0, 1].map(i => <Slot key={`st${i}`} player={starters.ST[i]} positionLabel="ST" popDown />)}
           </div>
           {/* Row 2: CM — center of own half */}
           <div className="absolute left-0 right-0 flex justify-center" style={{ top: '36%' }}>

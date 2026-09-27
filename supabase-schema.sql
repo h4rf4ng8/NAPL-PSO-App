@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS public.accounts (
   championships   JSONB NOT NULL DEFAULT '[]'::jsonb,
   totw_until      TIMESTAMPTZ,
   cheater         BOOLEAN NOT NULL DEFAULT false,
+  strikers_id     TEXT,
+  steam_url       TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

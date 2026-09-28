@@ -8747,7 +8747,41 @@ const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
 };
 
 const Dashboard = ({ account, onLogout, onUpdate }) => {
-  const [view, setView] = useState('home');
+  // Map between URL path and view id. Only tabs that make sense as
+  // shareable URLs are listed; others (like admin sub-sections) stay
+  // in local state and don't get their own URL.
+  const VIEW_TO_PATH = {
+    home: '/', card: '/card', teams: '/teams', leaderboard: '/leaderboard',
+    news: '/news', hof: '/hof', tiers: '/tiers', rules: '/rules', admin: '/admin',
+  };
+  const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
+  const viewFromPath = () => {
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    return PATH_TO_VIEW[path] || 'home';
+  };
+
+  const [view, _setView] = useState(viewFromPath);
+  // Wrapper: updates state AND pushes new history entry so back/forward work.
+  // Same view = no-op (avoids duplicate history entries on repeat clicks).
+  const setView = (next) => {
+    _setView(prev => {
+      if (prev === next) return prev;
+      const path = VIEW_TO_PATH[next] || '/';
+      if (window.location.pathname !== path) {
+        window.history.pushState({ view: next }, '', path);
+      }
+      return next;
+    });
+  };
+
+  // Listen for back/forward button — sync view to whatever URL the browser
+  // is now on so the UI matches without full page reload.
+  useEffect(() => {
+    const onPop = () => _setView(viewFromPath());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
   const [showLog, setShowLog] = useState(false);
   const [showEditPos, setShowEditPos] = useState(false);
   const [showEditName, setShowEditName] = useState(false);

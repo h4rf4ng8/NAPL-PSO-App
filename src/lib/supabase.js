@@ -454,6 +454,49 @@ export const db = {
     return (data || []).map(rowToNews);
   },
 
+  // ============ RULES SECTIONS ============
+  // The rulebook is a list of sections shown to all players on the RULES tab.
+  // Admins add, edit, delete, and reorder sections from ADMIN → RULES.
+  // Body supports minimal markdown: **bold**, *italic*, ## heading, - list.
+  async listRulesSections() {
+    const { data, error } = await supabase
+      .from('rules_sections')
+      .select('*')
+      .order('sort_order', { ascending: true });
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => ({
+      id: r.id,
+      title: r.title,
+      body: r.body || '',
+      sortOrder: r.sort_order,
+      createdAt: new Date(r.created_at).getTime(),
+      updatedAt: new Date(r.updated_at).getTime(),
+    }));
+  },
+  async saveRulesSection(section) {
+    const row = {
+      id: section.id,
+      title: section.title,
+      body: section.body || '',
+      sort_order: section.sortOrder ?? 0,
+      updated_at: new Date().toISOString(),
+    };
+    const { error } = await supabase.from('rules_sections').upsert(row);
+    if (error) throw error;
+  },
+  async deleteRulesSection(id) {
+    const { error } = await supabase.from('rules_sections').delete().eq('id', id);
+    if (error) throw error;
+  },
+  // Bulk-set sort_order for a list of section ids. Used by drag-reorder.
+  async reorderRulesSections(orderedIds) {
+    // Sequential updates (small list, fine to loop). Wraps in Promise.all
+    // for parallel dispatch.
+    await Promise.all(orderedIds.map((id, idx) =>
+      supabase.from('rules_sections').update({ sort_order: idx, updated_at: new Date().toISOString() }).eq('id', id)
+    ));
+  },
+
   // ============ TOTW VOTING ============
   // List all voting periods (most recent first). Used by both admin (to manage
   // periods) and players (to see if a voting period is currently open).

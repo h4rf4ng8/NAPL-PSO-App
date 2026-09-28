@@ -32,6 +32,23 @@ CREATE TABLE IF NOT EXISTS public.accounts (
 
 CREATE INDEX IF NOT EXISTS idx_accounts_team ON public.accounts(team_id);
 
+-- ----- RULES SECTIONS (editable rulebook, ordered) -----
+-- Each section is a titled chunk of the rulebook. Sort order determines
+-- display order on the public rules page. Body is markdown-lite (line
+-- breaks preserved; supports **bold**, *italic*, bulleted lists with -,
+-- numbered lists with 1., and headings with ## ). Admins edit these via
+-- the ADMIN → RULES section.
+CREATE TABLE IF NOT EXISTS public.rules_sections (
+  id           TEXT PRIMARY KEY,
+  title        TEXT NOT NULL,
+  body         TEXT NOT NULL DEFAULT '',
+  sort_order   INTEGER NOT NULL DEFAULT 0,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rules_sort ON public.rules_sections(sort_order);
+
 -- ----- TEAMS -----
 CREATE TABLE IF NOT EXISTS public.teams (
   id                TEXT PRIMARY KEY,
@@ -145,6 +162,13 @@ CREATE POLICY "news_delete" ON public.news FOR DELETE TO authenticated USING (tr
 CREATE POLICY "settings_read_all" ON public.settings FOR SELECT TO authenticated USING (true);
 CREATE POLICY "settings_upsert" ON public.settings FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "settings_update" ON public.settings FOR UPDATE TO authenticated USING (true);
+
+-- RULES (public read, admins manage via UI)
+ALTER TABLE public.rules_sections ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "rules_read_all" ON public.rules_sections FOR SELECT TO authenticated USING (true);
+CREATE POLICY "rules_insert" ON public.rules_sections FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY "rules_update" ON public.rules_sections FOR UPDATE TO authenticated USING (true);
+CREATE POLICY "rules_delete" ON public.rules_sections FOR DELETE TO authenticated USING (true);
 
 -- =============================================================
 -- STORAGE — for player and team images

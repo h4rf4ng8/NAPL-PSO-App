@@ -2438,6 +2438,12 @@ const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClose, onS
 
   const handleSubmit = async () => {
     setError('');
+    // Captain must have their own Strikers Club ID set before they can create
+    // a team (same rule that applies to invitees — no unlinked players).
+    if (!account.strikersId) {
+      setError('You need to set your Strikers Club Player ID on MY CARD before creating a team.');
+      return;
+    }
     if (!name.trim() || name.length < 3) { setError('Team name must be 3+ characters'); return; }
     if (!tag.trim() || tag.length < 2 || tag.length > 5) { setError('Tag must be 2-5 characters'); return; }
     if (!logoUrl) { setError('Please upload a team logo'); return; }
@@ -2562,18 +2568,20 @@ const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClose, onS
             ) : (
               candidatePlayers.map(p => {
                 const locked = lockedTeamByUser[p.username.toLowerCase()];
+                const noSid = !p.strikersId; // Must have Strikers ID to join a team
                 const checked = selectedMembers.includes(p.username);
+                const disabled = !!locked || noSid;
                 return (
                   <button
                     key={p.username}
                     type="button"
-                    disabled={!!locked}
+                    disabled={disabled}
                     onClick={() => toggleMember(p.username)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-left transition-colors disabled:cursor-not-allowed"
                     style={{
                       borderBottom: `1px solid ${C.navyLight}33`,
                       background: checked ? `${C.green}22` : 'transparent',
-                      opacity: locked ? 0.45 : 1,
+                      opacity: disabled ? 0.45 : 1,
                     }}
                   >
                     <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
@@ -2588,11 +2596,15 @@ const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClose, onS
                     <span className="font-mono text-[9px] tracking-wider" style={{ color: `${C.cream}66` }}>
                       {p.position}
                     </span>
-                    {locked && (
+                    {locked ? (
                       <span className="font-mono text-[9px] tracking-wider px-1.5 py-0.5 rounded" style={{
                         background: `${C.red}22`, color: C.redLight,
                       }}>ON {locked.tag || 'A TEAM'}</span>
-                    )}
+                    ) : noSid ? (
+                      <span className="font-mono text-[9px] tracking-wider px-1.5 py-0.5 rounded" style={{
+                        background: `${C.red}22`, color: C.redLight,
+                      }}>NO SC ID</span>
+                    ) : null}
                   </button>
                 );
               })
@@ -4398,6 +4410,14 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
   useEffect(() => { refresh(); }, []);
 
   const approve = async (team) => {
+    // Captain must have their Strikers Club ID set before their team can be
+    // approved. Rare in practice (they set it before submitting) but this is
+    // the belt-and-suspenders check on the admin side.
+    const owner = await db.getAccount(team.ownerUsername);
+    if (owner && !owner.strikersId) {
+      alert(`Cannot approve: captain ${team.ownerUsername} has no Strikers Club ID linked. Ask them to set it on MY CARD (or admin can set it via ADMIN → PLAYERS → SC ID).`);
+      return;
+    }
     // Pull in players the creator invited (pendingMembers), but only ones who
     // are still free agents — skip anyone who joined another team in the
     // meantime. Roster capped at 15 players total (defensive: cap should already
@@ -4408,13 +4428,15 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
     for (const username of invited) {
       if (finalMembers.length >= ROSTER_CAP) break;
       const player = await db.getAccount(username);
-      if (player && !player.teamId) {
+      // Enforce Strikers Club ID requirement: skip anyone who doesn't have one.
+      // Admin can add them later via ADMIN → PLAYERS → SC ID + TEAM.
+      if (player && !player.teamId && player.strikersId) {
         if (!finalMembers.includes(player.username)) finalMembers.push(player.username);
         await db.saveAccount({ ...player, teamId: team.id });
       }
     }
-    // Make sure the owner also has their teamId set to this team.
-    const owner = await db.getAccount(team.ownerUsername);
+    // The owner variable is already loaded above (for the strikersId check).
+    // Make sure their teamId is set to this team.
     if (owner && owner.teamId !== team.id) {
       await db.saveAccount({ ...owner, teamId: team.id });
     }
@@ -6477,6 +6499,8 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
   const [editing, setEditing] = useState(null);   // account being renamed
   const [newName, setNewName] = useState('');
   const [teamEditing, setTeamEditing] = useState(null); // account whose team is being changed
+  const [sidEditing, setSidEditing] = useState(null); // account whose Strikers ID is being changed
+  const [newSid, setNewSid] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -6535,6 +6559,12 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
 
   const changeTeam = async (player, newTeamId) => {
     setError('');
+    // No team assignment without a Strikers Club ID linked on the account.
+    // Admins can set the ID via the SC ID button on this same row.
+    if (newTeamId && !player.strikersId) {
+      setError(`${player.username} has no Strikers Club ID linked. Set it via the SC ID button before assigning a team.`);
+      return;
+    }
     setBusy(true);
     try {
       const oldTeamId = player.teamId || null;
@@ -6576,6 +6606,43 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
       setTimeout(() => setInfo(''), 3000);
     } catch (e) {
       setError('Could not change team: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  // Admin override for Strikers Club Player ID. Players can't change theirs
+  // once set (see MY CARD); this is the only escape hatch. Empty input clears it.
+  const startSidEdit = (player) => {
+    setSidEditing(player);
+    setNewSid(player.strikersId || '');
+    setError('');
+  };
+  const saveSid = async () => {
+    setError('');
+    const sid = (newSid || '').trim();
+    if (sid && !/^\d{2,15}$/.test(sid)) {
+      setError('Strikers Club Player ID must be 2-15 digits, or empty to clear.');
+      return;
+    }
+    setBusy(true);
+    try {
+      // Uniqueness check: refuse to set an ID that another account already owns.
+      if (sid) {
+        const clash = allPlayers.find(p =>
+          p.strikersId && String(p.strikersId) === sid && p.username !== sidEditing.username
+        );
+        if (clash) {
+          setError(`That ID is already linked to ${clash.username}. Clear theirs first if you're moving it.`);
+          setBusy(false); return;
+        }
+      }
+      await db.saveAccount({ ...sidEditing, strikersId: sid || null });
+      setInfo(`✓ ${sidEditing.username} → Strikers ID ${sid || 'cleared'}`);
+      setSidEditing(null);
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) {
+      setError('Could not save: ' + (e?.message || e));
     }
     setBusy(false);
   };
@@ -6674,6 +6741,35 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 >CANCEL</button>
               </div>
+            ) : sidEditing && (sidEditing.id === p.id) ? (
+              <div className="space-y-2">
+                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
+                  STRIKERS CLUB ID — {p.username.toUpperCase()}
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newSid}
+                  onChange={(e) => setNewSid(e.target.value.replace(/\D/g, ''))}
+                  placeholder="e.g. 365702 (empty to clear)"
+                  className="w-full px-3 py-2 font-mono text-sm rounded"
+                  style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                />
+                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
+                <div className="flex gap-2">
+                  <button
+                    onClick={saveSid}
+                    disabled={busy}
+                    className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: C.green, color: C.onColor }}
+                  >{busy ? 'SAVING…' : 'SAVE'}</button>
+                  <button
+                    onClick={() => { setSidEditing(null); setError(''); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                  >CANCEL</button>
+                </div>
+              </div>
             ) : (
               <div className="flex items-center gap-3">
                 <div className="flex-1 min-w-0">
@@ -6685,10 +6781,13 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
                     {playerTeam
                       ? <span style={{ color: playerTeam.color || C.green }}> • {playerTeam.tag}</span>
                       : <span style={{ color: `${C.brandNavy}44` }}> • FREE AGENT</span>}
+                    {p.strikersId
+                      ? <span style={{ color: `${C.brandNavy}77` }}> • SC:{p.strikersId}</span>
+                      : <span style={{ color: C.red }}> • NO SC ID</span>}
                   </div>
                 </div>
                 <button
-                  onClick={() => { setTeamEditing(p); setEditing(null); setError(''); }}
+                  onClick={() => { setTeamEditing(p); setEditing(null); setSidEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 ><Users size={11} /> TEAM</button>
@@ -6697,6 +6796,11 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 ><Edit3 size={11} /> RENAME</button>
+                <button
+                  onClick={() => { startSidEdit(p); setEditing(null); setTeamEditing(null); }}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
+                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                >SC ID</button>
                 <button
                   onClick={() => toggleCheater(p)}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
@@ -7492,20 +7596,22 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
   // ASL account row. Set them once here and imports will find you.
   const handleSaveLinks = async () => {
     setLinksMsg('');
-    // Basic validation: Strikers Club ID is digits (usually 3-8 chars).
     const sid = (strikersIdInput || '').trim();
-    if (sid && !/^\d{2,15}$/.test(sid)) {
+    const surl = (steamUrlInput || '').trim();
+    // Guardrail: once strikersId is set, players can't change it here (only
+    // admins can, via ADMIN → PLAYERS). Save silently ignores changes to it.
+    const finalStrikersId = account.strikersId ? account.strikersId : (sid || null);
+    if (!account.strikersId && sid && !/^\d{2,15}$/.test(sid)) {
       setLinksMsg('Strikers Club Player ID should be a number (2-15 digits)');
       return;
     }
-    const surl = (steamUrlInput || '').trim();
     if (surl && !/^https?:\/\/(www\.)?steamcommunity\.com\//i.test(surl)) {
       setLinksMsg('Steam URL should start with https://steamcommunity.com/');
       return;
     }
     setLinksBusy(true);
     try {
-      const updated = { ...account, strikersId: sid || null, steamUrl: surl || null };
+      const updated = { ...account, strikersId: finalStrikersId, steamUrl: surl || null };
       await db.saveAccount(updated);
       onUpdate && onUpdate(updated);
       setEditingLinks(false);
@@ -7764,18 +7870,32 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
               </div>
             ) : (
               <div className="space-y-2">
-                <div>
-                  <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STRIKERS CLUB PLAYER ID</div>
-                  <input
-                    type="text"
-                    value={strikersIdInput}
-                    onChange={(e) => setStrikersIdInput(e.target.value.replace(/\D/g, ''))}
-                    placeholder="e.g. 365702"
-                    className="w-full px-3 py-2 font-mono text-sm focus:outline-none rounded"
-                    style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
-                  />
-                  <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.brandNavy}66` }}>Numbers only. Find it in-game on your profile.</div>
-                </div>
+                {/* Strikers Club ID — LOCKED once set. Only admins can change
+                    it after that (via ADMIN → PLAYERS). This prevents players
+                    from swapping IDs to claim someone else's stats. */}
+                {account.strikersId ? (
+                  <div>
+                    <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STRIKERS CLUB PLAYER ID</div>
+                    <div className="px-3 py-2 font-mono text-sm rounded flex items-center justify-between" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44`, color: `${C.brandNavy}` }}>
+                      <span>{account.strikersId}</span>
+                      <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.brandNavy}88` }}>🔒 LOCKED</span>
+                    </div>
+                    <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.brandNavy}77` }}>Once set, this can only be changed by an admin. Contact staff if it's wrong.</div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STRIKERS CLUB PLAYER ID</div>
+                    <input
+                      type="text"
+                      value={strikersIdInput}
+                      onChange={(e) => setStrikersIdInput(e.target.value.replace(/\D/g, ''))}
+                      placeholder="e.g. 365702"
+                      className="w-full px-3 py-2 font-mono text-sm focus:outline-none rounded"
+                      style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                    />
+                    <div className="font-mono text-[9px] mt-0.5" style={{ color: C.red }}>⚠ REQUIRED to join a team. Numbers only. Find it in-game on your profile. Can only be set once — after that only an admin can change it.</div>
+                  </div>
+                )}
                 <div>
                   <div className="font-mono text-[9px] tracking-wider mb-0.5" style={{ color: `${C.brandNavy}77` }}>STEAM PROFILE URL (OPTIONAL)</div>
                   <input

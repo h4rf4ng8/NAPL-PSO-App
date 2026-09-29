@@ -35,7 +35,7 @@ const C = {
 // ============ ADMIN CONFIG ============
 // "Super admins" are hardcoded as a safety net — they can never be removed
 // via the UI. They have the unique power to promote/demote other admins.
-const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906', 'biggiebag'];
+const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906','biggiebag'];
 // Regular admins are stored in the DB and managed via the Admin Panel.
 // Both super admins and regular admins have full admin powers EXCEPT
 // only super admins can manage the admin list itself.
@@ -2854,39 +2854,43 @@ const EmptyState = ({ icon, text }) => (
 );
 
 // ============ TEAM STANDINGS ============
-// Reads all approved match submissions and computes a season standings table:
-// W/D/L/GF/GA/GD/Pts, sorted by points then goal difference. Filterable by
-// season via a dropdown.
-const TeamStandings = ({ allTeams = [] }) => {
-  const [submissions, setSubmissions] = useState([]);
+// Derives the league table from each player's imported match records:
+// dedup by (team_id + strikersMatchId) so a match only counts once per team
+// regardless of how many players logged it. Tiebreakers follow Rulebook 2.1.3:
+// Points → Wins → Goal Diff → Total Goals → team name alphabetically.
+const TeamStandings = ({ allTeams = [], allPlayers = [] }) => {
   const [season, setSeason] = useState('all');
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const subs = await db.listSubmissions();
-        setSubmissions(subs.filter(s => s.status === 'approved'));
-      } catch (e) {
-        console.error('Failed to load submissions for standings:', e);
+  // Collect every unique (teamId, matchId) → single match record per team.
+  // Uses the FIRST player-record's numbers as the team's numbers (they all
+  // agree on team-level fields like goalsFor/goalsAgainst since those come
+  // from the shared match_id JSON).
+  const teamMatches = useMemo(() => {
+    const seen = new Set();
+    const rows = [];
+    for (const p of (allPlayers || [])) {
+      for (const m of (p.matches || [])) {
+        if (!m.ownTeamId || !m.strikersMatchId) continue;
+        const key = `${m.ownTeamId}_${m.strikersMatchId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rows.push(m);
       }
-      setLoading(false);
-    })();
-  }, []);
+    }
+    return rows;
+  }, [allPlayers]);
 
-  // Build the list of seasons present in the data
+  // Available seasons for the filter dropdown
   const seasons = useMemo(() => {
     const set = new Set();
-    submissions.forEach(s => { if (s.matchInfo?.season) set.add(s.matchInfo.season); });
+    teamMatches.forEach(m => { if (m.season) set.add(m.season); });
     return Array.from(set).sort();
-  }, [submissions]);
+  }, [teamMatches]);
 
-  // Filter submissions by chosen season
-  const filtered = useMemo(() => {
-    if (season === 'all') return submissions;
-    return submissions.filter(s => s.matchInfo?.season === season);
-  }, [submissions, season]);
+  // Filter by season
+  const filtered = useMemo(() => (
+    season === 'all' ? teamMatches : teamMatches.filter(m => (m.season || 'S1') === season)
+  ), [teamMatches, season]);
 
   // Aggregate stats per team
   const standings = useMemo(() => {
@@ -2898,39 +2902,29 @@ const TeamStandings = ({ allTeams = [] }) => {
         gf: 0, ga: 0, gd: 0, pts: 0,
       };
     });
-    filtered.forEach(sub => {
-      const mi = sub.matchInfo || {};
-      const homeId = mi.homeTeamId;
-      const awayId = mi.awayTeamId;
-      const hs = Number(mi.homeScore || 0);
-      const as = Number(mi.awayScore || 0);
-      if (!homeId || !awayId) return;
-      // Skip matches involving deleted / non-approved teams
-      if (!table[homeId] || !table[awayId]) return;
-      const home = table[homeId];
-      const away = table[awayId];
-      home.played += 1; away.played += 1;
-      home.gf += hs; home.ga += as;
-      away.gf += as; away.ga += hs;
-      if (hs > as) { home.w += 1; home.pts += 3; away.l += 1; }
-      else if (hs < as) { away.w += 1; away.pts += 3; home.l += 1; }
-      else { home.d += 1; away.d += 1; home.pts += 1; away.pts += 1; }
+    filtered.forEach(m => {
+      const row = table[m.ownTeamId];
+      if (!row) return; // team not approved / deleted
+      row.played += 1;
+      row.gf += (m.goalsFor || 0);
+      row.ga += (m.goalsAgainst || 0);
+      if (m.result === 'W') { row.w += 1; row.pts += 3; }
+      else if (m.result === 'L') { row.l += 1; }
+      else { row.d += 1; row.pts += 1; }
     });
     Object.values(table).forEach(row => { row.gd = row.gf - row.ga; });
-    // Sort by pts desc, gd desc, gf desc, team name asc
+    // Rulebook 2.1.3.2 tiebreakers: Points → Wins → GD → GF → name
+    // (Head-to-head omitted for now — complex, add later if needed)
     return Object.values(table).sort((a, b) => {
       if (b.pts !== a.pts) return b.pts - a.pts;
+      if (b.w   !== a.w)   return b.w   - a.w;
       if (b.gd  !== a.gd)  return b.gd  - a.gd;
       if (b.gf  !== a.gf)  return b.gf  - a.gf;
       return a.team.name.localeCompare(b.team.name);
     });
   }, [filtered, allTeams]);
 
-  if (loading) {
-    return <div className="text-center py-6 font-mono text-xs" style={{ color: `${C.cream}66` }}>LOADING STANDINGS…</div>;
-  }
-
-  const hasAnyMatches = submissions.length > 0;
+  const hasAnyMatches = teamMatches.length > 0;
 
   return (
     <div className="space-y-3">
@@ -3004,6 +2998,40 @@ const TeamStandings = ({ allTeams = [] }) => {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+};
+
+// ============ STANDINGS VIEW (main nav tab) ============
+// Full-page wrapper around TeamStandings. Loads teams + players fresh each
+// time this view mounts so freshly-imported matches show up right away.
+const StandingsView = () => {
+  const [teams, setTeams] = useState([]);
+  const [allPlayers, setAllPlayers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    Promise.all([db.listTeams(), db.listAccounts()]).then(([t, p]) => {
+      if (!alive) return;
+      setTeams(t || []);
+      setAllPlayers(p || []);
+      setLoading(false);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center gap-3">
+        <Trophy size={22} style={{ color: C.brandNavy }} />
+        <h1 className="font-display text-2xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>LEAGUE STANDINGS</h1>
+      </div>
+      {loading ? (
+        <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading standings...</div>
+      ) : (
+        <TeamStandings allTeams={teams} allPlayers={allPlayers} />
       )}
     </div>
   );
@@ -3360,9 +3388,9 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
         )}
       </div>
 
-      {/* SEASON STANDINGS — computed from approved match submissions */}
+      {/* SEASON STANDINGS — computed from imported match records */}
       <div className="mb-6">
-        <TeamStandings allTeams={teams} />
+        <TeamStandings allTeams={teams} allPlayers={allPlayers} />
       </div>
 
       {myPending && (
@@ -8872,7 +8900,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   // in local state and don't get their own URL.
   const VIEW_TO_PATH = {
     home: '/', card: '/card', teams: '/teams', leaderboard: '/leaderboard',
-    news: '/news', hof: '/hof', tiers: '/tiers', rules: '/rules', admin: '/admin',
+    news: '/news', hof: '/hof', standings: '/standings', tiers: '/tiers',
+    rules: '/rules', admin: '/admin',
   };
   const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
   const viewFromPath = () => {
@@ -8982,6 +9011,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     { id: 'teams', label: 'TEAMS', icon: Users },
     { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
+    { id: 'standings', label: 'STANDINGS', icon: Trophy },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
     { id: 'rules', label: 'RULES', icon: BookOpen },
   ];
@@ -9347,6 +9377,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         )}
 
         {view === 'tiers' && <TierPreview />}
+
+        {view === 'standings' && <StandingsView />}
 
         {view === 'rules' && <RulesView onJump={setView} />}
 

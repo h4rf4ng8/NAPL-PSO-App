@@ -1452,70 +1452,23 @@ const CardStatBar = ({ label, value, valueSize, labelSize, accent, maxValue = 99
 
 // ============ AUTH SCREEN ============
 const AuthScreen = ({ onLogin }) => {
-  const [mode, setMode] = useState('login');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [position, setPosition] = useState('ST');
-  const [email, setEmail] = useState('');
-  const [country, setCountry] = useState('');
+  // Discord-only authentication. Email/password sign-in and registration have
+  // been retired — every user now authenticates through Discord OAuth, which
+  // keeps the roster locked to real Discord accounts in the ASL server and
+  // removes the need for password management.
   const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Simple email format check
-  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
-
-  // "Forgot password" — sends a reset link to the account's email
-  const handleForgotPassword = async () => {
-    setError(''); setInfo('');
-    if (!username.trim()) { setError('Enter your username first, then tap "Forgot password".'); return; }
+  const handleDiscord = async () => {
+    setError('');
     setLoading(true);
-    try {
-      const res = await auth.sendPasswordReset(username.trim());
-      if (res.ok) {
-        setInfo(`A password reset link has been sent to ${res.email}. Check your inbox (and spam folder).`);
-      } else {
-        setError(res.reason || 'Could not send a reset link.');
-      }
-    } catch (e) {
-      setError(e?.message || 'Could not send a reset link.');
+    const res = await auth.signInWithDiscord();
+    if (!res.ok) {
+      setError(res.reason || 'Could not start Discord sign-in.');
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  const handleSubmit = async () => {
-    setError(''); setInfo('');
-    if (!username.trim() || !password.trim()) { setError('Username and password required'); return; }
-    if (username.length < 3) { setError('Username must be at least 3 characters'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) { setError('Letters, numbers, and underscores only'); return; }
-    // Sign-up only: profanity check, email, and country are required
-    if (mode === 'signup') {
-      if (checkUsernameProfanity(username)) {
-        setError('That username isn\'t allowed. Please choose a different one.');
-        return;
-      }
-      if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
-      if (!country) { setError('Please select your country'); return; }
-    }
-    setLoading(true);
-    try {
-      let account;
-      if (mode === 'signup') {
-        account = await auth.signUp({
-          username: username.trim(), password, position,
-          email: email.trim(), country,
-        });
-      } else {
-        account = await auth.signIn({ username: username.trim(), password });
-      }
-      if (!account) throw new Error('Could not load account');
-      onLogin(account);
-    } catch (e) {
-      console.error('Auth error:', e);
-      setError(e?.message ? `Error: ${e.message}` : 'Something went wrong');
-    }
-    setLoading(false);
+    // On success, Supabase redirects the browser to Discord, then back.
+    // The SIGNED_IN handler in App.jsx picks up the session from there.
   };
 
   return (
@@ -1545,156 +1498,43 @@ const AuthScreen = ({ onLogin }) => {
           border: `1px solid ${C.navyLight}`,
           boxShadow: `0 20px 60px ${C.brandNavy}22, inset 0 1px 0 ${C.white}`,
         }}>
-          <div className="flex gap-1 mb-6 p-1 rounded" style={{ background: `${C.navyDeep}` }}>
-            <button
-              onClick={() => { setMode('login'); setError(''); }}
-              className="flex-1 py-2 font-heading tracking-wider text-xs transition-all rounded"
-              style={{
-                background: mode === 'login' ? C.green : 'transparent',
-                color: mode === 'login' ? C.onColor : `${C.cream}77`,
-                boxShadow: mode === 'login' ? `0 2px 8px ${C.green}66` : 'none',
-              }}
-            >SIGN IN</button>
-            <button
-              onClick={() => { setMode('signup'); setError(''); }}
-              className="flex-1 py-2 font-heading tracking-wider text-xs transition-all rounded"
-              style={{
-                background: mode === 'signup' ? C.green : 'transparent',
-                color: mode === 'signup' ? C.onColor : `${C.cream}77`,
-                boxShadow: mode === 'signup' ? `0 2px 8px ${C.green}66` : 'none',
-              }}
-            >REGISTER</button>
+          <div className="text-center mb-5">
+            <h2 className="font-display text-2xl tracking-[0.15em]" style={{ color: C.cream }}>SIGN IN</h2>
+            <p className="font-mono text-[10px] tracking-wider mt-2" style={{ color: `${C.cream}99` }}>
+              AUTHENTICATE THROUGH DISCORD TO JOIN THE LEAGUE
+            </p>
           </div>
 
-          <div className="space-y-3">
-            <Field label="USERNAME">
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
-                placeholder="your_gamertag"
-                style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              />
-            </Field>
-            <Field label="PASSWORD">
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
-                placeholder="••••••••"
-                style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              />
-            </Field>
-            {mode === 'signup' && (
-              <Field label="PRIMARY POSITION">
-                <select
-                  value={position}
-                  onChange={(e) => setPosition(e.target.value)}
-                  className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
-                  style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-                >
-                  {POSITIONS.map(p => <option key={p} value={p} style={{ background: C.navyDeep }}>{p}</option>)}
-                </select>
-              </Field>
-            )}
-            {mode === 'signup' && (
-              <Field label="EMAIL">
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
-                  placeholder="you@example.com"
-                  style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-                />
-              </Field>
-            )}
-            {mode === 'signup' && (
-              <Field label="COUNTRY">
-                <select
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  className="w-full px-3 py-2 font-body text-base focus:outline-none rounded"
-                  style={{ background: `${C.navyDeep}`, border: `1px solid ${C.navyLight}66`, color: country ? C.cream : `${C.cream}66` }}
-                >
-                  <option value="" style={{ background: C.navyDeep }}>Select your country…</option>
-                  {COUNTRIES.map(c => <option key={c} value={c} style={{ background: C.navyDeep }}>{c}</option>)}
-                </select>
-              </Field>
-            )}
-            {error && (
-              <div className="flex items-center gap-2 px-3 py-2 rounded font-mono text-xs" style={{
-                background: `${C.red}22`, border: `1px solid ${C.red}66`, color: C.redLight,
-              }}>
-                <XCircle size={12} /> {error}
-              </div>
-            )}
-            {info && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded font-mono text-xs" style={{
-                background: `${C.green}22`, border: `1px solid ${C.green}66`, color: C.greenLight,
-              }}>
-                <CheckCircle size={12} style={{ marginTop: 2, flexShrink: 0 }} /> {info}
-              </div>
-            )}
-            <button
-              onClick={handleSubmit}
-              disabled={loading}
-              className="w-full py-3 font-display tracking-[0.15em] text-xl transition-all disabled:opacity-50 rounded mt-2"
-              style={{
-                background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-                color: C.onColor,
-                boxShadow: `0 4px 16px ${C.green}66, inset 0 1px 0 ${C.white}30`,
-              }}
-            >
-              {loading ? 'LOADING...' : mode === 'login' ? 'ENTER LEAGUE' : 'JOIN THE LEAGUE'}
-            </button>
-
-            {/* DIVIDER + DISCORD OAUTH */}
-            <div className="flex items-center gap-3 my-2">
-              <div className="flex-1 h-px" style={{ background: `${C.cream}22` }} />
-              <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}55` }}>OR</span>
-              <div className="flex-1 h-px" style={{ background: `${C.cream}22` }} />
+          {error && (
+            <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded font-mono text-xs" style={{
+              background: `${C.red}22`, border: `1px solid ${C.red}66`, color: C.redLight,
+            }}>
+              <XCircle size={12} /> {error}
             </div>
-            <button
-              type="button"
-              onClick={async () => {
-                setError(''); setInfo(''); setLoading(true);
-                const res = await auth.signInWithDiscord();
-                if (!res.ok) { setError(res.reason || 'Could not start Discord sign-in.'); setLoading(false); }
-                // On success, Supabase redirects the browser to Discord, then back.
-                // The SIGNED_IN handler in App.jsx picks it up from there.
-              }}
-              disabled={loading}
-              className="w-full py-3 font-display tracking-[0.15em] text-lg rounded disabled:opacity-50 flex items-center justify-center gap-2"
-              style={{
-                background: '#5865F2',
-                color: '#ffffff',
-                boxShadow: '0 4px 16px #5865F266, inset 0 1px 0 #ffffff30',
-              }}
-            >
-              {/* Discord logo (inline SVG) */}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"/>
-              </svg>
-              SIGN IN WITH DISCORD
-            </button>
+          )}
 
-            {mode === 'login' && (
-              <button
-                onClick={handleForgotPassword}
-                disabled={loading}
-                className="w-full font-mono text-[11px] tracking-wider disabled:opacity-50 mt-1"
-                style={{ color: `${C.cream}88`, textDecoration: 'underline' }}
-              >Forgot my password</button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={handleDiscord}
+            disabled={loading}
+            className="w-full py-3 font-display tracking-[0.15em] text-lg rounded disabled:opacity-50 flex items-center justify-center gap-2 transition-all hover:scale-[1.02]"
+            style={{
+              background: '#5865F2',
+              color: '#ffffff',
+              boxShadow: '0 4px 16px #5865F266, inset 0 1px 0 #ffffff30',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418Z"/>
+            </svg>
+            {loading ? 'REDIRECTING...' : 'SIGN IN WITH DISCORD'}
+          </button>
 
           <div className="mt-5 pt-4 text-center" style={{ borderTop: `1px solid ${C.navyLight}33` }}>
-            <p className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}55` }}>
-              {mode === 'signup' ? 'BY REGISTERING, YOU JOIN THE OFFICIAL LEAGUE' : 'WELCOME BACK, BALLER'}
+            <p className="font-mono text-[10px] tracking-wider leading-relaxed" style={{ color: `${C.cream}77` }}>
+              NEW HERE? JUST SIGN IN WITH DISCORD —
+              <br />
+              YOUR ACCOUNT IS CREATED AUTOMATICALLY.
             </p>
           </div>
         </div>

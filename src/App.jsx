@@ -9613,12 +9613,12 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     { id: 'news', label: 'NEWS', icon: Flag },
     { id: 'teams', label: 'TEAMS', icon: Users },
     { id: 'schedule', label: 'SCHEDULE', icon: Calendar },
+    { id: 'standings', label: 'STANDINGS', icon: Trophy },
     { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
   ];
   // Reference tabs (less frequently visited). Live under a MORE dropdown
   // but still have real URLs that work when visited directly.
   const moreTabs = [
-    { id: 'standings', label: 'STANDINGS', icon: Trophy },
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
     { id: 'rules', label: 'RULES', icon: BookOpen },

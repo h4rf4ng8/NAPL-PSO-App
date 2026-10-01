@@ -35,7 +35,7 @@ const C = {
 // ============ ADMIN CONFIG ============
 // "Super admins" are hardcoded as a safety net — they can never be removed
 // via the UI. They have the unique power to promote/demote other admins.
-const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906','biggiebag'];
+const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906'];
 // Regular admins are stored in the DB and managed via the Admin Panel.
 // Both super admins and regular admins have full admin powers EXCEPT
 // only super admins can manage the admin list itself.
@@ -2852,6 +2852,605 @@ const EmptyState = ({ icon, text }) => (
     {text}
   </div>
 );
+
+// ============ SCHEDULE: ROUND-ROBIN GENERATOR ============
+// Classic "circle method" algorithm. For N teams:
+//   - If N is odd, add a ghost team so one team gets a bye each round.
+//   - Fix team 0, rotate the rest. Each round produces N/2 matches.
+//   - For double round-robin, play the whole schedule twice, swapping home/away.
+// Returns an array of weeks, each week is an array of {homeTeamId, awayTeamId}.
+const generateRoundRobinSchedule = (teamIds, doubleRound = true) => {
+  if (!teamIds || teamIds.length < 2) return [];
+  // Shuffle slightly for variety across generations with the same team list.
+  // (Deterministic shuffles would be reproducible but less interesting season-to-season.)
+  const teams = [...teamIds];
+  for (let i = teams.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [teams[i], teams[j]] = [teams[j], teams[i]];
+  }
+  const hasBye = teams.length % 2 === 1;
+  if (hasBye) teams.push(null); // ghost team; one real team sits out each week
+  const n = teams.length;
+  const halfSize = n / 2;
+  const rounds = [];
+
+  // Single round-robin via circle method
+  const working = [...teams];
+  for (let round = 0; round < n - 1; round++) {
+    const weekMatches = [];
+    for (let i = 0; i < halfSize; i++) {
+      const home = working[i];
+      const away = working[n - 1 - i];
+      if (home !== null && away !== null) {
+        weekMatches.push({ homeTeamId: home, awayTeamId: away });
+      }
+    }
+    rounds.push(weekMatches);
+    // Rotate: keep working[0] fixed, rotate rest by one
+    working.splice(1, 0, working.pop());
+  }
+
+  // For double round-robin, add the mirror image (home/away swapped) as a second half
+  if (doubleRound) {
+    const secondHalf = rounds.map(wk => wk.map(m => ({ homeTeamId: m.awayTeamId, awayTeamId: m.homeTeamId })));
+    rounds.push(...secondHalf);
+  }
+
+  return rounds;
+};
+
+// ============ SCHEDULE: GENERATE MODAL ============
+// Admin picks the season name + the teams to include, then this generates
+// the entire fixture list and inserts it in one shot.
+const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, onGenerated }) => {
+  const [seasonName, setSeasonName] = useState(() => {
+    // Suggest next season number based on existing
+    const nums = existingSeasons.map(s => parseInt(s.replace(/\D/g, ''), 10)).filter(n => !isNaN(n));
+    const next = nums.length ? Math.max(...nums) + 1 : 1;
+    return `Season ${next}`;
+  });
+  const approvedTeams = allTeams.filter(t => t.status === 'approved');
+  const [selectedTeamIds, setSelectedTeamIds] = useState(() => approvedTeams.map(t => t.id));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [preview, setPreview] = useState(null); // array of weeks of {homeTeamId, awayTeamId}
+
+  const toggleTeam = (id) => {
+    setSelectedTeamIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+    setPreview(null);
+  };
+
+  const handlePreview = () => {
+    setErr('');
+    if (selectedTeamIds.length < 2) { setErr('Pick at least 2 teams.'); return; }
+    if (!seasonName.trim()) { setErr('Season name is required.'); return; }
+    const weeks = generateRoundRobinSchedule(selectedTeamIds, true);
+    setPreview(weeks);
+  };
+
+  const handleGenerate = async () => {
+    setErr('');
+    if (!preview) { setErr('Preview the schedule first.'); return; }
+    // Confirm wipe if the season already exists
+    if (existingSeasons.includes(seasonName)) {
+      if (!confirm(`Season "${seasonName}" already has matches. REPLACE all of them with a new generated schedule?`)) return;
+    }
+    setBusy(true);
+    try {
+      if (existingSeasons.includes(seasonName)) {
+        await db.deleteScheduledSeason(seasonName);
+      }
+      const rows = [];
+      preview.forEach((wk, idx) => {
+        wk.forEach((m, mIdx) => {
+          rows.push({
+            id: `sch_${seasonName.toLowerCase().replace(/\s+/g, '_')}_w${idx + 1}_${m.homeTeamId.slice(-4)}_${m.awayTeamId.slice(-4)}_${mIdx}`,
+            season: seasonName,
+            week: idx + 1,
+            homeTeamId: m.homeTeamId,
+            awayTeamId: m.awayTeamId,
+            scheduledDate: null,
+            status: 'scheduled',
+            matchType: 'regular',
+          });
+        });
+      });
+      await db.bulkInsertScheduledMatches(rows);
+      onGenerated && onGenerated(seasonName);
+      onClose && onClose();
+    } catch (e) {
+      setErr('Could not generate: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const totalMatches = preview ? preview.reduce((sum, wk) => sum + wk.length, 0) : 0;
+  const teamById = (id) => approvedTeams.find(t => t.id === id);
+
+  return (
+    <ModalShell title="GENERATE SEASON SCHEDULE" onClose={onClose} maxWidth="max-w-2xl">
+      <div className="space-y-4">
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>SEASON NAME</label>
+          <input
+            type="text"
+            value={seasonName}
+            onChange={(e) => setSeasonName(e.target.value)}
+            className="w-full px-3 py-2 font-heading tracking-wider rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+            TEAMS IN THIS SEASON ({selectedTeamIds.length} selected)
+          </label>
+          {approvedTeams.length === 0 ? (
+            <div className="font-mono text-xs p-3 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>
+              No approved teams yet. Approve teams first before generating a schedule.
+            </div>
+          ) : (
+            <div className="max-h-56 overflow-y-auto rounded" style={{ border: `1px solid ${C.navyLight}33` }}>
+              {approvedTeams.map(t => {
+                const checked = selectedTeamIds.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => toggleTeam(t.id)}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-left"
+                    style={{
+                      borderBottom: `1px solid ${C.navyLight}22`,
+                      background: checked ? `${C.green}22` : 'transparent',
+                    }}
+                  >
+                    <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
+                      border: `1.5px solid ${checked ? C.green : `${C.cream}55`}`,
+                      background: checked ? C.green : 'transparent',
+                    }}>
+                      {checked && <Check size={11} style={{ color: C.onColor }} />}
+                    </div>
+                    <span className="font-heading tracking-wider text-sm" style={{ color: C.cream }}>
+                      {t.tag} — {t.name}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="font-mono text-[10px] p-3 rounded" style={{ background: `${C.navyLight}22`, color: `${C.cream}cc` }}>
+          <div className="mb-1" style={{ color: C.goldLight }}>DOUBLE ROUND-ROBIN FORMAT</div>
+          Each team plays every other team twice (once home, once away).
+          Total: <b>{selectedTeamIds.length * (selectedTeamIds.length - 1)}</b> matches
+          over <b>{Math.max(0, selectedTeamIds.length % 2 === 0 ? (selectedTeamIds.length - 1) * 2 : selectedTeamIds.length * 2)}</b> weeks.
+          Matches start with no date/time — you set those individually as teams agree on times.
+        </div>
+
+        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
+
+        {preview && (
+          <div className="max-h-64 overflow-y-auto rounded p-2" style={{ background: `${C.brandNavyDeep}66`, border: `1px solid ${C.navyLight}33` }}>
+            <div className="font-mono text-[10px] mb-2" style={{ color: C.goldLight }}>
+              PREVIEW — {preview.length} WEEKS, {totalMatches} MATCHES
+            </div>
+            {preview.map((wk, i) => (
+              <div key={i} className="mb-2">
+                <div className="font-heading text-[10px] tracking-widest" style={{ color: `${C.cream}99` }}>WEEK {i + 1}</div>
+                {wk.map((m, mi) => (
+                  <div key={mi} className="font-mono text-[10px] pl-2" style={{ color: C.cream }}>
+                    {teamById(m.homeTeamId)?.tag || '?'} vs {teamById(m.awayTeamId)?.tag || '?'}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          {!preview ? (
+            <button
+              onClick={handlePreview}
+              className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
+              style={{ background: `${C.navyLight}66`, color: C.cream }}
+            >PREVIEW SCHEDULE</button>
+          ) : (
+            <>
+              <button
+                onClick={() => setPreview(null)}
+                className="px-4 py-2 font-heading tracking-wider text-sm rounded"
+                style={{ background: `${C.navyLight}66`, color: C.cream }}
+              >RE-SHUFFLE</button>
+              <button
+                onClick={handleGenerate}
+                disabled={busy}
+                className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+                style={{ background: C.green, color: C.onColor }}
+              >{busy ? 'GENERATING...' : 'GENERATE & SAVE'}</button>
+            </>
+          )}
+          <button
+            onClick={onClose}
+            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
+            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
+          >CANCEL</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ============ SCHEDULE: EDIT MATCH MODAL ============
+// Admin opens this on any individual match to set the date/time, enter a
+// score, mark postponed/forfeit, add a stream link, etc.
+const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }) => {
+  const home = allTeams.find(t => t.id === match.homeTeamId);
+  const away = allTeams.find(t => t.id === match.awayTeamId);
+  // Convert epoch ms → local 'YYYY-MM-DDTHH:MM' for the datetime-local input
+  const toLocalInput = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  const [dateInput, setDateInput] = useState(toLocalInput(match.scheduledDate));
+  const [status, setStatus] = useState(match.status || 'scheduled');
+  const [homeScore, setHomeScore] = useState(match.homeScore ?? '');
+  const [awayScore, setAwayScore] = useState(match.awayScore ?? '');
+  const [streamUrl, setStreamUrl] = useState(match.streamUrl || '');
+  const [notes, setNotes] = useState(match.notes || '');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSave = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const updated = {
+        ...match,
+        scheduledDate: dateInput ? new Date(dateInput).getTime() : null,
+        status,
+        homeScore: homeScore === '' ? null : Number(homeScore),
+        awayScore: awayScore === '' ? null : Number(awayScore),
+        streamUrl: streamUrl.trim(),
+        notes: notes.trim(),
+      };
+      await db.saveScheduledMatch(updated);
+      onSaved && onSaved();
+      onClose && onClose();
+    } catch (e) {
+      setErr('Could not save: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this match from the schedule?')) return;
+    setBusy(true);
+    try {
+      await db.deleteScheduledMatch(match.id);
+      onSaved && onSaved();
+      onClose && onClose();
+    } catch (e) {
+      setErr('Could not delete: ' + (e?.message || e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ModalShell title={`EDIT MATCH — WEEK ${match.week}`} onClose={onClose} maxWidth="max-w-xl">
+      <div className="space-y-3">
+        <div className="font-heading tracking-wider text-center text-base p-2 rounded" style={{
+          background: `${C.navyLight}22`, color: C.cream
+        }}>
+          {home?.tag || '?'} <span style={{ color: `${C.cream}66` }}>vs</span> {away?.tag || '?'}
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>DATE & TIME</label>
+          <input
+            type="datetime-local"
+            value={dateInput}
+            onChange={(e) => setDateInput(e.target.value)}
+            className="w-full px-3 py-2 font-mono text-sm rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
+            Leave empty if time not yet decided.
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>STATUS</label>
+          <div className="grid grid-cols-4 gap-1">
+            {['scheduled', 'completed', 'postponed', 'forfeit'].map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatus(s)}
+                className="py-1.5 font-mono text-[10px] tracking-widest rounded uppercase"
+                style={status === s
+                  ? { background: C.green, color: C.onColor }
+                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
+                }
+              >{s}</button>
+            ))}
+          </div>
+        </div>
+
+        {status === 'completed' && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+                {home?.tag || 'HOME'} SCORE
+              </label>
+              <input
+                type="number" min="0"
+                value={homeScore}
+                onChange={(e) => setHomeScore(e.target.value)}
+                className="w-full px-3 py-2 font-mono text-sm rounded"
+                style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+              />
+            </div>
+            <div>
+              <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+                {away?.tag || 'AWAY'} SCORE
+              </label>
+              <input
+                type="number" min="0"
+                value={awayScore}
+                onChange={(e) => setAwayScore(e.target.value)}
+                className="w-full px-3 py-2 font-mono text-sm rounded"
+                style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>STREAM URL (OPTIONAL)</label>
+          <input
+            type="url"
+            value={streamUrl}
+            onChange={(e) => setStreamUrl(e.target.value)}
+            placeholder="https://twitch.tv/..."
+            className="w-full px-3 py-2 font-mono text-xs rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>NOTES (OPTIONAL)</label>
+          <input
+            type="text"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="e.g. rescheduled from last week"
+            className="w-full px-3 py-2 font-body text-sm rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+        </div>
+
+        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+            style={{ background: C.green, color: C.onColor }}
+          >{busy ? 'SAVING...' : 'SAVE'}</button>
+          <button
+            onClick={handleDelete}
+            disabled={busy}
+            className="px-3 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+            style={{ background: `${C.red}44`, color: C.redLight }}
+          >DELETE</button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
+            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
+          >CANCEL</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+};
+
+// ============ SCHEDULE VIEW (public tab) ============
+// Shows the whole season grouped by week. Each row shows home/away, date/time
+// (or TBD), status badge, and score if played. Admins see an EDIT button;
+// others just see the info.
+const ScheduleView = ({ account }) => {
+  const [matches, setMatches] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [season, setSeason] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const isAdminUser = isAdmin(account);
+
+  const refresh = async () => {
+    setLoading(true);
+    const [m, t] = await Promise.all([db.listScheduledMatches(), db.listTeams()]);
+    setMatches(m || []);
+    setTeams(t || []);
+    setLoading(false);
+  };
+  useEffect(() => { refresh(); }, []);
+
+  // Available seasons for the filter dropdown
+  const seasons = useMemo(() => {
+    const set = new Set();
+    matches.forEach(m => set.add(m.season));
+    return Array.from(set).sort();
+  }, [matches]);
+
+  // Default to the most recent season on first load
+  useEffect(() => {
+    if (!season && seasons.length > 0) setSeason(seasons[seasons.length - 1]);
+  }, [seasons, season]);
+
+  const filtered = season ? matches.filter(m => m.season === season) : matches;
+
+  // Group by week
+  const byWeek = useMemo(() => {
+    const groups = {};
+    filtered.forEach(m => {
+      if (!groups[m.week]) groups[m.week] = [];
+      groups[m.week].push(m);
+    });
+    // Sort each week by scheduled date (null dates last)
+    Object.values(groups).forEach(wk => wk.sort((a, b) => {
+      if (!a.scheduledDate && !b.scheduledDate) return 0;
+      if (!a.scheduledDate) return 1;
+      if (!b.scheduledDate) return -1;
+      return a.scheduledDate - b.scheduledDate;
+    }));
+    return groups;
+  }, [filtered]);
+
+  const teamById = (id) => teams.find(t => t.id === id);
+  const fmtDate = (ms) => {
+    if (!ms) return 'TBD';
+    const d = new Date(ms);
+    return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+      + ' • ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  };
+
+  const statusBadge = (m) => {
+    const styles = {
+      scheduled: { bg: `${C.navyLight}66`, color: C.cream, label: 'SCHEDULED' },
+      completed: { bg: `${C.green}44`, color: C.greenLight, label: 'FINAL' },
+      postponed: { bg: `${C.gold}44`, color: C.goldLight, label: 'POSTPONED' },
+      forfeit:   { bg: `${C.red}44`,   color: C.redLight,  label: 'FORFEIT'   },
+    };
+    const s = styles[m.status] || styles.scheduled;
+    return (
+      <span className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded"
+        style={{ background: s.bg, color: s.color }}>{s.label}</span>
+    );
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <Calendar size={22} style={{ color: C.brandNavy }} />
+          <h1 className="font-display text-2xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>SCHEDULE</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {seasons.length > 0 && (
+            <select value={season} onChange={(e) => setSeason(e.target.value)}
+              className="px-3 py-1.5 font-mono text-xs rounded"
+              style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}>
+              {seasons.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+          {isAdminUser && (
+            <button
+              onClick={() => setGenerating(true)}
+              className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
+              style={{ background: C.green, color: C.onColor }}
+            ><Plus size={12} /> NEW SEASON</button>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading schedule...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10 font-mono text-sm rounded" style={{ color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}44` }}>
+          No schedule yet. {isAdminUser ? 'Click NEW SEASON to generate one.' : 'The admin will post the fixtures when ready.'}
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {Object.keys(byWeek).map(n => Number(n)).sort((a, b) => a - b).map(wkNum => (
+            <div key={wkNum}>
+              <div className="font-display tracking-widest text-sm mb-2 flex items-center gap-2" style={{ color: C.brandNavy }}>
+                <span className="px-2 py-0.5 rounded" style={{ background: `${C.brandNavy}22` }}>WEEK {wkNum}</span>
+                <span className="font-mono text-[10px]" style={{ color: `${C.brandNavy}77` }}>
+                  {byWeek[wkNum].length} MATCH{byWeek[wkNum].length !== 1 ? 'ES' : ''}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {byWeek[wkNum].map(m => {
+                  const home = teamById(m.homeTeamId);
+                  const away = teamById(m.awayTeamId);
+                  const played = m.status === 'completed' && m.homeScore !== null && m.awayScore !== null;
+                  return (
+                    <div key={m.id}
+                      className="rounded p-3 flex items-center gap-3 flex-wrap"
+                      style={{ background: C.white, border: `1px solid ${C.navyLight}33` }}
+                    >
+                      <div className="font-mono text-[10px] shrink-0" style={{ color: `${C.brandNavy}99`, minWidth: 130 }}>
+                        {fmtDate(m.scheduledDate)}
+                      </div>
+                      <div className="flex-1 flex items-center gap-2 flex-wrap">
+                        <span className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
+                          {home?.tag || '???'}
+                        </span>
+                        {played && (
+                          <span className="font-mono text-sm px-1.5 py-0.5 rounded" style={{
+                            background: `${C.brandNavy}11`, color: C.brandNavyDeep,
+                            fontWeight: m.homeScore > m.awayScore ? 700 : 400,
+                          }}>{m.homeScore}</span>
+                        )}
+                        <span className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>vs</span>
+                        {played && (
+                          <span className="font-mono text-sm px-1.5 py-0.5 rounded" style={{
+                            background: `${C.brandNavy}11`, color: C.brandNavyDeep,
+                            fontWeight: m.awayScore > m.homeScore ? 700 : 400,
+                          }}>{m.awayScore}</span>
+                        )}
+                        <span className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
+                          {away?.tag || '???'}
+                        </span>
+                      </div>
+                      {statusBadge(m)}
+                      {m.streamUrl && (
+                        <a href={m.streamUrl} target="_blank" rel="noopener noreferrer"
+                          className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded"
+                          style={{ background: '#9146FF22', color: '#9146FF' }}>WATCH</a>
+                      )}
+                      {isAdminUser && (
+                        <button
+                          onClick={() => setEditing(m)}
+                          className="px-2 py-1 font-mono text-[9px] tracking-widest rounded"
+                          style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                        >EDIT</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {generating && (
+        <GenerateScheduleModal
+          allTeams={teams}
+          existingSeasons={seasons}
+          onClose={() => setGenerating(false)}
+          onGenerated={(newSeason) => { setSeason(newSeason); refresh(); }}
+        />
+      )}
+      {editing && (
+        <EditMatchModal
+          match={editing}
+          allTeams={teams}
+          onClose={() => setEditing(null)}
+          onSaved={refresh}
+        />
+      )}
+    </div>
+  );
+};
 
 // ============ TEAM STANDINGS ============
 // Derives the league table from each player's imported match records:
@@ -7715,7 +8314,7 @@ const HomeView = ({ account, allPlayers, allTeams, rankings, currentSeason, onJu
             <span style={{ color: C.goldLight }}>{account.username.toUpperCase()}</span>
           </h1>
           <p className="font-body mt-3 max-w-md" style={{ color: `${C.white}cc`, fontSize: 16 }}>
-            Alliance Strikers League — your official Pro Soccer Online community. Track your career, follow the league, climb the ranks.
+            Alliance Strikers League — your official Strikers Club community. Track your career, follow the league, climb the ranks.
           </p>
           <div className="flex gap-3 mt-6 flex-wrap">
             <button
@@ -8900,8 +9499,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   // in local state and don't get their own URL.
   const VIEW_TO_PATH = {
     home: '/', card: '/card', teams: '/teams', leaderboard: '/leaderboard',
-    news: '/news', hof: '/hof', standings: '/standings', tiers: '/tiers',
-    rules: '/rules', admin: '/admin',
+    news: '/news', hof: '/hof', standings: '/standings', schedule: '/schedule',
+    tiers: '/tiers', rules: '/rules', admin: '/admin',
   };
   const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
   const viewFromPath = () => {
@@ -9012,6 +9611,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'standings', label: 'STANDINGS', icon: Trophy },
+    { id: 'schedule', label: 'SCHEDULE', icon: Calendar },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
     { id: 'rules', label: 'RULES', icon: BookOpen },
   ];
@@ -9379,6 +9979,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         {view === 'tiers' && <TierPreview />}
 
         {view === 'standings' && <StandingsView />}
+
+        {view === 'schedule' && <ScheduleView account={account} />}
 
         {view === 'rules' && <RulesView onJump={setView} />}
 

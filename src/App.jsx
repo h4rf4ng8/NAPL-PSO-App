@@ -9536,6 +9536,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [showShare, setShowShare] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false); // MORE dropdown in main nav
+  const moreBtnRef = useRef(null); // used to position dropdown below the button
+  const [morePos, setMorePos] = useState({ top: 0, right: 0 });
   const [allPlayers, setAllPlayers] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
   const [dynamicAdmins, setDynamicAdmins] = useState([]);
@@ -9714,11 +9716,20 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
                 </button>
               );
             })}
-            {/* MORE — overflow dropdown for reference/less-visited tabs
-                (STANDINGS, HOF, TIERS, RULES). Keeps the main nav tight. */}
+            {/* MORE — overflow dropdown for reference/less-visited tabs.
+                Uses fixed positioning (anchored to the button via ref) because
+                the nav bar's overflow-x-auto would otherwise clip an absolute
+                dropdown. */}
             <div className="relative">
               <button
-                onClick={() => setMoreOpen(o => !o)}
+                ref={moreBtnRef}
+                onClick={() => {
+                  if (!moreOpen && moreBtnRef.current) {
+                    const r = moreBtnRef.current.getBoundingClientRect();
+                    setMorePos({ top: r.bottom, right: window.innerWidth - r.right });
+                  }
+                  setMoreOpen(o => !o);
+                }}
                 className={`asl-nav-tab ${moreTabs.some(t => t.id === view) ? 'active' : ''} flex items-center gap-1.5 whitespace-nowrap`}
                 style={{ padding: '11px 14px 9px', fontSize: 11 }}
               >
@@ -9726,20 +9737,21 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
               </button>
               {moreOpen && (
                 <>
-                  {/* Click-outside catcher — covers the whole viewport underneath
-                      the dropdown so any click elsewhere closes it. */}
                   <div
                     className="fixed inset-0"
-                    style={{ zIndex: 40 }}
+                    style={{ zIndex: 2147483646 }}
                     onClick={() => setMoreOpen(false)}
                   />
                   <div
-                    className="absolute right-0 mt-0 rounded-b overflow-hidden"
+                    className="rounded shadow-lg overflow-hidden"
                     style={{
-                      zIndex: 50, minWidth: 180,
+                      position: 'fixed',
+                      top: morePos.top,
+                      right: morePos.right,
+                      zIndex: 2147483647, minWidth: 200,
                       background: C.brandNavyDeep,
                       border: `1px solid ${C.navyLight}66`,
-                      boxShadow: `0 8px 20px ${C.black}66`,
+                      boxShadow: `0 8px 24px rgba(0,0,0,0.4)`,
                     }}
                   >
                     {moreTabs.map(t => {
@@ -9748,17 +9760,17 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
                         <button
                           key={t.id}
                           onClick={() => { setView(t.id); setMoreOpen(false); }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors"
+                          className="w-full flex items-center gap-2 px-4 py-3 text-left transition-colors"
                           style={{
                             background: active ? `${C.gold}33` : 'transparent',
                             color: active ? C.goldLight : C.white,
-                            fontSize: 11,
+                            fontSize: 12,
                             fontFamily: 'Oswald, sans-serif',
                             letterSpacing: '0.1em',
                             borderBottom: `1px solid ${C.navyLight}22`,
                           }}
                         >
-                          <t.icon size={13} /> {t.label}
+                          <t.icon size={14} /> {t.label}
                         </button>
                       );
                     })}

@@ -600,4 +600,103 @@ export const db = {
     if (error) { console.error(error); return { ok: false, reason: error.message }; }
     return { ok: true };
   },
+
+  // ============ SCHEDULED MATCHES ============
+  // Row ↔ app object converter — keeps the UI free of snake_case plumbing
+  // and lets JS code work with camelCase dates as numeric timestamps.
+  _rowToSchedMatch(r) {
+    return {
+      id: r.id,
+      season: r.season,
+      week: r.week,
+      homeTeamId: r.home_team_id,
+      awayTeamId: r.away_team_id,
+      scheduledDate: r.scheduled_date ? new Date(r.scheduled_date).getTime() : null,
+      streamUrl: r.stream_url || '',
+      matchType: r.match_type || 'regular',
+      playoffRound: r.playoff_round || null,
+      status: r.status || 'scheduled',
+      homeScore: r.home_score,
+      awayScore: r.away_score,
+      linkedMatchId: r.linked_match_id || null,
+      notes: r.notes || '',
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : null,
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : null,
+    };
+  },
+
+  async listScheduledMatches(season = null) {
+    let q = supabase.from('scheduled_matches').select('*').order('week', { ascending: true });
+    if (season) q = q.eq('season', season);
+    const { data, error } = await q;
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => this._rowToSchedMatch(r));
+  },
+
+  async saveScheduledMatch(match) {
+    const payload = {
+      id: match.id,
+      season: match.season,
+      week: match.week,
+      home_team_id: match.homeTeamId,
+      away_team_id: match.awayTeamId,
+      scheduled_date: match.scheduledDate ? new Date(match.scheduledDate).toISOString() : null,
+      stream_url: match.streamUrl || null,
+      match_type: match.matchType || 'regular',
+      playoff_round: match.playoffRound || null,
+      status: match.status || 'scheduled',
+      home_score: (match.homeScore === undefined || match.homeScore === null || match.homeScore === '') ? null : Number(match.homeScore),
+      away_score: (match.awayScore === undefined || match.awayScore === null || match.awayScore === '') ? null : Number(match.awayScore),
+      linked_match_id: match.linkedMatchId || null,
+      notes: match.notes || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await supabase
+      .from('scheduled_matches')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToSchedMatch(data);
+  },
+
+  // Bulk insert — used by the round-robin generator. Does an upsert so re-running
+  // with the same ids updates in place rather than creating duplicates.
+  async bulkInsertScheduledMatches(matches) {
+    if (!matches || matches.length === 0) return [];
+    const payload = matches.map(m => ({
+      id: m.id,
+      season: m.season,
+      week: m.week,
+      home_team_id: m.homeTeamId,
+      away_team_id: m.awayTeamId,
+      scheduled_date: m.scheduledDate ? new Date(m.scheduledDate).toISOString() : null,
+      stream_url: m.streamUrl || null,
+      match_type: m.matchType || 'regular',
+      playoff_round: m.playoffRound || null,
+      status: m.status || 'scheduled',
+      home_score: m.homeScore ?? null,
+      away_score: m.awayScore ?? null,
+      linked_match_id: m.linkedMatchId || null,
+      notes: m.notes || null,
+    }));
+    const { data, error } = await supabase
+      .from('scheduled_matches')
+      .upsert(payload, { onConflict: 'id' })
+      .select();
+    if (error) { console.error(error); throw error; }
+    return (data || []).map(r => this._rowToSchedMatch(r));
+  },
+
+  async deleteScheduledMatch(id) {
+    const { error } = await supabase.from('scheduled_matches').delete().eq('id', id);
+    if (error) { console.error(error); throw error; }
+  },
+
+  // Wipe an entire season's schedule — used when admin wants to regenerate
+  // from scratch.
+  async deleteScheduledSeason(season) {
+    const { error } = await supabase.from('scheduled_matches').delete().eq('season', season);
+    if (error) { console.error(error); throw error; }
+  },
 };

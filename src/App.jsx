@@ -9535,6 +9535,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [showEditName, setShowEditName] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false); // MORE dropdown in main nav
   const [allPlayers, setAllPlayers] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
   const [dynamicAdmins, setDynamicAdmins] = useState([]);
@@ -9602,24 +9603,37 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
       }),
     [allPlayers, allTeams, season]);
 
-  const tabs = [
+  // Main nav tabs (always visible). Keep this list short so the full nav
+  // fits without horizontal scrolling on typical screens.
+  const mainTabs = [
     { id: 'home', label: 'HOME', icon: HomeIcon },
     { id: 'me', label: 'MY CARD', icon: User },
     { id: 'news', label: 'NEWS', icon: Flag },
-    { id: 'matches', label: 'MATCHES', icon: Activity },
     { id: 'teams', label: 'TEAMS', icon: Users },
-    { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
-    { id: 'hof', label: 'HALL OF FAME', icon: Crown },
-    { id: 'standings', label: 'STANDINGS', icon: Trophy },
     { id: 'schedule', label: 'SCHEDULE', icon: Calendar },
+    { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
+  ];
+  // Reference tabs (less frequently visited). Live under a MORE dropdown
+  // but still have real URLs that work when visited directly.
+  const moreTabs = [
+    { id: 'standings', label: 'STANDINGS', icon: Trophy },
+    { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
     { id: 'rules', label: 'RULES', icon: BookOpen },
   ];
-  // VOTE tab appears only while a voting period is open
+  // Hidden-from-nav view (reachable only by direct URL / internal links)
+  // 'matches' lives here — the main interaction with matches is through
+  // MY CARD and TEAMS views, so cluttering the main nav with it is unneeded.
+  // ADMIN added below if the user is an admin.
+  // VOTE tab appears inline in the main nav only while a voting period is open.
   if (currentVotingPeriod) {
-    tabs.splice(4, 0, { id: 'vote', label: 'VOTE TOTW', icon: Trophy });
+    mainTabs.push({ id: 'vote', label: 'VOTE TOTW', icon: Trophy });
   }
-  if (isAdmin(account, dynamicAdmins)) tabs.push({ id: 'admin', label: 'ADMIN', icon: Crown });
+  if (isAdmin(account, dynamicAdmins)) {
+    mainTabs.push({ id: 'admin', label: 'ADMIN', icon: Crown });
+  }
+  // Combined list used in a few places that need to look up by id
+  const tabs = [...mainTabs, ...moreTabs, { id: 'matches', label: 'MATCHES', icon: Activity }];
 
   return (
     <div className="min-h-screen pitch-bg" style={{ color: C.cream }}>
@@ -9687,12 +9701,12 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         {/* Navy nav bar with gold underline on active tab */}
         <div className="asl-nav-bar">
           <div className="max-w-6xl mx-auto px-3 flex gap-0 overflow-x-auto">
-            {tabs.map(t => {
+            {mainTabs.map(t => {
               const active = view === t.id;
               return (
                 <button
                   key={t.id}
-                  onClick={() => setView(t.id)}
+                  onClick={() => { setView(t.id); setMoreOpen(false); }}
                   className={`asl-nav-tab ${active ? 'active' : ''} flex items-center gap-1.5 whitespace-nowrap`}
                   style={{ padding: '11px 14px 9px', fontSize: 11 }}
                 >
@@ -9700,6 +9714,58 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
                 </button>
               );
             })}
+            {/* MORE — overflow dropdown for reference/less-visited tabs
+                (STANDINGS, HOF, TIERS, RULES). Keeps the main nav tight. */}
+            <div className="relative">
+              <button
+                onClick={() => setMoreOpen(o => !o)}
+                className={`asl-nav-tab ${moreTabs.some(t => t.id === view) ? 'active' : ''} flex items-center gap-1.5 whitespace-nowrap`}
+                style={{ padding: '11px 14px 9px', fontSize: 11 }}
+              >
+                MORE <ChevronRight size={12} style={{ transform: 'rotate(90deg)' }} />
+              </button>
+              {moreOpen && (
+                <>
+                  {/* Click-outside catcher — covers the whole viewport underneath
+                      the dropdown so any click elsewhere closes it. */}
+                  <div
+                    className="fixed inset-0"
+                    style={{ zIndex: 40 }}
+                    onClick={() => setMoreOpen(false)}
+                  />
+                  <div
+                    className="absolute right-0 mt-0 rounded-b overflow-hidden"
+                    style={{
+                      zIndex: 50, minWidth: 180,
+                      background: C.brandNavyDeep,
+                      border: `1px solid ${C.navyLight}66`,
+                      boxShadow: `0 8px 20px ${C.black}66`,
+                    }}
+                  >
+                    {moreTabs.map(t => {
+                      const active = view === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => { setView(t.id); setMoreOpen(false); }}
+                          className="w-full flex items-center gap-2 px-3 py-2.5 text-left transition-colors"
+                          style={{
+                            background: active ? `${C.gold}33` : 'transparent',
+                            color: active ? C.goldLight : C.white,
+                            fontSize: 11,
+                            fontFamily: 'Oswald, sans-serif',
+                            letterSpacing: '0.1em',
+                            borderBottom: `1px solid ${C.navyLight}22`,
+                          }}
+                        >
+                          <t.icon size={13} /> {t.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>

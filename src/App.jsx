@@ -1993,7 +1993,7 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
   };
   return (
     <ModalShell onClose={onClose} title="POSITION" maxWidth="max-w-sm">
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-2 mb-2">
         {POSITIONS.map(p => {
           const active = pos === p;
           return (
@@ -2010,6 +2010,10 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
             >{p}</button>
           );
         })}
+      </div>
+      {/* FLEX hint — explains why someone might pick it over a specific role */}
+      <div className="font-mono text-[10px] mb-4 leading-relaxed" style={{ color: `${C.cream}88` }}>
+        Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
       </div>
       <button
         onClick={handleSave}
@@ -9333,6 +9337,136 @@ const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
   );
 };
 
+// ============ ONBOARDING MODAL ============
+// Shown once after a Discord user's first sign-in. Forces them to:
+//   1. Enter their Strikers Club Player ID (required to join a team)
+//   2. Confirm their primary position (default is 'CM' from account creation,
+//      but we want them to actively pick one so match-import matching works
+//      and their card displays accurately).
+// Cannot be dismissed without completing both. Once saved, the strikersId
+// lock kicks in just like the MY CARD editor — players can't change it
+// themselves after that.
+const OnboardingModal = ({ account, onComplete }) => {
+  const [strikersId, setStrikersId] = useState('');
+  const [position, setPosition] = useState(account.position || 'CM');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSave = async () => {
+    setErr('');
+    const sid = strikersId.trim();
+    if (!sid) { setErr('Strikers Club Player ID is required.'); return; }
+    if (!/^\d{2,15}$/.test(sid)) { setErr('Strikers Club Player ID must be 2-15 digits.'); return; }
+    if (!position) { setErr('Please choose your primary position.'); return; }
+    setBusy(true);
+    try {
+      // Uniqueness: refuse if this ID is already linked to another account.
+      // (Same check admins use in PlayersManager.)
+      const all = await db.listAccounts();
+      const clash = all.find(a => a.strikersId && String(a.strikersId) === sid && a.username !== account.username);
+      if (clash) {
+        setErr(`That Strikers Club ID is already linked to ${clash.username}. If this is really you, contact an admin.`);
+        setBusy(false); return;
+      }
+      const updated = { ...account, strikersId: sid, position };
+      await db.saveAccount(updated);
+      onComplete && onComplete(updated);
+    } catch (e) {
+      setErr('Could not save: ' + (e?.message || e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    // No close button — this modal MUST be completed. User can sign out from
+    // the top-right if they really need to escape.
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{
+      background: `${C.black}dd`, backdropFilter: 'blur(10px)',
+    }}>
+      <div className="w-full max-w-md rounded-xl p-7 fade-in" style={{
+        background: C.white,
+        border: `1px solid ${C.navyLight}`,
+        boxShadow: `0 20px 60px ${C.brandNavy}44`,
+      }}>
+        <div className="text-center mb-5">
+          <div className="flex justify-center mb-3">
+            <ASLCrest size={70} />
+          </div>
+          <h2 className="font-display text-2xl tracking-[0.15em]" style={{ color: C.cream }}>WELCOME TO ASL</h2>
+          <p className="font-mono text-[11px] tracking-wider mt-2 leading-relaxed" style={{ color: `${C.cream}99` }}>
+            TWO QUICK THINGS BEFORE YOU GET STARTED —
+            <br />
+            REQUIRED TO JOIN ANY TEAM.
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}99` }}>
+              STRIKERS CLUB PLAYER ID *
+            </label>
+            <input
+              type="text"
+              value={strikersId}
+              onChange={(e) => setStrikersId(e.target.value.replace(/\D/g, ''))}
+              placeholder="e.g. 365702"
+              className="w-full px-3 py-2 font-mono text-sm focus:outline-none rounded"
+              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+              autoFocus
+            />
+            <div className="font-mono text-[9px] mt-1 leading-relaxed" style={{ color: `${C.cream}77` }}>
+              Numbers only. Find it in-game on your profile. Once set, only an admin can change it.
+            </div>
+          </div>
+
+          <div>
+            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}99` }}>
+              PRIMARY POSITION *
+            </label>
+            <div className="grid grid-cols-5 gap-1">
+              {POSITIONS.map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setPosition(p)}
+                  className="py-2 font-heading tracking-wider text-xs rounded"
+                  style={position === p
+                    ? { background: C.green, color: C.onColor }
+                    : { background: C.navyDeep, color: `${C.cream}99`, border: `1px solid ${C.navyLight}66` }
+                  }
+                >{p}</button>
+              ))}
+            </div>
+            {/* FLEX hint — explains why someone might pick FLEX over a specific role */}
+            <div className="font-mono text-[9px] mt-1 leading-relaxed" style={{ color: `${C.cream}77` }}>
+              Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
+            </div>
+          </div>
+
+          {err && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded font-mono text-xs" style={{
+              background: `${C.red}22`, border: `1px solid ${C.red}66`, color: C.redLight,
+            }}>
+              <XCircle size={12} /> {err}
+            </div>
+          )}
+
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="w-full py-3 font-display tracking-[0.15em] text-lg transition-all disabled:opacity-50 rounded"
+            style={{
+              background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
+              color: C.onColor,
+              boxShadow: `0 4px 16px ${C.green}66`,
+            }}
+          >{busy ? 'SAVING...' : 'COMPLETE PROFILE'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = ({ account, onLogout, onUpdate }) => {
   // Map between URL path and view id. Only tabs that make sense as
   // shareable URLs are listed; others (like admin sub-sections) stay
@@ -9477,9 +9611,22 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   // Combined list used in a few places that need to look up by id
   const tabs = [...mainTabs, ...moreTabs, { id: 'matches', label: 'MATCHES', icon: Activity }];
 
+  // Trigger onboarding popup for any account without a Strikers Club ID set.
+  // Discord-created accounts start with no strikersId, so new users see this
+  // modal immediately after their first sign-in and have to complete it before
+  // using the app.
+  const needsOnboarding = !account.strikersId;
+
   return (
     <div className="min-h-screen pitch-bg" style={{ color: C.cream }}>
       <div className="absolute inset-0 pitch-lines opacity-20 pointer-events-none" />
+
+      {needsOnboarding && (
+        <OnboardingModal
+          account={account}
+          onComplete={(updated) => onUpdate && onUpdate(updated)}
+        />
+      )}
 
       {/* HEADER — 2006 sports-broadcast style: glossy blue bar + gold ticker + navy nav */}
       <div className="sticky top-0 z-30">

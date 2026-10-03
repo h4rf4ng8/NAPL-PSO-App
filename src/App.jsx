@@ -4100,15 +4100,43 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
                   boxShadow: `0 2px 8px ${C.brandNavy}11`,
                 }}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <div className="font-display text-2xl tracking-wider" style={{ color: C.cream }}>{t.name.toUpperCase()}</div>
-                  <div className="font-heading text-xs px-2 py-0.5 rounded tracking-widest" style={{
-                    background: tColor, color: C.onColor,
-                  }}>{t.tag}</div>
+                <div className="flex items-start gap-3 mb-2">
+                  {/* Team logo thumbnail — falls back to a tag chip if no logo */}
+                  {t.logoUrl ? (
+                    <img
+                      src={t.logoUrl}
+                      alt={`${t.name} logo`}
+                      className="shrink-0 rounded object-contain"
+                      style={{
+                        width: 52, height: 52,
+                        background: `${tColor}11`,
+                        border: `1px solid ${tColor}33`,
+                        padding: 3,
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="shrink-0 rounded flex items-center justify-center font-display tracking-widest"
+                      style={{
+                        width: 52, height: 52,
+                        background: tColor, color: C.onColor, fontSize: 14,
+                      }}
+                    >{t.tag}</div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="font-display text-xl tracking-wider truncate" style={{ color: C.cream }}>
+                        {t.name.toUpperCase()}
+                      </div>
+                      <div className="font-heading text-[10px] px-1.5 py-0.5 rounded tracking-widest shrink-0" style={{
+                        background: tColor, color: C.onColor,
+                      }}>{t.tag}</div>
+                    </div>
+                    {t.description && (
+                      <div className="font-body text-xs line-clamp-2" style={{ color: `${C.cream}99` }}>{t.description}</div>
+                    )}
+                  </div>
                 </div>
-                {t.description && (
-                  <div className="font-body text-sm mb-3 line-clamp-2" style={{ color: `${C.cream}99` }}>{t.description}</div>
-                )}
                 <div className="flex items-center justify-between font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>
                   <span>{t.members.length} {t.members.length === 1 ? 'MEMBER' : 'MEMBERS'}</span>
                   <span className="flex items-center gap-1"><Crown size={10} style={{ color: C.goldLight }} /> {t.ownerUsername}</span>

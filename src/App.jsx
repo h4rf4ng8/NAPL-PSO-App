@@ -4199,7 +4199,17 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
             </div>
 
             <h4 className="font-display text-xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-              <Users size={16} /> ROSTER ({selected.members.length})
+              <Users size={16} /> ROSTER ({(() => {
+                // Count only unique usernames that match a real account
+                // (same guard as the team card listing — see earlier edit).
+                const seen = new Set();
+                return (selected.members || []).filter(u => {
+                  const key = (u || '').toLowerCase();
+                  if (!key || seen.has(key)) return false;
+                  seen.add(key);
+                  return allPlayers.some(p => p.username.toLowerCase() === key);
+                }).length;
+              })()})
             </h4>
             <TeamRosterFormation
               team={selected}

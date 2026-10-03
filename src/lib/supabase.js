@@ -191,6 +191,9 @@ const rowToTeam = (row) => row ? ({
   ),
   totw: row.totw || false,
   totwSetAt: row.totw_set_at ? new Date(row.totw_set_at).getTime() : null,
+  // Captain-chosen lineup: {GK, DEF_L, DEF_R, CM, ST_L, ST_R} → usernames.
+  // Empty object means "fall back to auto-assign by position".
+  lineup: row.lineup || {},
   status: row.status,
   logoUrl: row.logo_url,
   createdAt: new Date(row.created_at).getTime(),
@@ -329,6 +332,7 @@ export const db = {
       pending_members: team.pendingMembers || [],
       totw: team.totw || false,
       totw_set_at: team.totwSetAt ? new Date(team.totwSetAt).toISOString() : null,
+      lineup: team.lineup || {},
       status: team.status,
       logo_url: team.logoUrl,
       reviewed_at: team.reviewedAt ? new Date(team.reviewedAt).toISOString() : null,

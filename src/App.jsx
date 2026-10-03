@@ -3485,7 +3485,46 @@ const StandingsView = () => {
 // for missing positions. Extra players (beyond 8) appear under a BENCH section.
 // FLEX players go on the bench too since they don't map to a formation slot.
 // Clicking any player card opens the PlayerCardModal for full front + back view.
-const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) => {
+// Slot keys for the 6v6 pitch — distinct keys for the two STs and two DEFs
+// so each spot in the formation can be independently assigned.
+const LINEUP_SLOTS = ['ST_L', 'ST_R', 'CM', 'DEF_L', 'DEF_R', 'GK'];
+// Position hint for an empty slot (shown as its label on the pitch)
+const SLOT_POSITION_LABEL = { GK: 'GK', DEF_L: 'DEF', DEF_R: 'DEF', CM: 'CM', ST_L: 'ST', ST_R: 'ST' };
+// For auto-fallback: which player position goes in which slot
+const SLOT_PRIMARY_POSITION = { GK: 'GK', DEF_L: 'DEF', DEF_R: 'DEF', CM: 'CM', ST_L: 'ST', ST_R: 'ST' };
+
+// Pure function: given a team's saved lineup and its roster members, resolve
+// each slot to a player (or null if unfilled). If no saved lineup exists,
+// falls back to auto-assigning by position (strongest OVR per position first).
+const resolveLineup = (team, members, rankings) => {
+  const byUsername = (u) => members.find(p => p.username.toLowerCase() === String(u || '').toLowerCase());
+  const saved = team.lineup || {};
+  const hasSaved = LINEUP_SLOTS.some(k => saved[k]);
+  if (hasSaved) {
+    // Use the captain's saved lineup directly
+    const resolved = {};
+    LINEUP_SLOTS.forEach(k => { resolved[k] = byUsername(saved[k]) || null; });
+    return resolved;
+  }
+  // Auto-assign fallback: bucket by position, pick strongest for each slot
+  const buckets = { GK: [], DEF: [], CM: [], ST: [], FLEX: [] };
+  members.forEach(p => {
+    const pos = p.position || 'CM';
+    if (buckets[pos]) buckets[pos].push(p); else buckets.CM.push(p);
+  });
+  const byOvr = (a, b) => (rankings?.[b.username]?.overall || 0) - (rankings?.[a.username]?.overall || 0);
+  Object.keys(buckets).forEach(k => buckets[k].sort(byOvr));
+  return {
+    GK: buckets.GK[0] || null,
+    DEF_L: buckets.DEF[0] || null,
+    DEF_R: buckets.DEF[1] || null,
+    CM: buckets.CM[0] || null,
+    ST_L: buckets.ST[0] || null,
+    ST_R: buckets.ST[1] || null,
+  };
+};
+
+const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isCaptain = false, onLineupSaved }) => {
   // Fetch full account records for each roster member
   const members = useMemo(() => {
     return (team.members || [])
@@ -3493,42 +3532,80 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
       .filter(Boolean);
   }, [team.members, allPlayers]);
 
-  // Bucket players by position for the formation slots
-  const buckets = useMemo(() => {
-    const b = { GK: [], DEF: [], CM: [], ST: [], FLEX: [] };
-    members.forEach(p => {
-      const pos = p.position || 'CM';
-      if (b[pos]) b[pos].push(p);
-      else b.CM.push(p);
-    });
-    // Sort each bucket by OVR desc so the strongest player takes the slot
-    const sortByOvr = (a, b) => {
-      const ra = rankings?.[a.username]?.overall || 0;
-      const rb = rankings?.[b.username]?.overall || 0;
-      return rb - ra;
-    };
-    Object.keys(b).forEach(pos => b[pos].sort(sortByOvr));
-    return b;
-  }, [members, rankings]);
+  // --- EDIT LINEUP STATE ---
+  // When captain is editing, we keep a draft of the lineup object so changes
+  // are local until they tap SAVE. editingSlot: which slot is being filled.
+  const [editingLineup, setEditingLineup] = useState(false);
+  const [draftLineup, setDraftLineup] = useState({});
+  const [editingSlot, setEditingSlot] = useState(null);
+  const [savingLineup, setSavingLineup] = useState(false);
 
-  // Formation needs: 1 GK, 2 DEF, 1 CM, 2 ST (Strikers Club 6v6)
-  const needs = { GK: 1, DEF: 2, CM: 1, ST: 2 };
+  // Starters = resolved lineup. During edit, use the draft; otherwise read saved.
+  const starters = useMemo(() => {
+    const source = editingLineup
+      ? { ...team, lineup: draftLineup }
+      : team;
+    return resolveLineup(source, members, rankings);
+  }, [team, draftLineup, editingLineup, members, rankings]);
 
-  // Starters (formation slots) — take up to N per position
-  const starters = {
-    GK:  buckets.GK.slice(0, needs.GK),
-    DEF: buckets.DEF.slice(0, needs.DEF),
-    CM:  buckets.CM.slice(0, needs.CM),
-    ST:  buckets.ST.slice(0, needs.ST),
+  // Bench = any member not currently in a starter slot
+  const bench = useMemo(() => {
+    const starterUsernames = new Set(
+      Object.values(starters).filter(Boolean).map(p => p.username.toLowerCase())
+    );
+    return members.filter(p => !starterUsernames.has(p.username.toLowerCase()));
+  }, [members, starters]);
+
+  const beginEdit = () => {
+    // Snapshot current resolved lineup (so if nothing was saved, draft starts
+    // with the auto-assignment the captain is looking at — easier to tweak)
+    const snapshot = {};
+    LINEUP_SLOTS.forEach(k => { snapshot[k] = starters[k]?.username || null; });
+    setDraftLineup(snapshot);
+    setEditingLineup(true);
   };
-  // Bench = anyone left over (extras per position + all FLEX)
-  const bench = [
-    ...buckets.GK.slice(needs.GK),
-    ...buckets.DEF.slice(needs.DEF),
-    ...buckets.CM.slice(needs.CM),
-    ...buckets.ST.slice(needs.ST),
-    ...buckets.FLEX,
-  ];
+  const cancelEdit = () => {
+    setDraftLineup({});
+    setEditingLineup(false);
+    setEditingSlot(null);
+  };
+  const saveEdit = async () => {
+    setSavingLineup(true);
+    try {
+      await db.saveTeam({ ...team, lineup: draftLineup });
+      setEditingLineup(false);
+      setEditingSlot(null);
+      onLineupSaved && onLineupSaved();
+    } catch (e) {
+      alert('Could not save lineup: ' + (e?.message || e));
+    }
+    setSavingLineup(false);
+  };
+  // Click a slot while editing — opens the picker for that slot
+  const handleSlotEdit = (slotKey) => {
+    if (!editingLineup) return;
+    setEditingSlot(slotKey);
+  };
+  // Pick a player from the picker → place in the slot. If they're already
+  // in another slot, swap them. "Empty" removes any player from this slot.
+  const assignToSlot = (slotKey, username) => {
+    setDraftLineup(prev => {
+      const next = { ...prev };
+      if (username == null) {
+        // Empty the slot (benches that player if they were there)
+        next[slotKey] = null;
+      } else {
+        // Find if this player is already in another slot — if so, swap
+        const currentlyIn = LINEUP_SLOTS.find(k => (prev[k] || '').toLowerCase() === username.toLowerCase());
+        if (currentlyIn && currentlyIn !== slotKey) {
+          next[currentlyIn] = prev[slotKey] || null; // put the previously-in-slot player where this one was
+        }
+        next[slotKey] = username;
+      }
+      return next;
+    });
+    setEditingSlot(null);
+  };
 
   // A single slot in the formation — small avatar icon by default. On hover
   // the FULL-size PlayerCard pops up as a floating overlay above the avatar
@@ -3687,27 +3764,162 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick }) =
         </div>
 
         {/* Player rows anchored to the pitch. Container is 4:5 aspect so the
-            percentages line up with the pitch markings above. */}
+            percentages line up with the pitch markings above. Each slot has
+            its own stable key (ST_L, ST_R, CM, DEF_L, DEF_R, GK) which is
+            how the lineup is stored. In edit mode slots become clickable to
+            swap/empty them via a picker. */}
         <div className="relative w-full" style={{ aspectRatio: '4 / 5' }}>
-          {/* Row 1: STs — right below halfway line, top of own half.
-              popDown so hover preview drops downward (avatar is near top edge). */}
+          {/* Row 1: STs — right below halfway line, top of own half. */}
           <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '9%' }}>
-            {[0, 1].map(i => <Slot key={`st${i}`} player={starters.ST[i]} positionLabel="ST" popDown />)}
+            <div onClick={() => handleSlotEdit('ST_L')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.ST_L} positionLabel="ST" popDown />
+            </div>
+            <div onClick={() => handleSlotEdit('ST_R')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.ST_R} positionLabel="ST" popDown />
+            </div>
           </div>
           {/* Row 2: CM — center of own half */}
           <div className="absolute left-0 right-0 flex justify-center" style={{ top: '36%' }}>
-            <Slot player={starters.CM[0]} positionLabel="CM" />
+            <div onClick={() => handleSlotEdit('CM')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.CM} positionLabel="CM" />
+            </div>
           </div>
           {/* Row 3: DEFs — defensive third */}
           <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '60%' }}>
-            {[0, 1].map(i => <Slot key={`def${i}`} player={starters.DEF[i]} positionLabel="DEF" />)}
+            <div onClick={() => handleSlotEdit('DEF_L')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.DEF_L} positionLabel="DEF" />
+            </div>
+            <div onClick={() => handleSlotEdit('DEF_R')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.DEF_R} positionLabel="DEF" />
+            </div>
           </div>
           {/* Row 4: GK — inside own penalty area */}
           <div className="absolute left-0 right-0 flex justify-center" style={{ top: '82%' }}>
-            <Slot player={starters.GK[0]} positionLabel="GK" />
+            <div onClick={() => handleSlotEdit('GK')} style={editingLineup ? { cursor: 'pointer' } : {}}>
+              <Slot player={starters.GK} positionLabel="GK" />
+            </div>
           </div>
+
+          {/* Edit mode overlay: pulsing dashed border around each slot area to
+              signal they're tappable */}
+          {editingLineup && (
+            <div className="absolute inset-0 pointer-events-none" style={{
+              border: `2px dashed ${C.gold}99`,
+              borderRadius: 12,
+              animation: 'pulse 2s ease-in-out infinite',
+            }} />
+          )}
         </div>
       </div>
+
+      {/* CAPTAIN'S EDIT LINEUP CONTROLS — only visible to the captain of this team */}
+      {isCaptain && (
+        <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
+          {!editingLineup ? (
+            <>
+              <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}99` }}>
+                As captain, you can arrange your starting XI by position.
+              </div>
+              <button
+                onClick={beginEdit}
+                className="px-3 py-1.5 font-heading tracking-wider text-xs flex items-center gap-1.5 rounded"
+                style={{ background: C.gold, color: C.brandNavyDeep }}
+              ><Edit3 size={11} /> EDIT LINEUP</button>
+            </>
+          ) : (
+            <>
+              <div className="font-mono text-[10px] tracking-wider" style={{ color: C.goldLight }}>
+                ◆ EDITING LINEUP — tap any slot above to assign a player
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={cancelEdit}
+                  disabled={savingLineup}
+                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+                  style={{ background: `${C.navyLight}66`, color: C.cream }}
+                >CANCEL</button>
+                <button
+                  onClick={saveEdit}
+                  disabled={savingLineup}
+                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+                  style={{ background: C.green, color: C.onColor }}
+                >{savingLineup ? 'SAVING...' : 'SAVE LINEUP'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* SLOT PICKER MODAL — appears when captain taps a slot in edit mode */}
+      {editingLineup && editingSlot && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
+          style={{ background: `${C.black}cc`, backdropFilter: 'blur(8px)' }}
+          onClick={() => setEditingSlot(null)}
+        >
+          <div className="w-full max-w-md rounded-xl p-5" style={{
+            background: C.white,
+            border: `1px solid ${C.navyLight}`,
+          }} onClick={(e) => e.stopPropagation()}>
+            <div className="font-display tracking-[0.15em] text-lg mb-1" style={{ color: C.cream }}>
+              SELECT PLAYER
+            </div>
+            <div className="font-mono text-[10px] tracking-wider mb-3" style={{ color: `${C.cream}99` }}>
+              FOR SLOT: {editingSlot.replace('_', ' ')}
+            </div>
+            <div className="max-h-80 overflow-y-auto rounded" style={{ border: `1px solid ${C.navyLight}33` }}>
+              {/* Empty slot option */}
+              <button
+                onClick={() => assignToSlot(editingSlot, null)}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                style={{ borderBottom: `1px solid ${C.navyLight}22`, background: 'transparent' }}
+              >
+                <X size={14} style={{ color: `${C.cream}66` }} />
+                <span className="font-mono text-xs tracking-widest" style={{ color: `${C.cream}99` }}>
+                  LEAVE EMPTY (benches player)
+                </span>
+              </button>
+              {members.map(p => {
+                const currentlyInSlot = LINEUP_SLOTS.find(k => (draftLineup[k] || '').toLowerCase() === p.username.toLowerCase());
+                const isSelectedForThisSlot = currentlyInSlot === editingSlot;
+                return (
+                  <button
+                    key={p.username}
+                    onClick={() => assignToSlot(editingSlot, p.username)}
+                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
+                    style={{
+                      borderBottom: `1px solid ${C.navyLight}22`,
+                      background: isSelectedForThisSlot ? `${C.green}22` : 'transparent',
+                    }}
+                  >
+                    <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
+                      border: `1.5px solid ${isSelectedForThisSlot ? C.green : `${C.cream}55`}`,
+                      background: isSelectedForThisSlot ? C.green : 'transparent',
+                    }}>
+                      {isSelectedForThisSlot && <Check size={11} style={{ color: C.onColor }} />}
+                    </div>
+                    <span className="font-heading tracking-wider text-sm flex-1" style={{ color: C.cream }}>
+                      {p.username}
+                    </span>
+                    <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}66` }}>
+                      {p.position}
+                    </span>
+                    {currentlyInSlot && currentlyInSlot !== editingSlot && (
+                      <span className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded" style={{
+                        background: `${C.gold}22`, color: C.goldLight,
+                      }}>WILL SWAP</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => setEditingSlot(null)}
+              className="w-full mt-3 py-2 font-heading tracking-wider text-xs rounded"
+              style={{ background: `${C.navyLight}66`, color: C.cream }}
+            >CLOSE</button>
+          </div>
+        </div>
+      )}
 
       {/* BENCH — compact avatar tiles (same treatment as the pitch), denser grid */}
       {bench.length > 0 && (
@@ -3955,6 +4167,8 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
               allPlayers={allPlayers}
               rankings={rankings}
               onCardClick={(player) => setViewingPlayerCard(player)}
+              isCaptain={isTeamCaptain(account, selected)}
+              onLineupSaved={refresh}
             />
           </div>
         </div>

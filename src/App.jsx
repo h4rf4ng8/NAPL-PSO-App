@@ -3480,6 +3480,211 @@ const StandingsView = () => {
   );
 };
 
+// ============ STATS VIEW (sortable NHL-style table) ============
+// Shows every player with every tracked stat in a sortable table.
+// Click a column header to sort by it; click again to flip asc/desc.
+// Position filter at the top (ALL / ST / CM / DEF / GK / FLEX) with GK stats
+// swapped in when GK is selected (deflects/catches/clean sheets emphasized).
+const StatsView = ({ allPlayers = [], allTeams = [], rankings = {}, onPlayerClick, season = 'all' }) => {
+  // Default sort: OVR descending (same as the old leaderboard default)
+  const [sortBy, setSortBy] = useState('ovr');
+  const [sortDir, setSortDir] = useState('desc');
+  const [posFilter, setPosFilter] = useState('ALL');
+
+  const teamByUsername = (u) => allTeams.find(t => (t.members || []).some(m => m.toLowerCase() === u.toLowerCase()));
+
+  // Build rows — one per player, with every stat flattened for sorting
+  const rows = useMemo(() => {
+    return allPlayers
+      .filter(p => posFilter === 'ALL' || p.position === posFilter)
+      .map(p => {
+        const s = p.stats || {};
+        const g = s.goals || 0;
+        const a = s.assists || 0;
+        return {
+          player: p,
+          team: teamByUsername(p.username),
+          ovr: rankings?.[p.username]?.overall || 0,
+          gp: s.games || 0,
+          g, a,
+          pts: g + a,
+          motm: s.motm || 0,
+          tkl: s.tackles || 0,
+          pass: s.passes || 0,
+          cs: s.cleanSheets || 0,
+          dfl: s.deflects || 0,
+          catches: s.catches || 0,
+          w: s.wins || 0,
+          d: s.draws || 0,
+          l: s.losses || 0,
+        };
+      });
+  }, [allPlayers, allTeams, rankings, posFilter]);
+
+  const sorted = useMemo(() => {
+    const sorted = [...rows].sort((x, y) => {
+      const a = x[sortBy] ?? 0;
+      const b = y[sortBy] ?? 0;
+      if (typeof a === 'string' && typeof b === 'string') {
+        return sortDir === 'asc' ? a.localeCompare(b) : b.localeCompare(a);
+      }
+      return sortDir === 'asc' ? a - b : b - a;
+    });
+    return sorted;
+  }, [rows, sortBy, sortDir]);
+
+  const toggleSort = (col) => {
+    if (sortBy === col) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(col);
+      setSortDir('desc'); // new column defaults to descending (best first)
+    }
+  };
+
+  // Columns configuration. "field" is the key on each row; "label" is the header.
+  // GK-emphasized columns (DFL, CATCHES, CS) always visible but moved to the
+  // front when the GK filter is selected.
+  const outfieldCols = [
+    { field: 'ovr', label: 'OVR', help: 'Overall rating' },
+    { field: 'gp', label: 'GP', help: 'Games played' },
+    { field: 'g', label: 'G', help: 'Goals' },
+    { field: 'a', label: 'A', help: 'Assists' },
+    { field: 'pts', label: 'PTS', help: 'Points (G+A)' },
+    { field: 'motm', label: 'MOTM', help: 'Man of the Match awards' },
+    { field: 'tkl', label: 'TKL', help: 'Tackles' },
+    { field: 'pass', label: 'PASS', help: 'Passes' },
+    { field: 'w', label: 'W', help: 'Wins' },
+    { field: 'd', label: 'D', help: 'Draws' },
+    { field: 'l', label: 'L', help: 'Losses' },
+  ];
+  const gkCols = [
+    { field: 'ovr', label: 'OVR', help: 'Overall rating' },
+    { field: 'gp', label: 'GP', help: 'Games played' },
+    { field: 'dfl', label: 'DFL', help: 'Deflects (saves)' },
+    { field: 'catches', label: 'CTCH', help: 'Catches' },
+    { field: 'cs', label: 'CS', help: 'Clean sheets' },
+    { field: 'g', label: 'G', help: 'Goals' },
+    { field: 'a', label: 'A', help: 'Assists' },
+    { field: 'motm', label: 'MOTM', help: 'Man of the Match awards' },
+    { field: 'w', label: 'W', help: 'Wins' },
+    { field: 'd', label: 'D', help: 'Draws' },
+    { field: 'l', label: 'L', help: 'Losses' },
+  ];
+  const cols = posFilter === 'GK' ? gkCols : outfieldCols;
+
+  const SortArrow = ({ col }) => {
+    if (sortBy !== col) {
+      return <span className="opacity-30 ml-0.5">↕</span>;
+    }
+    return <span className="ml-0.5" style={{ color: C.goldLight }}>{sortDir === 'asc' ? '▲' : '▼'}</span>;
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <BarChart3 size={22} style={{ color: C.goldLight }} />
+          <h3 className="font-display text-3xl tracking-wider">STATS</h3>
+          {season !== 'all' && (
+            <span className="font-mono text-[10px] px-2 py-0.5 rounded tracking-wider" style={{
+              background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}44`,
+            }}>{season}</span>
+          )}
+        </div>
+        {/* Position filter chips */}
+        <div className="flex gap-1 rounded p-0.5" style={{ background: `${C.navyLight}33` }}>
+          {['ALL', 'ST', 'CM', 'DEF', 'GK', 'FLEX'].map(p => (
+            <button
+              key={p}
+              onClick={() => setPosFilter(p)}
+              className="px-2.5 py-1 font-mono text-xs tracking-widest rounded transition-colors"
+              style={posFilter === p
+                ? { background: C.gold, color: C.brandNavyDeep }
+                : { color: `${C.cream}99` }
+              }
+            >{p}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="font-mono text-[10px] mb-2 tracking-wider" style={{ color: `${C.cream}66` }}>
+        Click any column header to sort. Click again to reverse.
+      </div>
+
+      {/* Scrollable table — scrolls horizontally on narrow screens so no column
+          gets squished. Sticky player column makes scrolling easier to follow. */}
+      <div className="rounded-lg overflow-x-auto" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33` }}>
+        <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
+          <thead>
+            <tr style={{ background: `${C.brandNavyDeep}cc` }}>
+              <th className="px-2 py-2 text-center font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 36 }}>#</th>
+              <th className="px-3 py-2 text-left font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 160 }}>PLAYER</th>
+              <th className="px-2 py-2 text-left font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 70 }}>TEAM</th>
+              <th className="px-2 py-2 text-center font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 50 }}>POS</th>
+              {cols.map(c => (
+                <th
+                  key={c.field}
+                  onClick={() => toggleSort(c.field)}
+                  title={c.help}
+                  className="px-2 py-2 text-center font-mono text-[10px] tracking-widest cursor-pointer select-none"
+                  style={{
+                    color: sortBy === c.field ? C.goldLight : `${C.cream}99`,
+                    minWidth: 55,
+                    userSelect: 'none',
+                  }}
+                >{c.label}<SortArrow col={c.field} /></th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((row, i) => (
+              <tr
+                key={row.player.username}
+                onClick={() => onPlayerClick && onPlayerClick(row.player)}
+                className="cursor-pointer transition-colors hover:opacity-90"
+                style={{
+                  background: i % 2 === 0 ? `${C.navyDeep}44` : 'transparent',
+                  borderBottom: `1px solid ${C.navyLight}22`,
+                }}
+              >
+                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{i + 1}</td>
+                <td className="px-3 py-2 font-heading tracking-wider text-sm" style={{ color: C.cream }}>
+                  <div className="flex items-center gap-1.5">
+                    {row.team && isTeamCaptain(row.player, row.team) && <CaptainStar size={11} />}
+                    {row.player.username}
+                  </div>
+                </td>
+                <td className="px-2 py-2 font-mono text-xs" style={{ color: row.team ? (row.team.color || C.greenLight) : `${C.cream}44` }}>
+                  {row.team?.tag || 'FA'}
+                </td>
+                <td className="px-2 py-2 text-center font-mono text-xs" style={{ color: `${C.cream}99` }}>{row.player.position}</td>
+                {cols.map(c => (
+                  <td
+                    key={c.field}
+                    className="px-2 py-2 text-center font-mono text-sm"
+                    style={{
+                      color: sortBy === c.field ? C.goldLight : C.cream,
+                      fontWeight: sortBy === c.field ? 600 : 400,
+                    }}
+                  >{row[c.field]}</td>
+                ))}
+              </tr>
+            ))}
+            {sorted.length === 0 && (
+              <tr>
+                <td colSpan={cols.length + 4} className="text-center py-8 font-mono text-xs" style={{ color: `${C.cream}66` }}>
+                  No players match this filter.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 // ============ TEAM ROSTER FORMATION ============
 // Displays team members arranged in a 1-3-2-2 formation (8v8) with empty slots
 // for missing positions. Extra players (beyond 8) appear under a BENCH section.
@@ -4111,7 +4316,7 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
                   boxShadow: `0 2px 8px ${C.brandNavy}11`,
                 }}
               >
-                <div className="flex items-start gap-3 mb-2">
+                <div className="flex items-start gap-4 mb-3">
                   {/* Team logo thumbnail — falls back to a tag chip if no logo */}
                   {t.logoUrl ? (
                     <img
@@ -4119,38 +4324,38 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
                       alt={`${t.name} logo`}
                       className="shrink-0 rounded object-contain"
                       style={{
-                        width: 52, height: 52,
+                        width: 76, height: 76,
                         background: `${tColor}11`,
                         border: `1px solid ${tColor}33`,
-                        padding: 3,
+                        padding: 4,
                       }}
                     />
                   ) : (
                     <div
                       className="shrink-0 rounded flex items-center justify-center font-display tracking-widest"
                       style={{
-                        width: 52, height: 52,
-                        background: tColor, color: C.onColor, fontSize: 14,
+                        width: 76, height: 76,
+                        background: tColor, color: C.onColor, fontSize: 20,
                       }}
                     >{t.tag}</div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <div className="font-display text-xl tracking-wider truncate" style={{ color: C.cream }}>
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="font-display text-2xl tracking-wider truncate leading-tight" style={{ color: C.cream }}>
                         {t.name.toUpperCase()}
                       </div>
-                      <div className="font-heading text-[10px] px-1.5 py-0.5 rounded tracking-widest shrink-0" style={{
+                      <div className="font-heading text-xs px-2 py-0.5 rounded tracking-widest shrink-0" style={{
                         background: tColor, color: C.onColor,
                       }}>{t.tag}</div>
                     </div>
                     {t.description && (
-                      <div className="font-body text-xs line-clamp-2" style={{ color: `${C.cream}99` }}>{t.description}</div>
+                      <div className="font-body text-sm line-clamp-2 leading-snug" style={{ color: `${C.cream}99` }}>{t.description}</div>
                     )}
                   </div>
                 </div>
-                <div className="flex items-center justify-between font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>
+                <div className="flex items-center justify-between font-mono text-xs tracking-wider" style={{ color: `${C.cream}66` }}>
                   <span>{memberCount} {memberCount === 1 ? 'MEMBER' : 'MEMBERS'}</span>
-                  <span className="flex items-center gap-1"><Crown size={10} style={{ color: C.goldLight }} /> {t.ownerUsername}</span>
+                  <span className="flex items-center gap-1.5"><Crown size={12} style={{ color: C.goldLight }} /> {t.ownerUsername}</span>
                 </div>
               </button>
             );
@@ -9851,7 +10056,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     { id: 'teams', label: 'TEAMS', icon: Users },
     { id: 'schedule', label: 'SCHEDULE', icon: Calendar },
     { id: 'standings', label: 'STANDINGS', icon: Trophy },
-    { id: 'leaderboard', label: 'LEADERBOARD', icon: Trophy },
+    { id: 'leaderboard', label: 'STATS', icon: BarChart3 },
   ];
   // Reference tabs (less frequently visited). Live under a MORE dropdown
   // but still have real URLs that work when visited directly.
@@ -10232,71 +10437,15 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         {/* TEAMS */}
         {view === 'teams' && <TeamsView account={account} onUpdate={onUpdate} rankings={rankings} />}
 
-        {/* LEADERBOARD */}
+        {/* STATS — sortable NHL-style table replacing the old OVR-only leaderboard */}
         {view === 'leaderboard' && (
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <Trophy size={22} style={{ color: C.goldLight }} />
-              <h3 className="font-display text-3xl tracking-wider">LEADERBOARD</h3>
-              {season !== 'all' && (
-                <span className="font-mono text-[10px] px-2 py-0.5 rounded tracking-wider" style={{
-                  background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}44`,
-                }}>{season}</span>
-              )}
-            </div>
-            <div className="space-y-2">
-              {leaderboard.map((p, i) => {
-                // Unranked players (fewer than 3 games) don't get a numeric rank,
-                // a medal color, or a score — they sit at the bottom marked UNRANKED.
-                const isUnranked = p._unranked;
-                const rankColor = isUnranked ? `${C.cream}40`
-                  : i === 0 ? C.goldLight : i === 1 ? '#c4c4c4' : i === 2 ? '#c08555' : `${C.cream}55`;
-                const showMedal = !isUnranked && i < 3;
-                return (
-                  <button
-                    key={p.username}
-                    onClick={() => setSelectedPlayer({ ...p, stats: p._seasonStats })}
-                    className="w-full rounded-lg p-3 flex items-center gap-4 transition-all hover:translate-x-1 hover:scale-[1.005]"
-                    style={{
-                      background: showMedal ? `linear-gradient(90deg, ${rankColor}11 0%, ${C.navyDeep}aa 30%)` : `${C.navyDeep}aa`,
-                      border: `1px solid ${showMedal ? rankColor : C.navyLight}44`,
-                      opacity: isUnranked ? 0.7 : 1,
-                    }}
-                  >
-                    <div className="font-display text-3xl w-10 text-center" style={{ color: rankColor }}>
-                      {isUnranked ? '–' : i + 1}
-                    </div>
-                    <div className="w-12 h-12 rounded-full flex items-center justify-center font-display text-2xl flex-shrink-0" style={{
-                      background: `linear-gradient(135deg, ${C.green} 0%, ${C.brandNavy} 100%)`,
-                      color: C.onColor,
-                      border: `2px solid ${rankColor}66`,
-                    }}>
-                      {p.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 text-left min-w-0">
-                      <div className="font-heading tracking-wider truncate flex items-center gap-1" style={{ color: C.cream }}>
-                        {isTeamCaptain(p, p._team) && <CaptainStar size={13} />}
-                        {p.username.toUpperCase()}
-                      </div>
-                      <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>
-                        {p.position} • {p._seasonStats.games || 0} GAMES
-                        {p._team && <span style={{ color: p._team.color || C.greenLight }}> • {p._team.tag}</span>}
-                      </div>
-                    </div>
-                    {isUnranked ? (
-                      <div className="font-mono text-[10px] tracking-wider text-right" style={{ color: `${C.cream}66` }}>
-                        UNRANKED<br />{p._seasonStats.games || 0}/{MIN_GAMES_FOR_RANKING} GAMES
-                      </div>
-                    ) : (
-                      <div className="font-display text-3xl" style={{ color: C.greenLight, textShadow: `0 0 12px ${C.green}` }}>{p._overall}</div>
-                    )}
-                    <ChevronRight size={18} style={{ color: `${C.cream}55` }} />
-                  </button>
-                );
-              })}
-              {leaderboard.length === 0 && <EmptyState icon={<Trophy size={40} />} text="No players yet" />}
-            </div>
-          </div>
+          <StatsView
+            allPlayers={allPlayers}
+            allTeams={allTeams}
+            rankings={rankings}
+            season={season}
+            onPlayerClick={(p) => setSelectedPlayer(p)}
+          />
         )}
 
         {/* HALL OF FAME */}

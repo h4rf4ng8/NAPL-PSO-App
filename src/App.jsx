@@ -2012,7 +2012,7 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
         })}
       </div>
       {/* FLEX hint — explains why someone might pick it over a specific role */}
-      <div className="font-mono text-[10px] mb-4 leading-relaxed" style={{ color: `${C.cream}88` }}>
+      <div className="font-body text-sm mb-4 leading-relaxed px-1" style={{ color: C.cream }}>
         Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
       </div>
       <button
@@ -4088,6 +4088,17 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
           {approved.map(t => {
             const tColor = t.color || C.green;
+            // True member count — unique usernames that match an actual account.
+            // Guards against: duplicates in team.members, usernames of deleted
+            // accounts still sitting in the array, and case-mismatched entries.
+            const seen = new Set();
+            const verifiedMembers = (t.members || []).filter(u => {
+              const key = (u || '').toLowerCase();
+              if (!key || seen.has(key)) return false;
+              seen.add(key);
+              return allPlayers.some(p => p.username.toLowerCase() === key);
+            });
+            const memberCount = verifiedMembers.length;
             return (
               <button
                 key={t.id}
@@ -4138,7 +4149,7 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
                   </div>
                 </div>
                 <div className="flex items-center justify-between font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>
-                  <span>{t.members.length} {t.members.length === 1 ? 'MEMBER' : 'MEMBERS'}</span>
+                  <span>{memberCount} {memberCount === 1 ? 'MEMBER' : 'MEMBERS'}</span>
                   <span className="flex items-center gap-1"><Crown size={10} style={{ color: C.goldLight }} /> {t.ownerUsername}</span>
                 </div>
               </button>
@@ -9680,7 +9691,7 @@ const OnboardingModal = ({ account, onComplete }) => {
               ))}
             </div>
             {/* FLEX hint — explains why someone might pick FLEX over a specific role */}
-            <div className="font-mono text-[9px] mt-1 leading-relaxed" style={{ color: `${C.cream}77` }}>
+            <div className="font-body text-sm mt-2 leading-relaxed" style={{ color: `${C.cream}cc` }}>
               Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
             </div>
           </div>

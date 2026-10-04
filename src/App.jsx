@@ -3,33 +3,76 @@ import {
   Trophy, Target, Zap, Shield, Activity, User, LogOut, Plus, TrendingUp,
   Award, Users, ChevronRight, X, Edit3, Crown, CheckCircle, XCircle,
   Clock, Swords, Calendar, Flag, Star, BarChart3, Hand, Footprints, Sparkles,
-  Share2, Download, Copy, Check, Home as HomeIcon, BookOpen
+  Share2, Download, Copy, Check, Home as HomeIcon, BookOpen, Sun, Moon
 } from 'lucide-react';
 
 // ============ ASL THEME (LIGHT) ============
 // Note: token names are kept for code stability, but values are now light-theme:
 // `cream` = primary text (navy), `navy*` = surface/border tints (white/grey).
-const C = {
-  navy: '#ffffff',          // primary surface (light theme)
+// ============ THEME PALETTES ============
+// Two palettes: LIGHT (default, current look) and DARK. Keys match the shape
+// expected everywhere in the app so switching themes is a straight property
+// swap on the shared C object below. Accent colors (gold/green/red) stay
+// close across themes so brand feel is preserved; surfaces + text invert.
+const LIGHT_PALETTE = {
+  navy: '#ffffff',          // primary surface
   navyDeep: '#f4f6fb',      // page background
   navyLight: '#dfe4f0',     // subtle border / muted surface
-  green: '#2d7a4a',         // status green (positive)
+  green: '#2d7a4a',
   greenLight: '#3fa05f',
-  red: '#a8243a',           // status red (negative)
+  red: '#a8243a',
   redLight: '#c93852',
-  // PRIMARY TEXT — ASL brand blue on light backgrounds
-  cream: '#1c4788',         // was '#1a2752' — now ASL blue
-  // ASL gold accent (from brand kit)
-  gold: '#a8892e',          // gold on light bg (contrast-safe)
-  goldLight: '#c0a038',     // ASL gold from brand kit
-  white: '#ffffff',
+  cream: '#1c4788',         // primary text (ASL blue on light bg)
+  gold: '#a8892e',
+  goldLight: '#c0a038',
+  white: '#ffffff',         // card background
   black: '#000000',
-  // Brand color surfaces — real ASL blues for dark accents & brand moments
-  brandNavy: '#3068b0',     // ASL primary blue
-  brandNavyDeep: '#185090', // ASL deeper blue for gradients / hover
-  // Text color to use *on top* of colored/dark backgrounds
+  brandNavy: '#3068b0',
+  brandNavyDeep: '#185090',
   onColor: '#ffffff',
 };
+const DARK_PALETTE = {
+  navy: '#1a2235',          // primary surface
+  navyDeep: '#0f1522',      // page background (near-black navy)
+  navyLight: '#2a3447',     // borders, muted surfaces
+  green: '#3fa05f',         // slightly brighter to pop on dark
+  greenLight: '#5cc080',
+  red: '#d04863',
+  redLight: '#e57d8b',
+  cream: '#e4e9f0',         // primary text (near-white on dark bg)
+  gold: '#d8b858',          // brighter gold on dark
+  goldLight: '#e5c87e',
+  white: '#1a2235',         // card background matches 'navy' surface
+  black: '#000000',
+  brandNavy: '#5c90d4',     // lighter so it reads on dark bg
+  brandNavyDeep: '#3068b0',
+  onColor: '#ffffff',
+};
+
+// Shared mutable palette object. Every component reads from C.* at render
+// time, so swapping values here + forcing a re-render recolors the whole
+// app without touching individual component code.
+const C = { ...LIGHT_PALETTE };
+
+// Read saved theme preference from localStorage so dark users stay dark across
+// visits. Falls back to 'light' when unset or storage is unavailable.
+const getSavedTheme = () => {
+  try { return localStorage.getItem('asl_theme') === 'dark' ? 'dark' : 'light'; }
+  catch { return 'light'; }
+};
+// Mutate C in place to match the requested theme + save the choice.
+const applyTheme = (mode) => {
+  const palette = mode === 'dark' ? DARK_PALETTE : LIGHT_PALETTE;
+  Object.assign(C, palette);
+  try { localStorage.setItem('asl_theme', mode); } catch {}
+  // Also set data-theme on <html> so any CSS rules in index.css that need to
+  // respond to theme (e.g. the pitch background texture) can hook into it.
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', mode);
+  }
+};
+// Apply saved theme immediately so first render matches user preference.
+applyTheme(getSavedTheme());
 
 // ============ ADMIN CONFIG ============
 // ============ ADMIN CONFIG ============
@@ -10019,6 +10062,15 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [moreOpen, setMoreOpen] = useState(false); // MORE dropdown in main nav
   const moreBtnRef = useRef(null); // used to position dropdown below the button
   const [morePos, setMorePos] = useState({ top: 0, right: 0 });
+  // Theme state — mirrors the module-level C palette. Toggling swaps C in
+  // place AND bumps this state to force a tree re-render so every component
+  // reading from C picks up the new colors on the next paint.
+  const [theme, setTheme] = useState(getSavedTheme);
+  const toggleTheme = () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setTheme(next);
+  };
   const [allPlayers, setAllPlayers] = useState([]);
   const [allTeams, setAllTeams] = useState([]);
   const [dynamicAdmins, setDynamicAdmins] = useState([]);
@@ -10168,6 +10220,20 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
                 @{account.username}
                 {isAdmin(account, dynamicAdmins) && <Crown size={11} style={{ color: '#d8b858' }} />}
               </div>
+              {/* Theme toggle — sun or moon depending on current theme.
+                  Click flips palette + saves to localStorage. */}
+              <button
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                className="px-2 py-1 rounded flex items-center justify-center transition-transform hover:scale-110"
+                style={{
+                  color: '#fff',
+                  background: 'rgba(255,255,255,0.1)',
+                  border: '1px solid rgba(0,0,0,0.4)',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.15)',
+                  minWidth: 28, minHeight: 24,
+                }}
+              >{theme === 'dark' ? <Sun size={12} /> : <Moon size={12} />}</button>
               {/* Discord invite — Discord-brand purple so it's instantly
                   recognizable. Opens in a new tab so people don't lose the site. */}
               <a

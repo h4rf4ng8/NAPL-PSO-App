@@ -4211,8 +4211,12 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
       );
     }
     const ranking = getPlayerRanking(player, rankings);
-    const ovr = ranking?.score || 0;
-    const tierName = ranking?.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
+    // Only show a real OVR score if the player meets the minimum-games threshold.
+    // Below that, the legacy fallback would show ~52 for every unplayed player
+    // which looks misleading on the pitch — show "NR" (Not Ranked) instead.
+    const isRanked = !!ranking?.ranked;
+    const ovr = isRanked ? (ranking.score || 0) : 'NR';
+    const tierName = isRanked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
     const tier = cardTier(tierName);
     const ringColor = tier.from || C.goldLight;
     const ovrTextColor = tier.accent || C.navyDeep;
@@ -4257,7 +4261,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
                 color: ovrTextColor,
                 border: `1.5px solid ${C.navyDeep}`,
                 fontFamily: 'Anton, sans-serif',
-                fontSize: 11,
+                fontSize: ovr === 'NR' ? 9 : 11,
                 lineHeight: 1,
               }}
             >{ovr}</div>

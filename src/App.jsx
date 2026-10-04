@@ -2744,12 +2744,13 @@ const EmptyState = ({ icon, text }) => (
 // Classic "circle method" algorithm. For N teams:
 //   - If N is odd, add a ghost team so one team gets a bye each round.
 //   - Fix team 0, rotate the rest. Each round produces N/2 matches.
-//   - For double round-robin, play the whole schedule twice, swapping home/away.
+//   - For rounds>1, repeat the pattern, swapping home/away on even repeats
+//     so the two halves of the season are the "mirror" of each other.
 // Returns an array of weeks, each week is an array of {homeTeamId, awayTeamId}.
-const generateRoundRobinSchedule = (teamIds, doubleRound = true) => {
+const generateRoundRobinSchedule = (teamIds, roundsCount = 2) => {
   if (!teamIds || teamIds.length < 2) return [];
-  // Shuffle slightly for variety across generations with the same team list.
-  // (Deterministic shuffles would be reproducible but less interesting season-to-season.)
+  if (roundsCount < 1) return [];
+  // Shuffle for variety across generations with the same team list.
   const teams = [...teamIds];
   for (let i = teams.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -2759,9 +2760,9 @@ const generateRoundRobinSchedule = (teamIds, doubleRound = true) => {
   if (hasBye) teams.push(null); // ghost team; one real team sits out each week
   const n = teams.length;
   const halfSize = n / 2;
-  const rounds = [];
 
-  // Single round-robin via circle method
+  // Build one single round-robin via the circle method
+  const singleRoundRobin = [];
   const working = [...teams];
   for (let round = 0; round < n - 1; round++) {
     const weekMatches = [];
@@ -2772,18 +2773,23 @@ const generateRoundRobinSchedule = (teamIds, doubleRound = true) => {
         weekMatches.push({ homeTeamId: home, awayTeamId: away });
       }
     }
-    rounds.push(weekMatches);
-    // Rotate: keep working[0] fixed, rotate rest by one
+    singleRoundRobin.push(weekMatches);
     working.splice(1, 0, working.pop());
   }
 
-  // For double round-robin, add the mirror image (home/away swapped) as a second half
-  if (doubleRound) {
-    const secondHalf = rounds.map(wk => wk.map(m => ({ homeTeamId: m.awayTeamId, awayTeamId: m.homeTeamId })));
-    rounds.push(...secondHalf);
+  // Repeat for the requested number of rounds. Each round swaps home/away
+  // from the previous round so teams get balanced home-vs-away games.
+  const allWeeks = [];
+  for (let r = 0; r < roundsCount; r++) {
+    if (r % 2 === 0) {
+      allWeeks.push(...singleRoundRobin);
+    } else {
+      allWeeks.push(...singleRoundRobin.map(wk => wk.map(m => ({
+        homeTeamId: m.awayTeamId, awayTeamId: m.homeTeamId
+      }))));
+    }
   }
-
-  return rounds;
+  return allWeeks;
 };
 
 // ============ SCHEDULE: GENERATE MODAL ============
@@ -2798,6 +2804,7 @@ const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, o
   });
   const approvedTeams = allTeams.filter(t => t.status === 'approved');
   const [selectedTeamIds, setSelectedTeamIds] = useState(() => approvedTeams.map(t => t.id));
+  const [rounds, setRounds] = useState(2); // how many times each pairing is played
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [preview, setPreview] = useState(null); // array of weeks of {homeTeamId, awayTeamId}
@@ -2813,8 +2820,25 @@ const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, o
     setErr('');
     if (selectedTeamIds.length < 2) { setErr('Pick at least 2 teams.'); return; }
     if (!seasonName.trim()) { setErr('Season name is required.'); return; }
-    const weeks = generateRoundRobinSchedule(selectedTeamIds, true);
+    if (rounds < 1 || rounds > 10) { setErr('Rounds must be between 1 and 10.'); return; }
+    const weeks = generateRoundRobinSchedule(selectedTeamIds, rounds);
     setPreview(weeks);
+  };
+
+  // Create an empty season with no auto-generated matches — admin will build
+  // the schedule match-by-match via ADD MATCH afterward.
+  const handleSkipGeneration = async () => {
+    setErr('');
+    if (!seasonName.trim()) { setErr('Season name is required.'); return; }
+    if (existingSeasons.includes(seasonName)) {
+      setErr(`Season "${seasonName}" already exists. Pick a different name or edit the existing one.`);
+      return;
+    }
+    // No matches to insert — just hand the name back so the caller can start
+    // using it. The season appears in the dropdown as soon as the first
+    // manual match is added.
+    onGenerated && onGenerated(seasonName);
+    onClose && onClose();
   };
 
   const handleGenerate = async () => {
@@ -2909,11 +2933,32 @@ const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, o
           )}
         </div>
 
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+            ROUNDS (HOW MANY TIMES EACH PAIRING PLAYS)
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="1" max="10"
+              value={rounds}
+              onChange={(e) => { setRounds(Math.max(1, Math.min(10, Number(e.target.value) || 1))); setPreview(null); }}
+              className="w-20 px-3 py-2 font-mono text-sm rounded text-center"
+              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+            />
+            <span className="font-mono text-[10px]" style={{ color: `${C.cream}99` }}>
+              {rounds === 1 ? 'SINGLE round-robin' : rounds === 2 ? 'DOUBLE round-robin' : `${rounds}× round-robin`}
+            </span>
+          </div>
+        </div>
+
         <div className="font-mono text-[10px] p-3 rounded" style={{ background: `${C.navyLight}22`, color: `${C.cream}cc` }}>
-          <div className="mb-1" style={{ color: C.goldLight }}>DOUBLE ROUND-ROBIN FORMAT</div>
-          Each team plays every other team twice (once home, once away).
-          Total: <b>{selectedTeamIds.length * (selectedTeamIds.length - 1)}</b> matches
-          over <b>{Math.max(0, selectedTeamIds.length % 2 === 0 ? (selectedTeamIds.length - 1) * 2 : selectedTeamIds.length * 2)}</b> weeks.
+          <div className="mb-1" style={{ color: C.goldLight }}>FORMAT PREVIEW</div>
+          With {selectedTeamIds.length} teams and {rounds} round{rounds > 1 ? 's' : ''}: each team plays {Math.max(0, (selectedTeamIds.length - 1)) * rounds} games.
+          Total: <b>{Math.floor(selectedTeamIds.length * (selectedTeamIds.length - 1) / 2) * rounds}</b> matches
+          over <b>{Math.max(0, selectedTeamIds.length % 2 === 0 ? (selectedTeamIds.length - 1) * rounds : selectedTeamIds.length * rounds)}</b> weeks.
+          {rounds >= 2 && ' Home/away flipped between rounds for balance.'}
+          <br />
           Matches start with no date/time — you set those individually as teams agree on times.
         </div>
 
@@ -2937,13 +2982,22 @@ const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, o
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {!preview ? (
-            <button
-              onClick={handlePreview}
-              className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
-              style={{ background: `${C.navyLight}66`, color: C.cream }}
-            >PREVIEW SCHEDULE</button>
+            <>
+              <button
+                onClick={handlePreview}
+                className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
+                style={{ background: `${C.navyLight}66`, color: C.cream }}
+              >PREVIEW SCHEDULE</button>
+              {/* Alternative: skip generation entirely and build matches manually */}
+              <button
+                onClick={handleSkipGeneration}
+                className="px-3 py-2 font-heading tracking-wider text-xs rounded"
+                style={{ background: `${C.gold}44`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
+                title="Create the season with no auto-generated matches — add them individually afterward"
+              >SKIP GEN. & BUILD MANUALLY</button>
+            </>
           ) : (
             <>
               <button
@@ -3151,6 +3205,143 @@ const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }) => {
 // Shows the whole season grouped by week. Each row shows home/away, date/time
 // (or TBD), status badge, and score if played. Admins see an EDIT button;
 // others just see the info.
+// ============ SCHEDULE: ADD MATCH MODAL ============
+// Standalone "add a one-off match" dialog. Admin picks season (new or existing),
+// week number, home and away teams, and optionally a date/time right away.
+// Useful for exhibition games, makeups, cup games, or building a whole season
+// from scratch after SKIP GENERATION.
+const AddMatchModal = ({ allTeams = [], existingSeasons = [], onClose, onSaved, defaultSeason = '' }) => {
+  const approvedTeams = allTeams.filter(t => t.status === 'approved');
+  const [season, setSeason] = useState(defaultSeason || existingSeasons[0] || '');
+  const [week, setWeek] = useState(1);
+  const [homeTeamId, setHomeTeamId] = useState('');
+  const [awayTeamId, setAwayTeamId] = useState('');
+  const [dateInput, setDateInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const handleSave = async () => {
+    setErr('');
+    if (!season.trim()) { setErr('Season name is required.'); return; }
+    if (!homeTeamId || !awayTeamId) { setErr('Pick both home and away teams.'); return; }
+    if (homeTeamId === awayTeamId) { setErr('Home and away must be different teams.'); return; }
+    if (week < 1) { setErr('Week must be 1 or higher.'); return; }
+    setBusy(true);
+    try {
+      const match = {
+        id: `sch_${season.toLowerCase().replace(/\s+/g, '_')}_w${week}_${homeTeamId.slice(-4)}_${awayTeamId.slice(-4)}_${Date.now()}`,
+        season,
+        week: Number(week),
+        homeTeamId,
+        awayTeamId,
+        scheduledDate: dateInput ? new Date(dateInput).getTime() : null,
+        status: 'scheduled',
+        matchType: 'regular',
+      };
+      await db.saveScheduledMatch(match);
+      onSaved && onSaved(season);
+      onClose && onClose();
+    } catch (e) {
+      setErr('Could not save: ' + (e?.message || e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ModalShell title="ADD MATCH" onClose={onClose} maxWidth="max-w-md">
+      <div className="space-y-3">
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>SEASON</label>
+          <input
+            type="text"
+            value={season}
+            onChange={(e) => setSeason(e.target.value)}
+            list="existing-seasons"
+            placeholder="e.g. Season 1"
+            className="w-full px-3 py-2 font-heading tracking-wider rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+          <datalist id="existing-seasons">
+            {existingSeasons.map(s => <option key={s} value={s} />)}
+          </datalist>
+          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}77` }}>
+            Type an existing season name or create a new one.
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>WEEK</label>
+          <input
+            type="number"
+            min="1" max="52"
+            value={week}
+            onChange={(e) => setWeek(Math.max(1, Number(e.target.value) || 1))}
+            className="w-24 px-3 py-2 font-mono text-sm rounded text-center"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>HOME</label>
+            <select
+              value={homeTeamId}
+              onChange={(e) => setHomeTeamId(e.target.value)}
+              className="w-full px-2 py-2 font-heading tracking-wider rounded"
+              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+            >
+              <option value="">— pick team —</option>
+              {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.tag} — {t.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>AWAY</label>
+            <select
+              value={awayTeamId}
+              onChange={(e) => setAwayTeamId(e.target.value)}
+              className="w-full px-2 py-2 font-heading tracking-wider rounded"
+              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+            >
+              <option value="">— pick team —</option>
+              {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.tag} — {t.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>DATE & TIME (OPTIONAL)</label>
+          <input
+            type="datetime-local"
+            value={dateInput}
+            onChange={(e) => setDateInput(e.target.value)}
+            className="w-full px-3 py-2 font-mono text-sm rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}77` }}>
+            Leave empty to set later via EDIT.
+          </div>
+        </div>
+
+        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+            style={{ background: C.green, color: C.onColor }}
+          >{busy ? 'SAVING...' : 'ADD MATCH'}</button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
+            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
+          >CANCEL</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+};
+
 const ScheduleView = ({ account }) => {
   const [matches, setMatches] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -3158,6 +3349,11 @@ const ScheduleView = ({ account }) => {
   const [season, setSeason] = useState('');
   const [editing, setEditing] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [adding, setAdding] = useState(false);
+  // Seasons created via SKIP GENERATION don't have any matches yet, so they
+  // wouldn't show up in the derived `seasons` list below. Track them here
+  // too so the filter dropdown still includes them.
+  const [emptySeasons, setEmptySeasons] = useState([]);
   const isAdminUser = isAdmin(account);
 
   const refresh = async () => {
@@ -3169,12 +3365,14 @@ const ScheduleView = ({ account }) => {
   };
   useEffect(() => { refresh(); }, []);
 
-  // Available seasons for the filter dropdown
+  // Available seasons for the filter dropdown — matches-derived + any empty
+  // seasons admin spun up via SKIP GENERATION
   const seasons = useMemo(() => {
     const set = new Set();
     matches.forEach(m => set.add(m.season));
+    emptySeasons.forEach(s => set.add(s));
     return Array.from(set).sort();
-  }, [matches]);
+  }, [matches, emptySeasons]);
 
   // Default to the most recent season on first load
   useEffect(() => {
@@ -3238,11 +3436,19 @@ const ScheduleView = ({ account }) => {
             </select>
           )}
           {isAdminUser && (
-            <button
-              onClick={() => setGenerating(true)}
-              className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
-              style={{ background: C.green, color: C.onColor }}
-            ><Plus size={12} /> NEW SEASON</button>
+            <>
+              <button
+                onClick={() => setAdding(true)}
+                className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
+                style={{ background: `${C.gold}44`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
+                title="Add a single match to any season/week"
+              ><Plus size={12} /> ADD MATCH</button>
+              <button
+                onClick={() => setGenerating(true)}
+                className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
+                style={{ background: C.green, color: C.onColor }}
+              ><Plus size={12} /> NEW SEASON</button>
+            </>
           )}
         </div>
       </div>
@@ -3251,7 +3457,7 @@ const ScheduleView = ({ account }) => {
         <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading schedule...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-10 font-mono text-sm rounded" style={{ color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}44` }}>
-          No schedule yet. {isAdminUser ? 'Click NEW SEASON to generate one.' : 'The admin will post the fixtures when ready.'}
+          No matches scheduled for this season yet. {isAdminUser ? 'Use ADD MATCH to build one at a time, or NEW SEASON to auto-generate a round-robin.' : 'The admin will post the fixtures when ready.'}
         </div>
       ) : (
         <div className="space-y-5">
@@ -3324,7 +3530,27 @@ const ScheduleView = ({ account }) => {
           allTeams={teams}
           existingSeasons={seasons}
           onClose={() => setGenerating(false)}
-          onGenerated={(newSeason) => { setSeason(newSeason); refresh(); }}
+          onGenerated={(newSeason) => {
+            // Make sure the season appears in the dropdown even if it has
+            // zero matches (e.g. SKIP GENERATION was used).
+            setEmptySeasons(prev => prev.includes(newSeason) ? prev : [...prev, newSeason]);
+            setSeason(newSeason);
+            refresh();
+          }}
+        />
+      )}
+      {adding && (
+        <AddMatchModal
+          allTeams={teams}
+          existingSeasons={seasons}
+          defaultSeason={season}
+          onClose={() => setAdding(false)}
+          onSaved={(usedSeason) => {
+            setSeason(usedSeason);
+            // The season now has at least one match, so it's no longer "empty"
+            setEmptySeasons(prev => prev.filter(s => s !== usedSeason));
+            refresh();
+          }}
         />
       )}
       {editing && (

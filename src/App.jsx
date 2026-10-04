@@ -35,7 +35,7 @@ const C = {
 // ============ ADMIN CONFIG ============
 // "Super admins" are hardcoded as a safety net — they can never be removed
 // via the UI. They have the unique power to promote/demote other admins.
-const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906'];
+const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906', 'biggiebag'];
 // Regular admins are stored in the DB and managed via the Admin Panel.
 // Both super admins and regular admins have full admin powers EXCEPT
 // only super admins can manage the admin list itself.

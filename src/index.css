@@ -17,12 +17,46 @@ body {
 
 /* ============ DARK MODE ============
    Hooked up via data-theme="dark" on <html> (set by applyTheme in App.jsx).
-   Only overrides CSS-driven surfaces/text that can't be reached by swapping
-   the C palette's inline-style values. Most of the dark-mode work happens
-   via the C palette swap; this file handles the stuff pure JS can't see. */
+   These rules override anything the C palette swap can't reach — including
+   CSS-in-JS template strings baked at module load (fontCSS block) and
+   hardcoded colors in the retro-2006 header/nav/ticker chrome.
+
+   The !important flags are necessary because the inline <style>{fontCSS}</style>
+   block in App.jsx has frozen the light-theme values at module-load time and
+   those rules otherwise win against ours. */
+
 html[data-theme="dark"] body {
-  background: #0f1522;
+  background: #0f1522 !important;
 }
+
+/* Main app page background — was a white→light-navy gradient. Flip to a
+   true dark navy field so the whole page is dark, not just a strip. */
+html[data-theme="dark"] .pitch-bg {
+  background:
+    radial-gradient(ellipse at top, rgba(92,144,212,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at bottom, rgba(63,160,95,0.08) 0%, transparent 60%),
+    linear-gradient(180deg, #0f1522 0%, #0a0f1a 100%) !important;
+}
+
+/* Pitch lines overlay — brighten slightly so they're still faintly visible */
+html[data-theme="dark"] .pitch-lines {
+  background-image:
+    linear-gradient(90deg, transparent 49.7%, rgba(255,255,255,0.03) 49.85%, rgba(255,255,255,0.05) 50.15%, transparent 50.3%),
+    linear-gradient(0deg,  transparent 49.7%, rgba(255,255,255,0.03) 49.85%, rgba(255,255,255,0.05) 50.15%, transparent 50.3%) !important;
+}
+
+/* Scrollbars — the inline fontCSS sets light-theme colors; override here */
+html[data-theme="dark"] ::-webkit-scrollbar-track {
+  background: #0f1522 !important;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background: #2a3447 !important;
+}
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background: #3fa05f !important;
+}
+
+/* Form controls — browser-native dropdowns + inputs need the dark hint */
 html[data-theme="dark"] select,
 html[data-theme="dark"] select option {
   background: #1a2235;
@@ -32,6 +66,10 @@ html[data-theme="dark"] input,
 html[data-theme="dark"] textarea {
   color-scheme: dark;
 }
+
+/* The 2006-style glossy header + navy nav are brand elements that look right
+   in both themes — we leave them as-is. Same for team-colored borders and
+   the pitch's green on the login screen (handled above). */
 
 /* ============ ASL 2006-STYLE UI PRIMITIVES ============
    These classes are used by the Header, Nav, and Ticker components

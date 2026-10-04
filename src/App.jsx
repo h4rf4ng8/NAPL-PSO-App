@@ -3350,6 +3350,8 @@ const ScheduleView = ({ account }) => {
   const [editing, setEditing] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Week slider: null = show all weeks, number = jump to that specific week
+  const [selectedWeek, setSelectedWeek] = useState(null);
   // Seasons created via SKIP GENERATION don't have any matches yet, so they
   // wouldn't show up in the derived `seasons` list below. Track them here
   // too so the filter dropdown still includes them.
@@ -3378,6 +3380,10 @@ const ScheduleView = ({ account }) => {
   useEffect(() => {
     if (!season && seasons.length > 0) setSeason(seasons[seasons.length - 1]);
   }, [seasons, season]);
+
+  // Reset the week slider whenever the season changes — different seasons
+  // have different week ranges, so holding the old week would be confusing.
+  useEffect(() => { setSelectedWeek(null); }, [season]);
 
   const filtered = season ? matches.filter(m => m.season === season) : matches;
 
@@ -3461,7 +3467,67 @@ const ScheduleView = ({ account }) => {
         </div>
       ) : (
         <div className="space-y-5">
-          {Object.keys(byWeek).map(n => Number(n)).sort((a, b) => a - b).map(wkNum => (
+          {/* ============ WEEK SLIDER ============
+              Lets you jump directly to any week instead of scrolling through
+              the whole season. "ALL" shows every week stacked (original view). */}
+          {(() => {
+            const weekNums = Object.keys(byWeek).map(n => Number(n)).sort((a, b) => a - b);
+            if (weekNums.length < 2) return null; // only one week — no need for a slider
+            const minWk = weekNums[0];
+            const maxWk = weekNums[weekNums.length - 1];
+            return (
+              <div className="rounded-lg p-3 flex items-center gap-3 flex-wrap" style={{
+                background: C.white, border: `1px solid ${C.navyLight}33`,
+              }}>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Calendar size={14} style={{ color: C.brandNavy }} />
+                  <span className="font-display tracking-widest text-sm" style={{ color: C.brandNavy }}>
+                    {selectedWeek === null ? 'ALL WEEKS' : `WEEK ${selectedWeek}`}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={minWk}
+                  max={maxWk}
+                  value={selectedWeek ?? minWk}
+                  onChange={(e) => setSelectedWeek(Number(e.target.value))}
+                  className="flex-1 min-w-[150px]"
+                  style={{ accentColor: C.brandNavy }}
+                />
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => setSelectedWeek(null)}
+                    className="px-2 py-1 font-mono text-[10px] tracking-widest rounded"
+                    style={selectedWeek === null
+                      ? { background: C.brandNavy, color: C.onColor }
+                      : { background: `${C.navyLight}44`, color: C.brandNavy }
+                    }
+                  >ALL</button>
+                  <button
+                    onClick={() => setSelectedWeek(w => w === null ? minWk : Math.max(minWk, w - 1))}
+                    className="px-2 py-1 font-mono text-xs rounded"
+                    style={{ background: `${C.navyLight}44`, color: C.brandNavy }}
+                    disabled={selectedWeek === minWk}
+                  >◀</button>
+                  <span className="font-mono text-[10px] px-2 min-w-[60px] text-center" style={{ color: `${C.brandNavy}99` }}>
+                    {selectedWeek === null ? `${minWk}–${maxWk}` : `${selectedWeek} / ${maxWk}`}
+                  </span>
+                  <button
+                    onClick={() => setSelectedWeek(w => w === null ? minWk : Math.min(maxWk, w + 1))}
+                    className="px-2 py-1 font-mono text-xs rounded"
+                    style={{ background: `${C.navyLight}44`, color: C.brandNavy }}
+                    disabled={selectedWeek === maxWk}
+                  >▶</button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {Object.keys(byWeek)
+            .map(n => Number(n))
+            .filter(wkNum => selectedWeek === null || wkNum === selectedWeek)
+            .sort((a, b) => a - b)
+            .map(wkNum => (
             <div key={wkNum}>
               <div className="font-display tracking-widest text-sm mb-2 flex items-center gap-2" style={{ color: C.brandNavy }}>
                 <span className="px-2 py-0.5 rounded" style={{ background: `${C.brandNavy}22` }}>WEEK {wkNum}</span>

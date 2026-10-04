@@ -12,6 +12,25 @@ body {
   font-family: 'Barlow Condensed', sans-serif;
   -webkit-font-smoothing: antialiased;
   background: #f4f6fa;
+  transition: background 0.3s ease;
+}
+
+/* ============ DARK MODE ============
+   Hooked up via data-theme="dark" on <html> (set by applyTheme in App.jsx).
+   Only overrides CSS-driven surfaces/text that can't be reached by swapping
+   the C palette's inline-style values. Most of the dark-mode work happens
+   via the C palette swap; this file handles the stuff pure JS can't see. */
+html[data-theme="dark"] body {
+  background: #0f1522;
+}
+html[data-theme="dark"] select,
+html[data-theme="dark"] select option {
+  background: #1a2235;
+  color: #e4e9f0;
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea {
+  color-scheme: dark;
 }
 
 /* ============ ASL 2006-STYLE UI PRIMITIVES ============

@@ -3345,6 +3345,7 @@ const AddMatchModal = ({ allTeams = [], existingSeasons = [], onClose, onSaved, 
 const ScheduleView = ({ account }) => {
   const [matches, setMatches] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [allPlayers, setAllPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [season, setSeason] = useState('');
   const [editing, setEditing] = useState(null);
@@ -3360,9 +3361,14 @@ const ScheduleView = ({ account }) => {
 
   const refresh = async () => {
     setLoading(true);
-    const [m, t] = await Promise.all([db.listScheduledMatches(), db.listTeams()]);
+    const [m, t, p] = await Promise.all([
+      db.listScheduledMatches(),
+      db.listTeams(),
+      db.listAccounts(),
+    ]);
     setMatches(m || []);
     setTeams(t || []);
+    setAllPlayers(p || []);
     setLoading(false);
   };
   useEffect(() => { refresh(); }, []);
@@ -3386,6 +3392,38 @@ const ScheduleView = ({ account }) => {
   useEffect(() => { setSelectedWeek(null); }, [season]);
 
   const filtered = season ? matches.filter(m => m.season === season) : matches;
+
+  // Team W/D/L records. Derived from imported player matches (same source
+  // as STANDINGS) so the two tabs show identical numbers.
+  // Logic matches TeamStandings exactly: for each player, walk matches, dedup
+  // by (ownTeamId + strikersMatchId) so one match counts once per team, then
+  // aggregate W/D/L per team across every season imported.
+  const recordsByTeam = useMemo(() => {
+    const seen = new Set();
+    const rec = {};
+    const bump = (teamId) => {
+      if (!rec[teamId]) rec[teamId] = { w: 0, d: 0, l: 0 };
+      return rec[teamId];
+    };
+    for (const p of (allPlayers || [])) {
+      for (const m of (p.matches || [])) {
+        if (!m.ownTeamId || !m.strikersMatchId) continue;
+        const key = `${m.ownTeamId}_${m.strikersMatchId}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const row = bump(m.ownTeamId);
+        if (m.result === 'W') row.w += 1;
+        else if (m.result === 'L') row.l += 1;
+        else row.d += 1;
+      }
+    }
+    return rec;
+  }, [allPlayers]);
+  const recordStringFor = (teamId) => {
+    const r = recordsByTeam[teamId];
+    if (!r || (r.w + r.d + r.l) === 0) return null;
+    return `${r.w}W-${r.d}D-${r.l}L`;
+  };
 
   // Group by week
   const byWeek = useMemo(() => {
@@ -3535,7 +3573,7 @@ const ScheduleView = ({ account }) => {
                   {byWeek[wkNum].length} MATCH{byWeek[wkNum].length !== 1 ? 'ES' : ''}
                 </span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {byWeek[wkNum].map(m => {
                   const home = teamById(m.homeTeamId);
                   const away = teamById(m.awayTeamId);
@@ -3545,102 +3583,177 @@ const ScheduleView = ({ account }) => {
                   const homeWon = played && m.homeScore > m.awayScore;
                   const awayWon = played && m.awayScore > m.homeScore;
 
-                  // Compact team unit: logo + name/tag, color-tinted. Reused for
-                  // both home and away sides so they stay visually balanced.
-                  const TeamSide = ({ team, color, won, align = 'left' }) => (
-                    <div className={`flex items-center gap-2 min-w-0 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}
-                      style={{ flex: '1 1 0' }}>
-                      {team?.logoUrl ? (
-                        <img
-                          src={team.logoUrl}
-                          alt={team.name}
-                          className="shrink-0 rounded object-contain"
-                          style={{
-                            width: 36, height: 36,
-                            background: `${color}11`,
-                            border: `1px solid ${color}55`,
-                            padding: 2,
-                          }}
-                        />
-                      ) : (
-                        <div className="shrink-0 rounded flex items-center justify-center font-display text-sm tracking-wider"
-                          style={{ width: 36, height: 36, background: color, color: C.onColor }}>
-                          {team?.tag?.slice(0, 3) || '?'}
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="font-display tracking-wider text-base truncate leading-none"
-                          style={{ color, fontWeight: won ? 800 : 600 }}>
-                          {team?.tag || '???'}
-                        </div>
-                        <div className="font-body text-[11px] truncate leading-tight"
-                          style={{ color: `${C.brandNavy}88` }}>
-                          {team?.name || 'TBD'}
+                  // Premium team unit: 56px logo + 24px tag + full name + record.
+                  // The logo gets a tinted background + colored border + shadow
+                  // so it reads as a real badge, not a thumbnail.
+                  const TeamSide = ({ team, color, won, record, align = 'left' }) => {
+                    const flipped = align === 'right';
+                    return (
+                      <div
+                        className="flex items-center min-w-0"
+                        style={{
+                          gap: 14,
+                          flex: '1 1 0',
+                          flexDirection: flipped ? 'row-reverse' : 'row',
+                          textAlign: flipped ? 'right' : 'left',
+                          position: 'relative', zIndex: 1,
+                        }}
+                      >
+                        {team?.logoUrl ? (
+                          <img
+                            src={team.logoUrl}
+                            alt={team.name}
+                            className="shrink-0 object-contain"
+                            style={{
+                              width: 56, height: 56, borderRadius: 10, padding: 4,
+                              background: `${color}11`,
+                              border: `1.5px solid ${color}`,
+                              boxShadow: `0 2px 8px ${color}33`,
+                            }}
+                          />
+                        ) : (
+                          <div className="shrink-0 flex items-center justify-center font-display tracking-wider"
+                            style={{
+                              width: 56, height: 56, borderRadius: 10,
+                              background: color, color: C.onColor, fontSize: 18,
+                              boxShadow: `0 2px 8px ${color}33`,
+                            }}>
+                            {team?.tag?.slice(0, 3) || '?'}
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-display truncate" style={{
+                            fontSize: 24, letterSpacing: '0.08em', lineHeight: 1,
+                            color, fontWeight: won ? 800 : 600, marginBottom: 4,
+                          }}>
+                            {team?.tag || '???'}
+                          </div>
+                          <div className="font-heading truncate" style={{
+                            fontSize: 12, letterSpacing: '0.1em',
+                            color: `${C.brandNavy}cc`,
+                          }}>
+                            {team?.name || 'TBD'}
+                          </div>
+                          {record && (
+                            <div className="font-mono" style={{
+                              fontSize: 10, letterSpacing: '0.18em', marginTop: 3,
+                              color: `${C.brandNavy}aa`,
+                            }}>{record}</div>
+                          )}
                         </div>
                       </div>
-                    </div>
-                  );
+                    );
+                  };
 
                   return (
                     <div key={m.id}
-                      className="rounded-lg overflow-hidden transition-all hover:shadow-md"
+                      className="rounded-xl overflow-hidden transition-all"
                       style={{
                         background: C.white,
-                        border: `1px solid ${C.navyLight}44`,
-                        // Subtle color bar on the left side — split home/away colors
-                        borderLeft: `3px solid ${homeColor}`,
-                        borderRight: `3px solid ${awayColor}`,
+                        border: `1px solid ${C.navyLight}66`,
+                        boxShadow: `0 1px 3px ${C.brandNavy}0f, 0 4px 12px ${C.brandNavy}0a`,
+                        position: 'relative',
                       }}
                     >
+                      {/* Full-height color stripes on the far left/right edges */}
+                      <div style={{
+                        position: 'absolute', top: 0, bottom: 0, left: 0,
+                        width: 4, background: homeColor,
+                      }} />
+                      <div style={{
+                        position: 'absolute', top: 0, bottom: 0, right: 0,
+                        width: 4, background: awayColor,
+                      }} />
+
                       {/* Top row: date + status + stream/edit controls */}
-                      <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1 flex-wrap"
-                        style={{ borderBottom: `1px solid ${C.navyLight}22` }}>
-                        <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.brandNavy}99` }}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap"
+                        style={{
+                          padding: '10px 24px',
+                          background: `linear-gradient(90deg, ${C.navyLight}26 0%, ${C.navyLight}0d 100%)`,
+                          borderBottom: `1px solid ${C.navyLight}66`,
+                        }}>
+                        <div className="font-mono flex items-center gap-2" style={{
+                          fontSize: 11, letterSpacing: '0.18em', color: `${C.brandNavyDeep}cc`,
+                        }}>
+                          <Calendar size={13} style={{ color: `${C.brandNavyDeep}cc` }} />
                           {fmtDate(m.scheduledDate)}
                         </div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {statusBadge(m)}
                           {m.streamUrl && (
                             <a href={m.streamUrl} target="_blank" rel="noopener noreferrer"
-                              className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded flex items-center gap-1"
-                              style={{ background: '#9146FF22', color: '#9146FF' }}>▶ WATCH</a>
+                              className="font-mono flex items-center gap-1 rounded-full"
+                              style={{
+                                fontSize: 10, letterSpacing: '0.2em', fontWeight: 700,
+                                padding: '3px 10px',
+                                background: '#9146FF22', color: '#9146FF',
+                                border: '1px solid #9146FF55',
+                              }}>▶ WATCH</a>
                           )}
                           {isAdminUser && (
                             <button
                               onClick={() => setEditing(m)}
-                              className="px-2 py-0.5 font-mono text-[9px] tracking-widest rounded"
-                              style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                              className="font-mono rounded-full"
+                              style={{
+                                fontSize: 10, letterSpacing: '0.2em', fontWeight: 700,
+                                padding: '3px 10px',
+                                background: `${C.navyLight}cc`, color: C.brandNavy,
+                              }}
                             >EDIT</button>
                           )}
                         </div>
                       </div>
 
-                      {/* Main row: HOME · score / vs · AWAY — the hero of the card */}
-                      <div className="px-3 py-3 flex items-center gap-3">
-                        <TeamSide team={home} color={homeColor} won={homeWon} align="left" />
+                      {/* Main row — the hero: home | score/vs | away */}
+                      <div className="relative" style={{
+                        display: 'grid', gridTemplateColumns: '1fr auto 1fr',
+                        alignItems: 'center', gap: 16, padding: '22px 24px',
+                      }}>
+                        {/* Subtle gradient tinting each side with team color */}
+                        <div style={{
+                          position: 'absolute', top: 0, bottom: 0, left: 0, width: '40%',
+                          background: `linear-gradient(90deg, ${homeColor} 0%, transparent 100%)`,
+                          opacity: 0.06, pointerEvents: 'none',
+                        }} />
+                        <div style={{
+                          position: 'absolute', top: 0, bottom: 0, right: 0, width: '40%',
+                          background: `linear-gradient(270deg, ${awayColor} 0%, transparent 100%)`,
+                          opacity: 0.06, pointerEvents: 'none',
+                        }} />
 
-                        {/* Center column — score or VS, prominent */}
-                        <div className="shrink-0 flex items-center gap-2 px-2">
+                        <TeamSide team={home} color={homeColor} won={homeWon} record={recordStringFor(m.homeTeamId)} align="left" />
+
+                        {/* Center — score when played, VS pill when upcoming */}
+                        <div className="shrink-0 flex items-center" style={{ gap: 10, padding: '0 16px', position: 'relative', zIndex: 1 }}>
                           {played ? (
                             <>
-                              <span className="font-display text-3xl leading-none"
-                                style={{ color: homeColor, opacity: homeWon ? 1 : 0.55 }}>
-                                {m.homeScore}
-                              </span>
-                              <span className="font-mono text-[10px]" style={{ color: `${C.brandNavy}55` }}>–</span>
-                              <span className="font-display text-3xl leading-none"
-                                style={{ color: awayColor, opacity: awayWon ? 1 : 0.55 }}>
-                                {m.awayScore}
-                              </span>
+                              <span className="font-display" style={{
+                                fontSize: 42, lineHeight: 0.9, letterSpacing: '-0.02em',
+                                color: homeColor, opacity: homeWon ? 1 : 0.4,
+                                fontWeight: homeWon ? 800 : 400,
+                              }}>{m.homeScore}</span>
+                              <span className="font-display" style={{
+                                fontSize: 24, color: `${C.brandNavy}99`,
+                              }}>–</span>
+                              <span className="font-display" style={{
+                                fontSize: 42, lineHeight: 0.9, letterSpacing: '-0.02em',
+                                color: awayColor, opacity: awayWon ? 1 : 0.4,
+                                fontWeight: awayWon ? 800 : 400,
+                              }}>{m.awayScore}</span>
                             </>
                           ) : (
-                            <span className="font-display text-xl tracking-widest" style={{ color: `${C.brandNavy}66` }}>
-                              vs
-                            </span>
+                            <span className="font-display" style={{
+                              fontSize: 22, letterSpacing: '0.2em',
+                              color: `${C.brandNavy}aa`,
+                              padding: '8px 16px',
+                              background: `${C.navyLight}4d`,
+                              border: `1px solid ${C.navyLight}99`,
+                              borderRadius: 6,
+                            }}>VS</span>
                           )}
                         </div>
 
-                        <TeamSide team={away} color={awayColor} won={awayWon} align="right" />
+                        <TeamSide team={away} color={awayColor} won={awayWon} record={recordStringFor(m.awayTeamId)} align="right" />
                       </div>
                     </div>
                   );

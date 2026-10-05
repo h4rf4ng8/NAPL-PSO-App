@@ -3535,53 +3535,113 @@ const ScheduleView = ({ account }) => {
                   {byWeek[wkNum].length} MATCH{byWeek[wkNum].length !== 1 ? 'ES' : ''}
                 </span>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {byWeek[wkNum].map(m => {
                   const home = teamById(m.homeTeamId);
                   const away = teamById(m.awayTeamId);
                   const played = m.status === 'completed' && m.homeScore !== null && m.awayScore !== null;
+                  const homeColor = home?.color || C.brandNavy;
+                  const awayColor = away?.color || C.brandNavy;
+                  const homeWon = played && m.homeScore > m.awayScore;
+                  const awayWon = played && m.awayScore > m.homeScore;
+
+                  // Compact team unit: logo + name/tag, color-tinted. Reused for
+                  // both home and away sides so they stay visually balanced.
+                  const TeamSide = ({ team, color, won, align = 'left' }) => (
+                    <div className={`flex items-center gap-2 min-w-0 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}
+                      style={{ flex: '1 1 0' }}>
+                      {team?.logoUrl ? (
+                        <img
+                          src={team.logoUrl}
+                          alt={team.name}
+                          className="shrink-0 rounded object-contain"
+                          style={{
+                            width: 36, height: 36,
+                            background: `${color}11`,
+                            border: `1px solid ${color}55`,
+                            padding: 2,
+                          }}
+                        />
+                      ) : (
+                        <div className="shrink-0 rounded flex items-center justify-center font-display text-sm tracking-wider"
+                          style={{ width: 36, height: 36, background: color, color: C.onColor }}>
+                          {team?.tag?.slice(0, 3) || '?'}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="font-display tracking-wider text-base truncate leading-none"
+                          style={{ color, fontWeight: won ? 800 : 600 }}>
+                          {team?.tag || '???'}
+                        </div>
+                        <div className="font-body text-[11px] truncate leading-tight"
+                          style={{ color: `${C.brandNavy}88` }}>
+                          {team?.name || 'TBD'}
+                        </div>
+                      </div>
+                    </div>
+                  );
+
                   return (
                     <div key={m.id}
-                      className="rounded p-3 flex items-center gap-3 flex-wrap"
-                      style={{ background: C.white, border: `1px solid ${C.navyLight}33` }}
+                      className="rounded-lg overflow-hidden transition-all hover:shadow-md"
+                      style={{
+                        background: C.white,
+                        border: `1px solid ${C.navyLight}44`,
+                        // Subtle color bar on the left side — split home/away colors
+                        borderLeft: `3px solid ${homeColor}`,
+                        borderRight: `3px solid ${awayColor}`,
+                      }}
                     >
-                      <div className="font-mono text-[10px] shrink-0" style={{ color: `${C.brandNavy}99`, minWidth: 130 }}>
-                        {fmtDate(m.scheduledDate)}
+                      {/* Top row: date + status + stream/edit controls */}
+                      <div className="flex items-center justify-between gap-2 px-3 pt-2 pb-1 flex-wrap"
+                        style={{ borderBottom: `1px solid ${C.navyLight}22` }}>
+                        <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.brandNavy}99` }}>
+                          {fmtDate(m.scheduledDate)}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {statusBadge(m)}
+                          {m.streamUrl && (
+                            <a href={m.streamUrl} target="_blank" rel="noopener noreferrer"
+                              className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded flex items-center gap-1"
+                              style={{ background: '#9146FF22', color: '#9146FF' }}>▶ WATCH</a>
+                          )}
+                          {isAdminUser && (
+                            <button
+                              onClick={() => setEditing(m)}
+                              className="px-2 py-0.5 font-mono text-[9px] tracking-widest rounded"
+                              style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                            >EDIT</button>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1 flex items-center gap-2 flex-wrap">
-                        <span className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
-                          {home?.tag || '???'}
-                        </span>
-                        {played && (
-                          <span className="font-mono text-sm px-1.5 py-0.5 rounded" style={{
-                            background: `${C.brandNavy}11`, color: C.brandNavyDeep,
-                            fontWeight: m.homeScore > m.awayScore ? 700 : 400,
-                          }}>{m.homeScore}</span>
-                        )}
-                        <span className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>vs</span>
-                        {played && (
-                          <span className="font-mono text-sm px-1.5 py-0.5 rounded" style={{
-                            background: `${C.brandNavy}11`, color: C.brandNavyDeep,
-                            fontWeight: m.awayScore > m.homeScore ? 700 : 400,
-                          }}>{m.awayScore}</span>
-                        )}
-                        <span className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
-                          {away?.tag || '???'}
-                        </span>
+
+                      {/* Main row: HOME · score / vs · AWAY — the hero of the card */}
+                      <div className="px-3 py-3 flex items-center gap-3">
+                        <TeamSide team={home} color={homeColor} won={homeWon} align="left" />
+
+                        {/* Center column — score or VS, prominent */}
+                        <div className="shrink-0 flex items-center gap-2 px-2">
+                          {played ? (
+                            <>
+                              <span className="font-display text-3xl leading-none"
+                                style={{ color: homeColor, opacity: homeWon ? 1 : 0.55 }}>
+                                {m.homeScore}
+                              </span>
+                              <span className="font-mono text-[10px]" style={{ color: `${C.brandNavy}55` }}>–</span>
+                              <span className="font-display text-3xl leading-none"
+                                style={{ color: awayColor, opacity: awayWon ? 1 : 0.55 }}>
+                                {m.awayScore}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="font-display text-xl tracking-widest" style={{ color: `${C.brandNavy}66` }}>
+                              vs
+                            </span>
+                          )}
+                        </div>
+
+                        <TeamSide team={away} color={awayColor} won={awayWon} align="right" />
                       </div>
-                      {statusBadge(m)}
-                      {m.streamUrl && (
-                        <a href={m.streamUrl} target="_blank" rel="noopener noreferrer"
-                          className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded"
-                          style={{ background: '#9146FF22', color: '#9146FF' }}>WATCH</a>
-                      )}
-                      {isAdminUser && (
-                        <button
-                          onClick={() => setEditing(m)}
-                          className="px-2 py-1 font-mono text-[9px] tracking-widest rounded"
-                          style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                        >EDIT</button>
-                      )}
                     </div>
                   );
                 })}

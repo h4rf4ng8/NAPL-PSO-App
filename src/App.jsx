@@ -78,7 +78,7 @@ applyTheme(getSavedTheme());
 // ============ ADMIN CONFIG ============
 // "Super admins" are hardcoded as a safety net — they can never be removed
 // via the UI. They have the unique power to promote/demote other admins.
-const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906', 'biggiebag'];
+const SUPER_ADMIN_USERNAMES = ['harfang', 'harfang1906', 'biggiebag', 'stiga'];
 // Regular admins are stored in the DB and managed via the Admin Panel.
 // Both super admins and regular admins have full admin powers EXCEPT
 // only super admins can manage the admin list itself.
@@ -3988,6 +3988,287 @@ const StandingsView = () => {
   );
 };
 
+// ============ TRANSFERS VIEW ============
+// Shows every roster move (signings, transfers between teams, releases) as a
+// chronological feed. Season filter dropdown, window badges per Rulebook,
+// admin can edit the window tag on any entry.
+const TransfersView = ({ account }) => {
+  const [transfers, setTransfers] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [seasonFilter, setSeasonFilter] = useState('all');
+  const [editingWindow, setEditingWindow] = useState(null);
+  const isAdminUser = isAdmin(account);
+
+  const refresh = async () => {
+    setLoading(true);
+    const [tx, t] = await Promise.all([db.listTransfers(), db.listTeams()]);
+    setTransfers(tx || []);
+    setTeams(t || []);
+    setLoading(false);
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const teamById = (id) => teams.find(t => t.id === id);
+  const fmtDate = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    const diff = Date.now() - ms;
+    const days = Math.floor(diff / 86400000);
+    if (days === 0) return 'Today';
+    if (days === 1) return 'Yesterday';
+    if (days < 7) return `${days} days ago`;
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  const seasons = useMemo(() => {
+    const set = new Set();
+    transfers.forEach(t => { if (t.season) set.add(t.season); });
+    return Array.from(set).sort();
+  }, [transfers]);
+
+  const filtered = seasonFilter === 'all'
+    ? transfers
+    : transfers.filter(t => t.season === seasonFilter);
+
+  // Chip style for each transfer kind
+  const kindChip = (kind) => {
+    const map = {
+      signing:  { bg: `${C.green}22`,  color: C.greenLight, label: 'SIGNING' },
+      transfer: { bg: `${C.gold}22`,   color: C.goldLight,  label: 'TRANSFER' },
+      release:  { bg: `${C.red}22`,    color: C.redLight,   label: 'RELEASE' },
+    };
+    const c = map[kind] || map.transfer;
+    return (
+      <span className="font-mono px-2 py-0.5 rounded-full" style={{
+        background: c.bg, color: c.color,
+        fontSize: 10, letterSpacing: '0.2em', fontWeight: 700,
+      }}>{c.label}</span>
+    );
+  };
+
+  // Window badge (League Window / Cross League Window)
+  const windowBadge = (type) => {
+    if (!type) return null;
+    const map = {
+      league:       { label: 'LEAGUE WINDOW',       bg: `${C.brandNavy}33`,  color: C.brandNavyDeep },
+      cross_league: { label: 'CROSS-LEAGUE WINDOW', bg: `${C.gold}44`, color: C.goldLight },
+    };
+    const c = map[type]; if (!c) return null;
+    return (
+      <span className="font-mono px-2 py-0.5 rounded-full" style={{
+        background: c.bg, color: c.color,
+        fontSize: 10, letterSpacing: '0.2em', fontWeight: 700,
+      }}>◆ {c.label}</span>
+    );
+  };
+
+  // Compact team display with logo + tag, or "FREE AGENT" placeholder
+  const TeamChip = ({ teamId, color: forcedColor }) => {
+    if (!teamId) {
+      return (
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="shrink-0 rounded flex items-center justify-center" style={{
+            width: 32, height: 32,
+            background: `${C.navyLight}66`,
+            border: `1px dashed ${C.brandNavy}55`,
+          }}>
+            <User size={14} style={{ color: `${C.brandNavy}99` }} />
+          </div>
+          <span className="font-mono truncate" style={{
+            fontSize: 11, letterSpacing: '0.15em', color: `${C.brandNavy}99`,
+          }}>FREE AGENT</span>
+        </div>
+      );
+    }
+    const t = teamById(teamId);
+    const color = forcedColor || t?.color || C.brandNavy;
+    return (
+      <div className="flex items-center gap-2 min-w-0">
+        {t?.logoUrl ? (
+          <img src={t.logoUrl} alt={t.name} className="shrink-0 object-contain" style={{
+            width: 32, height: 32, borderRadius: 6, padding: 2,
+            background: `${color}11`,
+            border: `1px solid ${color}66`,
+          }} />
+        ) : (
+          <div className="shrink-0 flex items-center justify-center font-display" style={{
+            width: 32, height: 32, borderRadius: 6,
+            background: color, color: C.onColor, fontSize: 11, letterSpacing: '0.08em',
+          }}>{t?.tag?.slice(0, 3) || '?'}</div>
+        )}
+        <div className="min-w-0">
+          <div className="font-display truncate" style={{
+            color, fontSize: 14, letterSpacing: '0.08em', lineHeight: 1,
+          }}>{t?.tag || '???'}</div>
+          <div className="font-mono truncate" style={{
+            fontSize: 9, letterSpacing: '0.15em', color: `${C.brandNavy}aa`, marginTop: 2,
+          }}>{t?.name || 'Unknown team'}</div>
+        </div>
+      </div>
+    );
+  };
+
+  const setWindow = async (tx, newType) => {
+    try {
+      await db.saveTransfer({ ...tx, windowType: newType });
+      setEditingWindow(null);
+      refresh();
+    } catch (e) {
+      alert('Could not update window: ' + (e?.message || e));
+    }
+  };
+
+  const deleteTransfer = async (tx) => {
+    if (!confirm(`Delete this transfer entry? This removes it from the log but doesn't undo the roster move.`)) return;
+    try {
+      await db.deleteTransfer(tx.id);
+      refresh();
+    } catch (e) {
+      alert('Could not delete: ' + (e?.message || e));
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <Swords size={22} style={{ color: C.brandNavy }} />
+          <h1 className="font-display text-2xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>TRANSFER MARKET</h1>
+        </div>
+        {seasons.length > 0 && (
+          <div className="flex gap-1 rounded p-0.5 flex-wrap" style={{ background: `${C.navyLight}66` }}>
+            <button
+              onClick={() => setSeasonFilter('all')}
+              className="px-3 py-1 font-mono text-xs tracking-widest rounded"
+              style={seasonFilter === 'all'
+                ? { background: C.goldLight, color: C.brandNavyDeep }
+                : { color: C.brandNavy }
+              }
+            >ALL</button>
+            {seasons.map(s => (
+              <button
+                key={s}
+                onClick={() => setSeasonFilter(s)}
+                className="px-3 py-1 font-mono text-xs tracking-widest rounded"
+                style={seasonFilter === s
+                  ? { background: C.goldLight, color: C.brandNavyDeep }
+                  : { color: C.brandNavy }
+                }
+              >{s}</button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading transfer activity...</div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10 font-mono text-sm rounded" style={{
+          color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}66`,
+        }}>
+          No transfer activity yet. As admins move players between teams, every signing / transfer / release will show up here.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(tx => {
+            const fromColor = tx.fromTeamId ? (teamById(tx.fromTeamId)?.color || C.brandNavy) : null;
+            const toColor   = tx.toTeamId   ? (teamById(tx.toTeamId)?.color   || C.brandNavy) : null;
+            return (
+              <div key={tx.id} className="rounded-lg overflow-hidden" style={{
+                background: C.white,
+                border: `1px solid ${C.navyLight}66`,
+                boxShadow: `0 1px 3px ${C.brandNavy}0f`,
+              }}>
+                {/* Top row — kind + window badge + date */}
+                <div className="flex items-center justify-between gap-2 px-4 py-2 flex-wrap" style={{
+                  borderBottom: `1px solid ${C.navyLight}44`,
+                  background: `${C.navyLight}1a`,
+                }}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {kindChip(tx.kind)}
+                    {windowBadge(tx.windowType)}
+                  </div>
+                  <div className="font-mono flex items-center gap-3" style={{
+                    fontSize: 10, letterSpacing: '0.15em', color: `${C.brandNavy}99`,
+                  }}>
+                    <span>{fmtDate(tx.createdAt)}</span>
+                    {tx.season && <span style={{ color: C.goldLight }}>• {tx.season}</span>}
+                    {isAdminUser && (
+                      <>
+                        <button
+                          onClick={() => setEditingWindow(tx)}
+                          className="px-2 py-0.5 rounded"
+                          style={{ background: `${C.navyLight}66`, color: C.brandNavy, fontSize: 9 }}
+                        >◆ WINDOW</button>
+                        <button
+                          onClick={() => deleteTransfer(tx)}
+                          className="px-2 py-0.5 rounded"
+                          style={{ background: `${C.red}22`, color: C.redLight, fontSize: 9 }}
+                        >DEL</button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Main row — player + FROM team → TO team */}
+                <div className="px-4 py-3 flex items-center gap-3 flex-wrap">
+                  <div className="font-display tracking-wider shrink-0 flex items-center gap-2" style={{
+                    color: C.brandNavyDeep, fontSize: 18,
+                  }}>
+                    <User size={16} style={{ color: `${C.brandNavy}77` }} />
+                    {tx.playerUsername}
+                  </div>
+                  <div className="flex items-center gap-3 flex-1 flex-wrap">
+                    <TeamChip teamId={tx.fromTeamId} />
+                    <div className="font-display shrink-0" style={{
+                      fontSize: 18, color: `${C.brandNavy}66`, letterSpacing: '0.1em',
+                    }}>→</div>
+                    <TeamChip teamId={tx.toTeamId} />
+                  </div>
+                </div>
+
+                {/* Window edit picker inline */}
+                {editingWindow && editingWindow.id === tx.id && (
+                  <div className="px-4 py-3 flex items-center gap-2 flex-wrap" style={{
+                    borderTop: `1px solid ${C.navyLight}44`,
+                    background: `${C.gold}0a`,
+                  }}>
+                    <span className="font-mono text-[10px] tracking-widest" style={{ color: C.brandNavy }}>
+                      TAG WINDOW:
+                    </span>
+                    <button onClick={() => setWindow(tx, null)}
+                      className="px-2 py-1 font-mono text-[10px] tracking-widest rounded"
+                      style={!tx.windowType
+                        ? { background: C.green, color: C.onColor }
+                        : { background: `${C.navyLight}66`, color: C.brandNavy }
+                      }>NONE</button>
+                    <button onClick={() => setWindow(tx, 'league')}
+                      className="px-2 py-1 font-mono text-[10px] tracking-widest rounded"
+                      style={tx.windowType === 'league'
+                        ? { background: C.brandNavy, color: C.onColor }
+                        : { background: `${C.navyLight}66`, color: C.brandNavy }
+                      }>LEAGUE WINDOW</button>
+                    <button onClick={() => setWindow(tx, 'cross_league')}
+                      className="px-2 py-1 font-mono text-[10px] tracking-widest rounded"
+                      style={tx.windowType === 'cross_league'
+                        ? { background: C.gold, color: C.brandNavyDeep }
+                        : { background: `${C.navyLight}66`, color: C.brandNavy }
+                      }>CROSS-LEAGUE WINDOW</button>
+                    <button onClick={() => setEditingWindow(null)}
+                      className="px-2 py-1 font-mono text-[10px] tracking-widest rounded"
+                      style={{ background: `${C.red}22`, color: C.redLight }}>CLOSE</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ============ STATS VIEW (sortable NHL-style table) ============
 // Shows every player with every tracked stat in a sortable table.
 // Click a column header to sort by it; click again to flip asc/desc.
@@ -5923,12 +6204,24 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
       if (player && !player.teamId && player.strikersId) {
         if (!finalMembers.includes(player.username)) finalMembers.push(player.username);
         await db.saveAccount({ ...player, teamId: team.id });
+        // Log as a signing (FA → team) in the transfer market
+        try { await db.logTransfer({
+          playerUsername: player.username,
+          fromTeamId: null, toTeamId: team.id,
+          season: currentSeason, createdBy: account.username,
+        }); } catch (e) { console.error('transfer log failed:', e); }
       }
     }
     // The owner variable is already loaded above (for the strikersId check).
     // Make sure their teamId is set to this team.
     if (owner && owner.teamId !== team.id) {
+      const prevTeamId = owner.teamId;
       await db.saveAccount({ ...owner, teamId: team.id });
+      try { await db.logTransfer({
+        playerUsername: owner.username,
+        fromTeamId: prevTeamId || null, toTeamId: team.id,
+        season: currentSeason, createdBy: account.username,
+      }); } catch (e) { console.error('transfer log failed:', e); }
     }
     await db.saveTeam({
       ...team,
@@ -6034,7 +6327,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
       )}
 
       {section === 'players' && (
-        <PlayersManager allPlayers={allPlayers} allTeams={allTeams} onRefresh={refresh} />
+        <PlayersManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
       )}
 
       {section === 'totw' && (
@@ -7984,7 +8277,7 @@ const TotwManager = ({ allPlayers = [], onRefresh }) => {
 
 
 // ============ PLAYERS MANAGER (admin: rename players, change teams) ============
-const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
+const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S1', onRefresh }) => {
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState(null);   // account being renamed
   const [newName, setNewName] = useState('');
@@ -8088,6 +8381,17 @@ const PlayersManager = ({ allPlayers, allTeams = [], onRefresh }) => {
       }
       // 3. Update the player's teamId
       await db.saveAccount({ ...player, teamId: newTeamId || null });
+
+      // 4. Log the move in the transfer market
+      try {
+        await db.logTransfer({
+          playerUsername: player.username,
+          fromTeamId: oldTeamId,
+          toTeamId: newTeamId || null,
+          season: currentSeason,
+          createdBy: account?.username || 'admin',
+        });
+      } catch (e) { console.error('transfer log failed:', e); }
 
       const label = newTeamId ? (teamById(newTeamId)?.name || 'team') : 'Free Agent';
       setInfo(`✓ ${player.username} → ${label}`);
@@ -10493,7 +10797,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const VIEW_TO_PATH = {
     home: '/', card: '/card', teams: '/teams', leaderboard: '/leaderboard',
     news: '/news', hof: '/hof', standings: '/standings', schedule: '/schedule',
-    tiers: '/tiers', rules: '/rules', admin: '/admin',
+    transfers: '/transfers', tiers: '/tiers', rules: '/rules', admin: '/admin',
   };
   const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
   const viewFromPath = () => {
@@ -10621,6 +10925,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   // Reference tabs (less frequently visited). Live under a MORE dropdown
   // but still have real URLs that work when visited directly.
   const moreTabs = [
+    { id: 'transfers', label: 'TRANSFER MARKET', icon: Swords },
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },
     { id: 'rules', label: 'RULES', icon: BookOpen },
@@ -11054,6 +11359,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         {view === 'standings' && <StandingsView />}
 
         {view === 'schedule' && <ScheduleView account={account} />}
+
+        {view === 'transfers' && <TransfersView account={account} />}
 
         {view === 'rules' && <RulesView onJump={setView} />}
 

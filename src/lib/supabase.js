@@ -703,4 +703,71 @@ export const db = {
     const { error } = await supabase.from('scheduled_matches').delete().eq('season', season);
     if (error) { console.error(error); throw error; }
   },
+
+  // ============ TRANSFERS ============
+  _rowToTransfer(r) {
+    return {
+      id: r.id,
+      season: r.season,
+      playerUsername: r.player_username,
+      fromTeamId: r.from_team_id || null,
+      toTeamId: r.to_team_id || null,
+      kind: r.kind,                      // 'signing' | 'transfer' | 'release'
+      windowType: r.window_type || null, // 'league' | 'cross_league' | null
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : null,
+      createdBy: r.created_by || null,
+    };
+  },
+
+  async listTransfers(season = null) {
+    let q = supabase.from('transfers').select('*').order('created_at', { ascending: false });
+    if (season) q = q.eq('season', season);
+    const { data, error } = await q;
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => this._rowToTransfer(r));
+  },
+
+  async saveTransfer(tx) {
+    const payload = {
+      id: tx.id || `tx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      season: tx.season,
+      player_username: (tx.playerUsername || '').toLowerCase(),
+      from_team_id: tx.fromTeamId || null,
+      to_team_id: tx.toTeamId || null,
+      kind: tx.kind,
+      window_type: tx.windowType || null,
+      created_by: tx.createdBy || null,
+    };
+    const { data, error } = await supabase
+      .from('transfers')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToTransfer(data);
+  },
+
+  async deleteTransfer(id) {
+    const { error } = await supabase.from('transfers').delete().eq('id', id);
+    if (error) { console.error(error); throw error; }
+  },
+
+  // Convenience helper used by auto-log hooks. Call this whenever a player's
+  // teamId changes to record it as a transfer. kind is derived from the
+  // from/to team IDs.
+  async logTransfer({ playerUsername, fromTeamId, toTeamId, season, createdBy, windowType = null }) {
+    if (!playerUsername) return null;
+    // No-op if the team didn't actually change
+    const from = fromTeamId || null;
+    const to = toTeamId || null;
+    if (from === to) return null;
+    let kind;
+    if (!from && to) kind = 'signing';
+    else if (from && !to) kind = 'release';
+    else kind = 'transfer';
+    return this.saveTransfer({
+      playerUsername, fromTeamId: from, toTeamId: to,
+      season: season || 'S1', kind, windowType, createdBy,
+    });
+  },
 };

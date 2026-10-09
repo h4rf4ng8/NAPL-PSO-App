@@ -424,8 +424,8 @@ const DEFAULT_POSITION_WEIGHTS = {
   CM:   { assistsPerGame: 0.35, passesPerGame: 0.30, goalsPerGame: 0.15, tacklesPerGame: 0.20 },
   DEF:  { tacklesPerGame: 0.55, assistsPerGame: 0.15, passesPerGame: 0.20, goalsPerGame: 0.10 },
   GK:   { deflectsPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
-  // FLEX: equal blend of attack and defense for players who play multiple roles
-  FLEX: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.30, passesPerGame: 0.20 },
+  // FLEX: true even split (25% × 4) for players who play multiple roles
+  FLEX: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.25, passesPerGame: 0.25 },
 };
 
 // Human-readable labels for each stat key (used in the weightings editor UI)
@@ -477,8 +477,9 @@ const calcRankings = (allPlayers, customWeights = null) => {
   const result = new Map();
   // Use custom weights if provided, else the defaults
   const weightsByPos = customWeights || DEFAULT_POSITION_WEIGHTS;
-  // Group players by position
-  const byPos = { ST: [], CM: [], DEF: [], GK: [] };
+  // Group players by position. FLEX gets its own pool with its own weights
+  // so FLEX players don't go unranked.
+  const byPos = { ST: [], CM: [], DEF: [], GK: [], FLEX: [] };
   allPlayers.forEach(p => {
     if (byPos[p.position]) byPos[p.position].push(p);
   });
@@ -10405,9 +10406,15 @@ const ResultRow = ({ r, home, away }) => {
 // Sub-nav uses URL paths /news, /articles, /articles/<slug> so sub-tabs are
 // shareable and browser back/forward works naturally.
 const NewsHub = ({ account, allTeams, dynamicAdmins = [] }) => {
-  // Detect which sub-view to show based on the current URL.
+  // Detect sub-view from hash (hash routing — see Dashboard for context).
+  const readPath = () => {
+    const h = window.location.hash || '';
+    if (!h || h === '#') return '/';
+    const stripped = h.startsWith('#/') ? h.slice(1) : h.slice(1);
+    return stripped.replace(/\/+$/, '') || '/';
+  };
   const detect = () => {
-    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    const path = readPath();
     if (path === '/articles') return { sub: 'articles', slug: null };
     const m = path.match(/^\/articles\/([^/]+)$/);
     if (m) return { sub: 'articles', slug: m[1] };
@@ -10415,19 +10422,20 @@ const NewsHub = ({ account, allTeams, dynamicAdmins = [] }) => {
   };
   const [state, setState] = useState(detect);
 
-  // Keep sub-state in sync when the browser back/forward buttons fire
+  // Keep sub-state in sync when the hash changes (back/forward, nav clicks, etc.)
   useEffect(() => {
-    const onPop = () => setState(detect());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    const onHash = () => setState(detect());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const goTo = (sub, slug = null) => {
     const path = sub === 'news' ? '/news'
       : slug ? `/articles/${slug}`
       : '/articles';
-    if (window.location.pathname !== path) {
-      window.history.pushState({}, '', path);
+    const newHash = '#' + path;
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
     }
     setState({ sub, slug });
   };
@@ -11368,46 +11376,55 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   // Map between URL path and view id. Only tabs that make sense as
   // shareable URLs are listed; others (like admin sub-sections) stay
   // in local state and don't get their own URL.
+  // ============ HASH ROUTING ============
+  // URLs use `#/path` instead of `/path`. The hash never reaches the server,
+  // so Vercel always serves index.html and the app reads window.location.hash
+  // to decide which view to show. This means:
+  //  - Refresh always works (no 404s from the server)
+  //  - No vercel.json SPA rewrite needed
+  //  - Direct links like alliancestrikersleague.com/#/tiers work
+  //  - Browser back/forward works via hashchange events
   const VIEW_TO_PATH = {
     home: '/', card: '/card', teams: '/teams', leaderboard: '/leaderboard',
     news: '/news', hof: '/hof', standings: '/standings', schedule: '/schedule',
     transfers: '/transfers', tiers: '/tiers', rules: '/rules', admin: '/admin',
   };
   const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
+  // Extract the path portion from window.location.hash ('#/tiers' → '/tiers',
+  // '' or '#' → '/'). We tolerate both '#/path' and the old '#path' just in case.
+  const readHashPath = () => {
+    const h = window.location.hash || '';
+    if (!h || h === '#') return '/';
+    const stripped = h.startsWith('#/') ? h.slice(1) : h.slice(1);
+    return stripped.replace(/\/+$/, '') || '/';
+  };
   const viewFromPath = () => {
-    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    const path = readHashPath();
     if (PATH_TO_VIEW[path]) return PATH_TO_VIEW[path];
-    // Articles live inside the NEWS tab (sub-nav). /articles and /articles/:slug
-    // both route the main view to 'news' — ArticlesHub picks up the sub-state
-    // from window.location directly.
+    // Articles live inside the NEWS tab (sub-nav).
     if (path === '/articles' || path.startsWith('/articles/')) return 'news';
     return 'home';
   };
 
   const [view, _setView] = useState(viewFromPath);
-  // Wrapper: updates state AND pushes a new history entry so back/forward work.
-  // Always syncs URL to the view's canonical path — if the user is on
-  // /articles/foo (which maps to view='news' internally) and clicks NEWS in
-  // the main nav, we want to leave /articles/foo and go to /news, even
-  // though the view state is "already" 'news'. We also force the sub-view
-  // to reload by dispatching a popstate so NewsHub re-detects from the URL.
+  // Wrapper: updates state AND writes the hash so the URL stays in sync.
+  // Writing to location.hash fires a hashchange event, which triggers the
+  // listener below — so sub-routers (like NewsHub) pick up changes too.
   const setView = (next) => {
     const path = VIEW_TO_PATH[next] || '/';
-    const urlChanged = window.location.pathname !== path;
-    if (urlChanged) {
-      window.history.pushState({ view: next }, '', path);
-      // Fire a popstate so any sub-router (like NewsHub) picks up the new URL
-      window.dispatchEvent(new PopStateEvent('popstate'));
+    const newHash = '#' + path;
+    if (window.location.hash !== newHash) {
+      window.location.hash = newHash;
     }
     _setView(next);
   };
 
-  // Listen for back/forward button — sync view to whatever URL the browser
-  // is now on so the UI matches without full page reload.
+  // Listen for the user hitting back/forward OR any code changing the hash
+  // (like NewsHub.goTo). Keep view in sync with whatever hash is now shown.
   useEffect(() => {
-    const onPop = () => _setView(viewFromPath());
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    const onHash = () => _setView(viewFromPath());
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
   const [showLog, setShowLog] = useState(false);

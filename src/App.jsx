@@ -498,11 +498,12 @@ const calcRankings = (allPlayers, customWeights = null) => {
       pctFns[statKey] = makePercentileFn(values);
     }
 
-    // Score every player
+    // Score every player (eligible OR not — unranked players get entry with ranked:false)
+    const scored = []; // { username, overall, percentile, games } — ranked only, for rank calc below
     for (const p of players) {
       const games = p.stats?.games || 0;
       if (games < MIN_GAMES_FOR_RANKING) {
-        result.set(p.username.toLowerCase(), { score: 0, percentile: 0, ranked: false, gamesPlayed: games });
+        result.set(p.username.toLowerCase(), { score: 0, percentile: 0, ranked: false, gamesPlayed: games, tier: 'BRONZE' });
         continue;
       }
       const vals = playerStatValues(p);
@@ -512,8 +513,25 @@ const calcRankings = (allPlayers, customWeights = null) => {
       }
       // score is 0..1 — convert to a 0..100 "overall" number
       const overall = Math.round(score * 100);
-      result.set(p.username.toLowerCase(), { score: overall, percentile: score, ranked: true, gamesPlayed: games });
+      scored.push({ username: p.username.toLowerCase(), overall, percentile: score, games });
     }
+    // Rank-based tier assignment within this position pool. #1 ranked = top X%
+    // etc, so the best player in each position is always Diamond regardless
+    // of how high or low their absolute score is.
+    scored.sort((a, b) => b.overall - a.overall);
+    const n = scored.length;
+    scored.forEach((s, idx) => {
+      const topFraction = (idx + 1) / n;
+      let tier;
+      if (topFraction <= 0.10) tier = 'DIAMOND';
+      else if (topFraction <= 0.30) tier = 'GOLD';
+      else if (topFraction <= 0.60) tier = 'SILVER';
+      else tier = 'BRONZE';
+      result.set(s.username, {
+        score: s.overall, percentile: s.percentile, ranked: true,
+        gamesPlayed: s.games, tier,
+      });
+    });
   }
   return result;
 };
@@ -534,10 +552,13 @@ const tierFromPercentile = (percentile) => {
   return 'BRONZE';
 };
 
-// Convenience: look up tier for an account using its ranking entry.
+// Convenience: look up tier for an account using its stored ranking entry.
+// The tier is computed once in calcRankings based on the player's rank
+// within their position pool (so the top player is always Diamond, the next
+// ~20% are Gold, etc.). Just reads the stored value here.
 const tierForAccount = (account, ranking) => {
   if (!ranking?.ranked) return 'BRONZE';
-  return tierFromPercentile(ranking.percentile || 0);
+  return ranking.tier || tierFromPercentile(ranking.percentile || 0);
 };
 
 // Look up a player's ranking; falls back to legacy formula if rankings unavailable
@@ -4722,14 +4743,13 @@ const StatsView = ({ allPlayers = [], allTeams = [], rankings = {}, onPlayerClic
         const s = getStatsForSeason(p, seasonFilter);
         const g = s.goals || 0;
         const a = s.assists || 0;
-        // OVR for the selected season — recomputed from that season's stats
-        // so sorting by OVR reflects form during that season, not all-time.
-        const attrs = calcAttributes(s, p.position);
-        // rankings is a Map keyed by lowercase username, holding { score, ... }
+        // OVR always comes from the player's all-time percentile ranking so
+        // the STATS table matches the OVR shown on each player's card.
+        // (Per-season "form" OVRs would need their own ranking pool — not
+        // worth the complexity for now; the season filter still filters
+        // every other stat column, just not the OVR itself.)
         const rankingEntry = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
-        const ovr = seasonFilter === 'all'
-          ? (rankingEntry?.score || 0)
-          : calcOverall(attrs, p.position);
+        const ovr = rankingEntry?.score || 0;
         return {
           player: p,
           team: teamByUsername(p.username),

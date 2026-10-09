@@ -515,17 +515,22 @@ const calcRankings = (allPlayers, customWeights = null) => {
       const overall = Math.round(score * 100);
       scored.push({ username: p.username.toLowerCase(), overall, percentile: score, games });
     }
-    // Rank-based tier assignment within this position pool. #1 ranked = top X%
-    // etc, so the best player in each position is always Diamond regardless
-    // of how high or low their absolute score is.
+    // Rank-based tier assignment within this position pool using ceiling
+    // buckets, so even with a tiny pool (1-3 players) the top ranked player
+    // always gets Diamond. For large pools this still approximates
+    // 10% Diamond / 20% Gold / 30% Silver / 40% Bronze.
     scored.sort((a, b) => b.overall - a.overall);
     const n = scored.length;
+    // Count per tier — minimum 1 Diamond, 1 Gold, 1 Silver when the pool
+    // is big enough. Bronze catches the remainder (can be 0).
+    const nDiamond = Math.max(1, Math.ceil(n * 0.10));
+    const nGold    = n > 1 ? Math.max(1, Math.ceil(n * 0.20)) : 0;
+    const nSilver  = n > 2 ? Math.max(1, Math.ceil(n * 0.30)) : 0;
     scored.forEach((s, idx) => {
-      const topFraction = (idx + 1) / n;
       let tier;
-      if (topFraction <= 0.10) tier = 'DIAMOND';
-      else if (topFraction <= 0.30) tier = 'GOLD';
-      else if (topFraction <= 0.60) tier = 'SILVER';
+      if (idx < nDiamond) tier = 'DIAMOND';
+      else if (idx < nDiamond + nGold) tier = 'GOLD';
+      else if (idx < nDiamond + nGold + nSilver) tier = 'SILVER';
       else tier = 'BRONZE';
       result.set(s.username, {
         score: s.overall, percentile: s.percentile, ranked: true,
@@ -9579,7 +9584,7 @@ const AdminsManager = ({ account, allPlayers, dynamicAdmins, onRefresh }) => {
 // ============ SHAREABLE CARD MODAL ============
 // Renders the player card (an SVG) to a PNG entirely in-browser, with no
 // external libraries: serialize the SVG, draw it onto a <canvas>, export.
-const ShareableCardModal = ({ account, team, onClose }) => {
+const ShareableCardModal = ({ account, team, onClose, rankings = null }) => {
   const cardRef = useRef(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -9722,7 +9727,7 @@ const ShareableCardModal = ({ account, team, onClose }) => {
       background: `${C.black}dd`, backdropFilter: 'blur(8px)',
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-center gap-4 fade-in">
-        <PlayerCard ref={cardRef} account={account} size="lg" team={team} />
+        <PlayerCard ref={cardRef} account={account} size="lg" team={team} rankings={rankings} />
 
         <div className="flex flex-wrap gap-2 justify-center">
           <button
@@ -11971,11 +11976,12 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
       {showEditPos && <EditPositionModal account={account} onClose={() => setShowEditPos(false)} onSave={onUpdate} />}
       {showEditName && <EditNameModal account={account} onClose={() => setShowEditName(false)} onSave={onUpdate} />}
       {showUpload && <UploadImageModal account={account} onClose={() => setShowUpload(false)} onSave={onUpdate} />}
-      {showShare && <ShareableCardModal account={accountForCard} team={myTeam} onClose={() => setShowShare(false)} />}
+      {showShare && <ShareableCardModal account={accountForCard} team={myTeam} rankings={rankings} onClose={() => setShowShare(false)} />}
       {selectedPlayer && (
         <ShareableCardModal
           account={selectedPlayer}
           team={selectedPlayer._team}
+          rankings={rankings}
           onClose={() => setSelectedPlayer(null)}
         />
       )}

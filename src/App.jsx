@@ -4712,8 +4712,10 @@ const StatsView = ({ allPlayers = [], allTeams = [], rankings = {}, onPlayerClic
         // OVR for the selected season — recomputed from that season's stats
         // so sorting by OVR reflects form during that season, not all-time.
         const attrs = calcAttributes(s, p.position);
+        // rankings is a Map keyed by lowercase username, holding { score, ... }
+        const rankingEntry = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
         const ovr = seasonFilter === 'all'
-          ? (rankings?.[p.username]?.overall || 0)
+          ? (rankingEntry?.score || 0)
           : calcOverall(attrs, p.position);
         return {
           player: p,
@@ -4951,7 +4953,11 @@ const resolveLineup = (team, members, rankings) => {
     const pos = p.position || 'CM';
     if (buckets[pos]) buckets[pos].push(p); else buckets.CM.push(p);
   });
-  const byOvr = (a, b) => (rankings?.[b.username]?.overall || 0) - (rankings?.[a.username]?.overall || 0);
+  const ovrOf = (p) => {
+    const e = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
+    return e?.score || 0;
+  };
+  const byOvr = (a, b) => ovrOf(b) - ovrOf(a);
   Object.keys(buckets).forEach(k => buckets[k].sort(byOvr));
   return {
     GK: buckets.GK[0] || null,
@@ -11019,8 +11025,8 @@ const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
     }
     // Sort each list by overall rating (highest first) so star players show on top
     const sortFn = (a, b) => {
-      const ra = rankings?.[a.username]?.overall || 0;
-      const rb = rankings?.[b.username]?.overall || 0;
+      const ra = rankings?.get ? (rankings.get(a.username.toLowerCase())?.score || 0) : 0;
+      const rb = rankings?.get ? (rankings.get(b.username.toLowerCase())?.score || 0) : 0;
       return rb - ra;
     };
     Object.keys(result).forEach(pos => result[pos].sort(sortFn));
@@ -11145,7 +11151,7 @@ const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }) => {
               <div className="space-y-1 max-h-72 overflow-y-auto">
                 {list.map(p => {
                   const isPicked = picked === p.username;
-                  const ov = rankings?.[p.username]?.overall || 0;
+                  const ov = rankings?.get ? (rankings.get(p.username.toLowerCase())?.score || 0) : 0;
                   const s = p.stats || {};
                   return (
                     <button

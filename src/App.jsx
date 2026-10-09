@@ -518,35 +518,26 @@ const calcRankings = (allPlayers, customWeights = null) => {
   return result;
 };
 
-// Tier is based on each player's ABSOLUTE performance (via calcAttributes
-// averaged into an OVR), not their percentile within the pool. This keeps
-// early-season tiers meaningful — a player who scored 2 goals in their
-// debut should look like a star, not a forced "bronze" because the pool is
-// small. Diamond is still rare (80+ ≈ elite performance); Bronze means
-// genuinely weak numbers, not just "below average in a tiny pool".
-//
-// Thresholds (OVR 0-99):
-//   Diamond ≥ 80, Gold 68-79, Silver 55-67, Bronze < 55
-// Takes the ranking entry (for games count) + the account itself so we can
-// compute the raw performance OVR off the actual stats.
-const tierForAccount = (account, ranking) => {
-  if (!ranking?.ranked) return 'BRONZE'; // 0-game accounts stay bronze
-  const attrs = calcAttributes(account.stats || {}, account.position);
-  const perf = calcOverall(attrs, account.position); // 40-99
-  if (perf >= 80) return 'DIAMOND';
-  if (perf >= 68) return 'GOLD';
-  if (perf >= 55) return 'SILVER';
-  return 'BRONZE';
-};
-
-// Legacy percentile → tier (kept for Tier Preview and anywhere that passes
-// an explicit percentile rather than an account). Prefer tierForAccount
-// when you have the account available.
+// Tiers are percentile-based against the pool of players who have actually
+// played at least one match (MIN_GAMES_FOR_RANKING). The pool grows naturally
+// as more players join — early on, with say 10 players, "top 10%" is 1
+// Diamond; later with 40 players it's 4 Diamonds. Position pools are separate
+// so a GK ranks against GKs, a ST against STs.
+//   Diamond = top 10%
+//   Gold    = next 20%
+//   Silver  = next 30%
+//   Bronze  = bottom 40%
 const tierFromPercentile = (percentile) => {
   if (percentile >= 0.90) return 'DIAMOND';
   if (percentile >= 0.70) return 'GOLD';
   if (percentile >= 0.40) return 'SILVER';
   return 'BRONZE';
+};
+
+// Convenience: look up tier for an account using its ranking entry.
+const tierForAccount = (account, ranking) => {
+  if (!ranking?.ranked) return 'BRONZE';
+  return tierFromPercentile(ranking.percentile || 0);
 };
 
 // Look up a player's ranking; falls back to legacy formula if rankings unavailable

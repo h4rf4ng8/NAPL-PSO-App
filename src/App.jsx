@@ -4269,6 +4269,407 @@ const TransfersView = ({ account }) => {
   );
 };
 
+// ============ ARTICLES ============
+// Long-form content lives here (match recaps, interviews, feature pieces).
+// Admin-only authoring. Each article has a URL-friendly slug for sharing
+// (/articles/the-article-slug). Separate from the news feed which is for
+// quick updates and announcements.
+
+// Slug generator — reduces a title to URL-safe lowercase-with-dashes.
+const slugify = (text) =>
+  String(text || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 80);
+
+// Auto-generate a short preview from the body if no excerpt is set
+const autoExcerpt = (body, limit = 160) => {
+  const plain = String(body || '')
+    .replace(/[#*`_]+/g, '')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return plain.length > limit ? plain.slice(0, limit).trimEnd() + '…' : plain;
+};
+
+const readTime = (body) => {
+  const words = String(body || '').split(/\s+/).filter(Boolean).length;
+  return Math.max(1, Math.round(words / 200));
+};
+
+// Article compose/edit modal — admin only
+const ArticleEditorModal = ({ article, defaultAuthor, onClose, onSaved }) => {
+  const isNew = !article;
+  const [title, setTitle] = useState(article?.title || '');
+  const [slug, setSlug] = useState(article?.slug || '');
+  const [coverImageUrl, setCoverImageUrl] = useState(article?.coverImageUrl || '');
+  const [author, setAuthor] = useState(article?.author || defaultAuthor || '');
+  const [body, setBody] = useState(article?.body || '');
+  const [excerpt, setExcerpt] = useState(article?.excerpt || '');
+  const [slugTouched, setSlugTouched] = useState(!!article);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  // When the user types a title, auto-fill the slug — but stop auto-filling
+  // once they manually edit the slug (so their custom slug isn't overwritten).
+  useEffect(() => {
+    if (!slugTouched) setSlug(slugify(title));
+  }, [title, slugTouched]);
+
+  const handleSave = async () => {
+    setErr('');
+    if (!title.trim()) { setErr('Title is required.'); return; }
+    if (!slug.trim()) { setErr('Slug is required.'); return; }
+    if (!body.trim()) { setErr('Body cannot be empty.'); return; }
+    setBusy(true);
+    try {
+      await db.saveArticle({
+        ...(article || {}),
+        title: title.trim(),
+        slug: slug.trim(),
+        coverImageUrl: coverImageUrl.trim(),
+        author: author.trim().toLowerCase(),
+        body,
+        excerpt: excerpt.trim(),
+      });
+      onSaved && onSaved();
+      onClose && onClose();
+    } catch (e) {
+      setErr('Could not save: ' + (e?.message || e));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <ModalShell title={isNew ? 'NEW ARTICLE' : 'EDIT ARTICLE'} onClose={onClose} maxWidth="max-w-3xl">
+      <div className="space-y-3">
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>TITLE *</label>
+          <input
+            type="text" value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Season 1 Opening Weekend Recap"
+            className="w-full px-3 py-2 font-display tracking-wider rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream, fontSize: 20 }}
+          />
+        </div>
+
+        <div className="grid sm:grid-cols-2 gap-2">
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>URL SLUG *</label>
+            <input
+              type="text" value={slug}
+              onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
+              placeholder="season-1-opening-weekend-recap"
+              className="w-full px-3 py-2 font-mono text-sm rounded"
+              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+            />
+            <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
+              → /articles/{slug || 'your-slug'}
+            </div>
+          </div>
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>AUTHOR</label>
+            <input
+              type="text" value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              className="w-full px-3 py-2 font-mono text-sm rounded"
+              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>COVER IMAGE URL</label>
+          <input
+            type="url" value={coverImageUrl}
+            onChange={(e) => setCoverImageUrl(e.target.value)}
+            placeholder="https://... (external URL to the hero image)"
+            className="w-full px-3 py-2 font-mono text-xs rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
+            Optional. Hosted somewhere accessible (Discord CDN, Imgur, etc.).
+          </div>
+          {coverImageUrl && (
+            <img src={coverImageUrl} alt="Cover preview" className="mt-2 rounded max-h-32 object-cover"
+              style={{ border: `1px solid ${C.navyLight}66` }} />
+          )}
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+            EXCERPT (OPTIONAL — AUTO FROM BODY IF BLANK)
+          </label>
+          <input
+            type="text" value={excerpt}
+            onChange={(e) => setExcerpt(e.target.value)}
+            placeholder="One-sentence preview shown on the articles list card"
+            className="w-full px-3 py-2 font-body text-sm rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
+          />
+        </div>
+
+        <div>
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+            BODY (MARKDOWN-LITE) *
+          </label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder={`## Heading\n\nParagraph with **bold** and *italic* text.\n\n- Bullet point\n- Another point\n\n### Sub-heading\n\nMore content.`}
+            rows={14}
+            className="w-full px-3 py-2 font-mono text-sm rounded"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream, fontFamily: 'JetBrains Mono, monospace' }}
+          />
+          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
+            Supports: ## heading, ### sub-heading, **bold**, *italic*, - bullets, 1. numbered lists, [link text](url), `code`.
+          </div>
+        </div>
+
+        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSave}
+            disabled={busy}
+            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
+            style={{ background: C.green, color: C.onColor }}
+          >{busy ? 'SAVING...' : (isNew ? 'PUBLISH ARTICLE' : 'SAVE CHANGES')}</button>
+          <button
+            onClick={onClose}
+            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
+            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
+          >CANCEL</button>
+        </div>
+      </div>
+    </ModalShell>
+  );
+};
+
+// Article detail — full-width hero image, title, metadata, body
+const ArticleDetailView = ({ slug, account, onBack }) => {
+  const [article, setArticle] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const isAdminUser = isAdmin(account);
+
+  const refresh = async () => {
+    setLoading(true);
+    const a = await db.getArticleBySlug(slug);
+    setArticle(a);
+    setLoading(false);
+  };
+  useEffect(() => { refresh(); }, [slug]);
+
+  const handleDelete = async () => {
+    if (!confirm(`Delete this article permanently?`)) return;
+    try { await db.deleteArticle(article.id); onBack && onBack(); }
+    catch (e) { alert('Could not delete: ' + (e?.message || e)); }
+  };
+
+  if (loading) {
+    return <div className="text-center py-10 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading article...</div>;
+  }
+  if (!article) {
+    return (
+      <div className="text-center py-10">
+        <div className="font-display text-2xl mb-2" style={{ color: C.brandNavy }}>ARTICLE NOT FOUND</div>
+        <button onClick={onBack} className="font-mono text-xs underline tracking-wider" style={{ color: C.brandNavy }}>
+          ← back to articles
+        </button>
+      </div>
+    );
+  }
+  const pub = new Date(article.publishedAt);
+  const pubStr = pub.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+  return (
+    <div>
+      <button onClick={onBack} className="mb-4 font-mono text-xs tracking-widest flex items-center gap-1" style={{ color: C.brandNavy }}>
+        ← ALL ARTICLES
+      </button>
+
+      {article.coverImageUrl && (
+        <div className="rounded-xl overflow-hidden mb-6" style={{
+          border: `1px solid ${C.navyLight}66`,
+          boxShadow: `0 4px 24px ${C.brandNavy}22`,
+          background: `${C.navyLight}22`,
+        }}>
+          <img
+            src={article.coverImageUrl}
+            alt={article.title}
+            className="w-full object-cover"
+            style={{ maxHeight: 420 }}
+          />
+        </div>
+      )}
+
+      <h1 className="font-display tracking-wider mb-3" style={{
+        color: C.brandNavyDeep, fontSize: 42, lineHeight: 1.1, letterSpacing: '0.02em',
+      }}>
+        {article.title}
+      </h1>
+
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-5 pb-4" style={{ borderBottom: `1px solid ${C.navyLight}66` }}>
+        <div className="font-mono text-xs tracking-widest flex items-center gap-2" style={{ color: `${C.brandNavy}cc` }}>
+          <span style={{ color: C.goldLight }}>BY</span>
+          <span style={{ color: C.cream, fontWeight: 600 }}>{(article.author || '').toUpperCase()}</span>
+          <span>•</span>
+          <span>{pubStr}</span>
+          <span>•</span>
+          <span>{readTime(article.body)} MIN READ</span>
+        </div>
+        {isAdminUser && (
+          <div className="flex gap-2">
+            <button onClick={() => setEditing(true)}
+              className="px-3 py-1 font-mono text-[10px] tracking-widest rounded"
+              style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+            >EDIT</button>
+            <button onClick={handleDelete}
+              className="px-3 py-1 font-mono text-[10px] tracking-widest rounded"
+              style={{ background: `${C.red}33`, color: C.redLight }}
+            >DELETE</button>
+          </div>
+        )}
+      </div>
+
+      <div className="font-body" style={{ color: C.cream, fontSize: 17, lineHeight: 1.7 }}>
+        {renderRulesBody(article.body)}
+      </div>
+
+      {editing && (
+        <ArticleEditorModal
+          article={article}
+          onClose={() => setEditing(false)}
+          onSaved={refresh}
+        />
+      )}
+    </div>
+  );
+};
+
+// Articles list — card grid
+const ArticlesListView = ({ account, onOpenArticle }) => {
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [composing, setComposing] = useState(false);
+  const isAdminUser = isAdmin(account);
+
+  const refresh = async () => {
+    setLoading(true);
+    setArticles(await db.listArticles());
+    setLoading(false);
+  };
+  useEffect(() => { refresh(); }, []);
+
+  const fmtDate = (ms) => {
+    if (!ms) return '';
+    return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-3">
+          <BookOpen size={20} style={{ color: C.brandNavy }} />
+          <h2 className="font-display tracking-widest" style={{ color: C.brandNavyDeep, fontSize: 22, letterSpacing: '0.2em' }}>
+            FEATURE ARTICLES
+          </h2>
+        </div>
+        {isAdminUser && (
+          <button
+            onClick={() => setComposing(true)}
+            className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
+            style={{ background: C.green, color: C.onColor }}
+          ><Plus size={12} /> NEW ARTICLE</button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading articles...</div>
+      ) : articles.length === 0 ? (
+        <div className="text-center py-10 font-mono text-sm rounded" style={{
+          color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}66`,
+        }}>
+          No articles yet. {isAdminUser ? 'Click NEW ARTICLE to publish the first one.' : 'Admins will post longer-form articles here.'}
+        </div>
+      ) : (
+        // Horizontal article cards — image on the left, headline + preview on
+        // the right. Reads like a magazine/newspaper article list. Each card
+        // is a button, clicking anywhere opens the full article.
+        <div className="space-y-3">
+          {articles.map(a => (
+            <button key={a.id}
+              onClick={() => onOpenArticle(a.slug)}
+              className="w-full text-left rounded-xl overflow-hidden transition-all hover:-translate-y-0.5"
+              style={{
+                background: C.white,
+                border: `1px solid ${C.navyLight}66`,
+                boxShadow: `0 2px 8px ${C.brandNavy}11, 0 6px 16px ${C.brandNavy}0a`,
+              }}
+            >
+              <div className="flex items-stretch gap-0" style={{ minHeight: 150 }}>
+                {/* Left: cover image (or placeholder) */}
+                {a.coverImageUrl ? (
+                  <img src={a.coverImageUrl} alt={a.title}
+                    className="object-cover shrink-0"
+                    style={{ width: 200, alignSelf: 'stretch' }} />
+                ) : (
+                  <div className="shrink-0 flex items-center justify-center" style={{
+                    width: 200, alignSelf: 'stretch',
+                    background: `linear-gradient(135deg, ${C.brandNavy} 0%, ${C.brandNavyDeep} 100%)`,
+                  }}>
+                    <BookOpen size={44} style={{ color: `${C.goldLight}99` }} />
+                  </div>
+                )}
+                {/* Right: title + excerpt + metadata */}
+                <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
+                  <div>
+                    <h3 className="font-display tracking-wider mb-2" style={{
+                      color: C.brandNavyDeep, fontSize: 24, lineHeight: 1.15, letterSpacing: '0.02em',
+                    }}>
+                      {a.title}
+                    </h3>
+                    <p className="font-body" style={{
+                      color: `${C.cream}cc`, fontSize: 14, lineHeight: 1.55,
+                      display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>
+                      {a.excerpt || autoExcerpt(a.body, 220)}
+                    </p>
+                  </div>
+                  <div className="font-mono text-[10px] tracking-widest flex items-center gap-2 mt-3 flex-wrap" style={{ color: `${C.brandNavy}99` }}>
+                    <span style={{ color: C.goldLight, fontWeight: 700 }}>{(a.author || '').toUpperCase()}</span>
+                    <span>•</span>
+                    <span>{fmtDate(a.publishedAt)}</span>
+                    <span>•</span>
+                    <span>{readTime(a.body)} MIN READ</span>
+                    <span className="ml-auto flex items-center gap-1" style={{ color: C.brandNavy }}>
+                      READ <ChevronRight size={10} />
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {composing && (
+        <ArticleEditorModal
+          defaultAuthor={account?.username}
+          onClose={() => setComposing(false)}
+          onSaved={refresh}
+        />
+      )}
+    </div>
+  );
+};
+
 // ============ STATS VIEW (sortable NHL-style table) ============
 // Shows every player with every tracked stat in a sortable table.
 // Click a column header to sort by it; click again to flip asc/desc.
@@ -5316,6 +5717,11 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
   }, [allPlayers]);
 
   // ---------- STEP 1: parse uploaded file ----------
+  // Accepts BOTH the legacy flat Strikers Club export format and the newer
+  // nested one (where per-player stats live under `stats.players` with the
+  // top-level `players` holding only join/team/result info). Normalizes
+  // whichever shape it sees into the flat shape the rest of the flow
+  // expects so steps 2-4 don't need to change.
   const handleFile = async (file) => {
     setError('');
     if (!file) return;
@@ -5324,7 +5730,7 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
       let text;
       const buf = await file.arrayBuffer();
       const bytes = new Uint8Array(buf);
-      // Detect UTF-16 (Strikers Club exports are UTF-16 LE with BOM)
+      // Detect UTF-16 (Strikers Club exports are often UTF-16 LE with BOM)
       if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
         text = new TextDecoder('utf-16le').decode(bytes.slice(2));
       } else if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) {
@@ -5334,10 +5740,52 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
       } else {
         text = new TextDecoder('utf-8').decode(bytes);
       }
-      const data = JSON.parse(text);
-      if (!data.match_id || !Array.isArray(data.players)) {
-        throw new Error('File does not look like a Strikers Club match export (missing match_id or players).');
+      const raw = JSON.parse(text);
+
+      // Normalize into the shape the rest of the import flow expects:
+      //   { match_id, score: {home, away}, stadium, match_length, players: [{player_id, username, team, stats}] }
+      const matchId = raw.match_id || raw.id || raw.matchId;
+      if (!matchId) {
+        throw new Error('File has no match ID. Did you upload the right JSON?');
       }
+
+      let normalizedPlayers = null;
+      // NEW format: detailed per-player stats under stats.players (keyed by playerId)
+      if (raw.stats && Array.isArray(raw.stats.players)) {
+        normalizedPlayers = raw.stats.players
+          .filter(p => p.team === 'home' || p.team === 'away') // drop spectators ("none")
+          .map(p => ({
+            player_id: p.playerId ?? p.player_id,
+            username: p.username,
+            team: p.team,
+            stats: p.stats || {},
+          }));
+      }
+      // OLD format: flat players array with per-player stats inline
+      else if (Array.isArray(raw.players) && raw.players.some(p => p.stats)) {
+        normalizedPlayers = raw.players
+          .filter(p => p.team === 'home' || p.team === 'away')
+          .map(p => ({
+            player_id: p.player_id ?? p.playerId,
+            username: p.username,
+            team: p.team,
+            stats: p.stats || {},
+          }));
+      }
+
+      if (!normalizedPlayers || normalizedPlayers.length === 0) {
+        throw new Error('File has no player stats. Expected a players array with per-player stats.');
+      }
+
+      const score = raw.score || raw.stats?.score || {};
+      const data = {
+        match_id: matchId,
+        score: { home: score.home ?? 0, away: score.away ?? 0 },
+        stadium: raw.stadium || raw.stats?.stadium || '',
+        match_length: raw.match_length || raw.stats?.matchLength || 0,
+        players: normalizedPlayers,
+      };
+
       setMatchData(data);
       // Pre-fill player map: auto-match by strikersId when possible
       const initialMap = {};
@@ -9900,6 +10348,83 @@ const ResultRow = ({ r, home, away }) => {
 };
 
 // ============ NEWS VIEW ============
+// ============ NEWS HUB (news + articles sub-navigation) ============
+// Wraps the three sub-views that share the NEWS tab:
+//   - News feed (default)
+//   - Articles list
+//   - Article detail (opened by slug)
+// Sub-nav uses URL paths /news, /articles, /articles/<slug> so sub-tabs are
+// shareable and browser back/forward works naturally.
+const NewsHub = ({ account, allTeams, dynamicAdmins = [] }) => {
+  // Detect which sub-view to show based on the current URL.
+  const detect = () => {
+    const path = window.location.pathname.replace(/\/+$/, '') || '/';
+    if (path === '/articles') return { sub: 'articles', slug: null };
+    const m = path.match(/^\/articles\/([^/]+)$/);
+    if (m) return { sub: 'articles', slug: m[1] };
+    return { sub: 'news', slug: null };
+  };
+  const [state, setState] = useState(detect);
+
+  // Keep sub-state in sync when the browser back/forward buttons fire
+  useEffect(() => {
+    const onPop = () => setState(detect());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  const goTo = (sub, slug = null) => {
+    const path = sub === 'news' ? '/news'
+      : slug ? `/articles/${slug}`
+      : '/articles';
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path);
+    }
+    setState({ sub, slug });
+  };
+
+  return (
+    <div>
+      {/* Sub-tab navigation — only shown when NOT reading a specific article
+          (article detail has its own back button so sub-nav would be noise). */}
+      {!state.slug && (
+        <div className="mb-5 flex gap-1 rounded p-1 w-fit" style={{ background: `${C.navyLight}66` }}>
+          <button
+            onClick={() => goTo('news')}
+            className="px-4 py-1.5 font-heading tracking-widest text-xs rounded"
+            style={state.sub === 'news'
+              ? { background: C.brandNavy, color: C.onColor }
+              : { color: C.brandNavy }
+            }
+          >NEWS</button>
+          <button
+            onClick={() => goTo('articles')}
+            className="px-4 py-1.5 font-heading tracking-widest text-xs rounded"
+            style={state.sub === 'articles'
+              ? { background: C.brandNavy, color: C.onColor }
+              : { color: C.brandNavy }
+            }
+          >ARTICLES</button>
+        </div>
+      )}
+
+      {state.sub === 'news' && (
+        <NewsView account={account} allTeams={allTeams} dynamicAdmins={dynamicAdmins} />
+      )}
+      {state.sub === 'articles' && !state.slug && (
+        <ArticlesListView account={account} onOpenArticle={(slug) => goTo('articles', slug)} />
+      )}
+      {state.sub === 'articles' && state.slug && (
+        <ArticleDetailView
+          slug={state.slug}
+          account={account}
+          onBack={() => goTo('articles')}
+        />
+      )}
+    </div>
+  );
+};
+
 const NewsView = ({ account, allTeams, dynamicAdmins = [] }) => {
   const [subtab, setSubtab] = useState('matchups');
   const [news, setNews] = useState([]);
@@ -10802,21 +11327,30 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const PATH_TO_VIEW = Object.fromEntries(Object.entries(VIEW_TO_PATH).map(([v, p]) => [p, v]));
   const viewFromPath = () => {
     const path = window.location.pathname.replace(/\/+$/, '') || '/';
-    return PATH_TO_VIEW[path] || 'home';
+    if (PATH_TO_VIEW[path]) return PATH_TO_VIEW[path];
+    // Articles live inside the NEWS tab (sub-nav). /articles and /articles/:slug
+    // both route the main view to 'news' — ArticlesHub picks up the sub-state
+    // from window.location directly.
+    if (path === '/articles' || path.startsWith('/articles/')) return 'news';
+    return 'home';
   };
 
   const [view, _setView] = useState(viewFromPath);
-  // Wrapper: updates state AND pushes new history entry so back/forward work.
-  // Same view = no-op (avoids duplicate history entries on repeat clicks).
+  // Wrapper: updates state AND pushes a new history entry so back/forward work.
+  // Always syncs URL to the view's canonical path — if the user is on
+  // /articles/foo (which maps to view='news' internally) and clicks NEWS in
+  // the main nav, we want to leave /articles/foo and go to /news, even
+  // though the view state is "already" 'news'. We also force the sub-view
+  // to reload by dispatching a popstate so NewsHub re-detects from the URL.
   const setView = (next) => {
-    _setView(prev => {
-      if (prev === next) return prev;
-      const path = VIEW_TO_PATH[next] || '/';
-      if (window.location.pathname !== path) {
-        window.history.pushState({ view: next }, '', path);
-      }
-      return next;
-    });
+    const path = VIEW_TO_PATH[next] || '/';
+    const urlChanged = window.location.pathname !== path;
+    if (urlChanged) {
+      window.history.pushState({ view: next }, '', path);
+      // Fire a popstate so any sub-router (like NewsHub) picks up the new URL
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    _setView(next);
   };
 
   // Listen for back/forward button — sync view to whatever URL the browser
@@ -11364,7 +11898,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
 
         {view === 'rules' && <RulesView onJump={setView} />}
 
-        {view === 'news' && <NewsView account={account} allTeams={allTeams} dynamicAdmins={dynamicAdmins} />}
+        {view === 'news' && <NewsHub account={account} allTeams={allTeams} dynamicAdmins={dynamicAdmins} />}
 
         {/* VOTE TAB — only renders when a voting period is open */}
         {view === 'vote' && currentVotingPeriod && (

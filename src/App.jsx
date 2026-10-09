@@ -518,8 +518,30 @@ const calcRankings = (allPlayers, customWeights = null) => {
   return result;
 };
 
-// Tier from the new percentile-based score
-// Top 10% = Diamond, next 20% = Gold, next 30% = Silver, bottom 40% = Bronze
+// Tier is based on each player's ABSOLUTE performance (via calcAttributes
+// averaged into an OVR), not their percentile within the pool. This keeps
+// early-season tiers meaningful — a player who scored 2 goals in their
+// debut should look like a star, not a forced "bronze" because the pool is
+// small. Diamond is still rare (80+ ≈ elite performance); Bronze means
+// genuinely weak numbers, not just "below average in a tiny pool".
+//
+// Thresholds (OVR 0-99):
+//   Diamond ≥ 80, Gold 68-79, Silver 55-67, Bronze < 55
+// Takes the ranking entry (for games count) + the account itself so we can
+// compute the raw performance OVR off the actual stats.
+const tierForAccount = (account, ranking) => {
+  if (!ranking?.ranked) return 'BRONZE'; // 0-game accounts stay bronze
+  const attrs = calcAttributes(account.stats || {}, account.position);
+  const perf = calcOverall(attrs, account.position); // 40-99
+  if (perf >= 80) return 'DIAMOND';
+  if (perf >= 68) return 'GOLD';
+  if (perf >= 55) return 'SILVER';
+  return 'BRONZE';
+};
+
+// Legacy percentile → tier (kept for Tier Preview and anywhere that passes
+// an explicit percentile rather than an account). Prefer tierForAccount
+// when you have the account available.
 const tierFromPercentile = (percentile) => {
   if (percentile >= 0.90) return 'DIAMOND';
   if (percentile >= 0.70) return 'GOLD';
@@ -1013,7 +1035,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
     tierName = (overall >= 85) ? 'DIAMOND' : (overall >= 75) ? 'GOLD' : (overall >= 65) ? 'SILVER' : 'BRONZE';
   } else {
     overall = ranking.score;
-    tierName = ranking.ranked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
+    tierName = tierForAccount(account, ranking);
   }
   const tier = cardTier(tierName);
   const isUnranked = !ranking.ranked && !forceTier && forceOverall == null;
@@ -5082,7 +5104,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
     // which looks misleading on the pitch — show "NR" (Not Ranked) instead.
     const isRanked = !!ranking?.ranked;
     const ovr = isRanked ? (ranking.score || 0) : 'NR';
-    const tierName = isRanked ? tierFromPercentile(ranking.percentile) : 'BRONZE';
+    const tierName = isRanked ? tierForAccount(player, ranking) : 'BRONZE';
     const tier = cardTier(tierName);
     const ringColor = tier.from || C.goldLight;
     const ovrTextColor = tier.accent || C.navyDeep;

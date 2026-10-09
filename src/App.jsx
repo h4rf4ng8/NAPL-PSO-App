@@ -1026,16 +1026,17 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   const canFlip = size === 'lg'; // only the large card flips
   const [flipped, setFlipped] = useState(false);
 
-  // Until a player has played MIN_GAMES_FOR_RANKING games, the card shows 0
-  // for the overall and every stat — they haven't "earned" a rating yet.
-  // forceOverall/forceTier (Tier Preview, etc.) bypass this.
-  const showZeroStats = isUnranked;
-  const displayOverall = showZeroStats ? 0 : overall;
+  // Stats shown on the card are ALWAYS the player's real numbers — if they
+  // scored a goal, we show that goal, no matter how few games they've played.
+  // Only the OVR is withheld until MIN_GAMES_FOR_RANKING: showing a position-
+  // relative overall before someone has a meaningful sample would be noise.
+  // forceOverall/forceTier (Tier Preview, etc.) bypass the "NR" guard.
   const emptyDisplayStats = {
     goals: 0, assists: 0, passes: 0, tackles: 0,
     deflects: 0, catches: 0, cleanSheets: 0, games,
   };
-  const displayStats = showZeroStats ? emptyDisplayStats : (account.stats || emptyDisplayStats);
+  const displayStats = account.stats || emptyDisplayStats;
+  const displayOverall = isUnranked ? 'NR' : overall;
 
   // v33 palette — metallic body with light/mid/dark/shadow stops for the
   // brushed-metal gradient, plus a separate panel palette for the stats area
@@ -1173,8 +1174,9 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
         <text x="47" y="78" fontFamily="Anton, sans-serif" fontSize="22" fill="#2196f3" textAnchor="middle" letterSpacing="2.5" style={{ paintOrder: 'stroke', stroke: '#0d47a1', strokeWidth: 0.9 }}>TOTW</text>
       )}
 
-      {/* 5. OVR + POS + FLAG + TEAM (left column, centered at x=47) */}
-      <text x="47" y={ovrY} fontFamily="Anton, sans-serif" fontSize="42" fill={palette.text} textAnchor="middle" letterSpacing="-0.5">{displayOverall}</text>
+      {/* 5. OVR + POS + FLAG + TEAM (left column, centered at x=47).
+          NR (not ranked) uses a smaller font size since it's text, not a 2-digit number. */}
+      <text x="47" y={ovrY} fontFamily="Anton, sans-serif" fontSize={displayOverall === 'NR' ? 28 : 42} fill={palette.text} textAnchor="middle" letterSpacing="-0.5">{displayOverall}</text>
       <text x="47" y={posY} fontFamily="Anton, sans-serif" fontSize="18" fill={palette.text} textAnchor="middle" letterSpacing="2">{account.position}</text>
 
       {account.country && flagUrl(account.country) && (
@@ -1377,7 +1379,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       </g>
       <text x="160" y="38" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 16)}</text>
       <text x="160" y="60" fontFamily="Russo One, sans-serif" fontSize="11" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5" opacity="0.85">
-        {account.position} · {displayOverall} OVR{isTotw ? ' · TOTW' : ''}
+        {account.position} · {displayOverall === 'NR' ? 'NOT RANKED' : `${displayOverall} OVR`}{isTotw ? ' · TOTW' : ''}
       </text>
 
       {/* TROPHY CABINET section */}
@@ -11389,7 +11391,8 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
   const [currentVotingPeriod, setCurrentVotingPeriod] = useState(null);
 
   const refresh = async () => {
-    setAllPlayers(await db.listAccounts());
+    const fresh = await db.listAccounts();
+    setAllPlayers(fresh);
     setAllTeams(await db.listTeams());
     setCurrentSeason(await db.getSeason());
     setDynamicAdmins(await db.getAdminList());
@@ -11401,6 +11404,12 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     const periods = await db.listTotwPeriods();
     const open = periods.find(p => p.status === 'open' && Date.now() < p.closesAt);
     setCurrentVotingPeriod(open || null);
+    // Also update the signed-in user's own account record so MY CARD + their
+    // own OVR reflects freshly-imported matches without needing a hard refresh.
+    if (account && onUpdate) {
+      const my = fresh.find(a => a.id === account.id || (a.username && account.username && a.username.toLowerCase() === account.username.toLowerCase()));
+      if (my) onUpdate(my);
+    }
   };
   useEffect(() => { refresh(); }, [account]);
 

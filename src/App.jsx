@@ -411,7 +411,10 @@ const calcOverall = (attrs, position) => {
 // Each player's tier is determined by how their per-game stats rank against
 // other players AT THE SAME POSITION. Different stats matter for different positions.
 
-const MIN_GAMES_FOR_RANKING = 3;
+// Threshold is set to 1 so a player gets ranked as soon as they have any
+// imported match. Set to 0 to rank everyone (including 0-game accounts,
+// which will all share the ~52 baseline). Set higher to require a sample.
+const MIN_GAMES_FOR_RANKING = 1;
 
 // Per-position stat weights (must sum to 1.0 each). These are the DEFAULTS —
 // super admins can override them via ADMIN → WEIGHTINGS, stored in the DB.

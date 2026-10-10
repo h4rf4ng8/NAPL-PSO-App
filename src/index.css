@@ -230,30 +230,25 @@ html[data-theme="dark"] textarea {
   align-items: flex-start;
   justify-content: center;
 }
+/* Icon stays STATIC on hover — don't resize/translate it or the hitbox
+   shifts and hover state oscillates (= glitch/flicker). */
 .asl-formation-icon {
-  transition: transform 0.15s ease;
+  /* no transition on hover */
 }
 .asl-formation-preview {
   position: absolute;
   bottom: calc(100% + 6px);
   left: 50%;
-  transform: translateX(-50%) scale(0.85);
-  transform-origin: bottom center;
+  transform: translateX(-50%);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.4, 0.1, 0.2, 1);
+  transition: opacity 0.12s ease-out;
   z-index: 40;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.6));
 }
 .asl-formation-slot:hover .asl-formation-preview,
 .asl-formation-slot:focus-visible .asl-formation-preview {
   opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
-.asl-formation-slot:hover .asl-formation-icon,
-.asl-formation-slot:focus-visible .asl-formation-icon {
-  transform: translateY(2px);
-  opacity: 0.5;
 }
 .asl-formation-slot:hover,
 .asl-formation-slot:focus-visible {
@@ -266,5 +261,4 @@ html[data-theme="dark"] textarea {
 .asl-formation-slot.pop-down .asl-formation-preview {
   top: calc(100% + 6px);
   bottom: auto;
-  transform-origin: top center;
 }

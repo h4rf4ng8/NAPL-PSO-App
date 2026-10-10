@@ -4048,9 +4048,16 @@ const TeamStandings = ({ allTeams = [], allPlayers = [] }) => {
     season === 'all' ? teamMatches : teamMatches.filter(m => (m.season || 'S1') === season)
   ), [teamMatches, season]);
 
-  // Aggregate stats per team
+  // Aggregate stats per team. When viewing a specific season, hide teams
+  // that aren't participating in it (team.seasons includes the season, OR
+  // team.seasons is empty meaning "all seasons").
   const standings = useMemo(() => {
-    const approvedTeams = allTeams.filter(t => t.status === 'approved');
+    const approvedTeams = allTeams.filter(t => {
+      if (t.status !== 'approved') return false;
+      if (season === 'all') return true;
+      const participates = !t.seasons || t.seasons.length === 0 || t.seasons.includes(season);
+      return participates;
+    });
     const table = {};
     approvedTeams.forEach(t => {
       table[t.id] = {
@@ -5935,7 +5942,7 @@ const TeamsView = ({ account, onUpdate, rankings, currentSeason = 'S1' }) => {
               <button
                 key={t.id}
                 onClick={() => setSelected(t)}
-                className="text-left rounded-xl p-4 transition-all hover:scale-[1.02]"
+                className="asl-team-card text-left rounded-xl p-4"
                 style={{
                   background: C.white,
                   border: `1px solid ${C.navyLight}`,

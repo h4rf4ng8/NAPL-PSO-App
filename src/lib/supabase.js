@@ -191,6 +191,8 @@ const rowToTeam = (row) => row ? ({
   ),
   totw: row.totw || false,
   totwSetAt: row.totw_set_at ? new Date(row.totw_set_at).getTime() : null,
+  // Which seasons the team participates in. Null/empty = all seasons.
+  seasons: Array.isArray(row.seasons) ? row.seasons : [],
   // Captain-chosen formation name (see FORMATIONS in App.jsx)
   formation: row.formation || '2-1-2',
   // Captain-chosen lineup: slot-id → username. Slot ids depend on the formation.
@@ -334,6 +336,7 @@ export const db = {
       pending_members: team.pendingMembers || [],
       totw: team.totw || false,
       totw_set_at: team.totwSetAt ? new Date(team.totwSetAt).toISOString() : null,
+      seasons: Array.isArray(team.seasons) && team.seasons.length > 0 ? team.seasons : null,
       formation: team.formation || '2-1-2',
       lineup: team.lineup || {},
       status: team.status,

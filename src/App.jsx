@@ -2345,9 +2345,23 @@ const EditTeamModal = ({ team, onClose, onSaved }) => {
   const [color, setColor] = useState(team.color || C.green);
   const [description, setDescription] = useState(team.description || '');
   const [logoUrl, setLogoUrl] = useState(team.logoUrl || null);
+  const [seasons, setSeasons] = useState(Array.isArray(team.seasons) ? team.seasons : []);
+  const [newSeason, setNewSeason] = useState('');
   const [logoBusy, setLogoBusy] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const toggleSeason = (s) => {
+    const key = s.toUpperCase();
+    if (!key) return;
+    setSeasons(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key].sort());
+  };
+  const addNewSeason = () => {
+    const key = (newSeason || '').trim().toUpperCase();
+    if (!key) return;
+    if (!seasons.includes(key)) setSeasons(prev => [...prev, key].sort());
+    setNewSeason('');
+  };
   const logoInputRef = useRef(null);
 
   const handleLogoFile = async (file) => {
@@ -2378,6 +2392,7 @@ const EditTeamModal = ({ team, onClose, onSaved }) => {
         color,
         description: description.trim(),
         logoUrl,
+        seasons,
       });
       onSaved && onSaved();
     } catch (e) {
@@ -2422,6 +2437,37 @@ const EditTeamModal = ({ team, onClose, onSaved }) => {
           <Lbl>DESCRIPTION (OPTIONAL)</Lbl>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={200}
             className="w-full px-3 py-2 font-body text-sm rounded resize-none" style={inputStyle} />
+        </div>
+
+        <div>
+          <Lbl>SEASONS</Lbl>
+          <div className="font-mono text-[10px] mb-2" style={{ color: `${C.cream}77` }}>
+            Pick the seasons this team competes in. Empty = all seasons.
+          </div>
+          <div className="flex gap-1.5 flex-wrap mb-2">
+            {['S1', 'S2', 'S3', 'S4', ...seasons.filter(s => !['S1', 'S2', 'S3', 'S4'].includes(s))].map(s => {
+              const active = seasons.includes(s);
+              return (
+                <button key={s} type="button" onClick={() => toggleSeason(s)}
+                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded"
+                  style={active
+                    ? { background: C.goldLight, color: C.brandNavyDeep, border: `1px solid ${C.gold}` }
+                    : { background: C.navyDeep, color: `${C.cream}88`, border: `1px solid ${C.navyLight}66` }
+                  }
+                >{s}</button>
+              );
+            })}
+          </div>
+          <div className="flex gap-1.5">
+            <input type="text" value={newSeason}
+              onChange={(e) => setNewSeason(e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0, 6))}
+              placeholder="Add season (e.g. S5)" className="flex-1 px-3 py-1.5 font-mono text-xs rounded"
+              style={inputStyle} />
+            <button type="button" onClick={addNewSeason} disabled={!newSeason}
+              className="px-3 font-heading tracking-wider text-[11px] rounded disabled:opacity-40"
+              style={{ background: `${C.navyLight}88`, color: C.brandNavy }}
+            >ADD</button>
+          </div>
         </div>
 
         <div>

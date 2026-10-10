@@ -191,7 +191,9 @@ const rowToTeam = (row) => row ? ({
   ),
   totw: row.totw || false,
   totwSetAt: row.totw_set_at ? new Date(row.totw_set_at).getTime() : null,
-  // Captain-chosen lineup: {GK, DEF_L, DEF_R, CM, ST_L, ST_R} → usernames.
+  // Captain-chosen formation name (see FORMATIONS in App.jsx)
+  formation: row.formation || '2-1-2',
+  // Captain-chosen lineup: slot-id → username. Slot ids depend on the formation.
   // Empty object means "fall back to auto-assign by position".
   lineup: row.lineup || {},
   status: row.status,
@@ -332,6 +334,7 @@ export const db = {
       pending_members: team.pendingMembers || [],
       totw: team.totw || false,
       totw_set_at: team.totwSetAt ? new Date(team.totwSetAt).toISOString() : null,
+      formation: team.formation || '2-1-2',
       lineup: team.lineup || {},
       status: team.status,
       logo_url: team.logoUrl,
@@ -749,6 +752,71 @@ export const db = {
 
   async deleteTransfer(id) {
     const { error } = await supabase.from('transfers').delete().eq('id', id);
+    if (error) { console.error(error); throw error; }
+  },
+
+  // ============ ARTICLES ============
+  _rowToArticle(r) {
+    return {
+      id: r.id,
+      slug: r.slug,
+      title: r.title,
+      coverImageUrl: r.cover_image_url || '',
+      author: r.author,
+      body: r.body || '',
+      excerpt: r.excerpt || '',
+      publishedAt: r.published_at ? new Date(r.published_at).getTime() : null,
+      updatedAt: r.updated_at ? new Date(r.updated_at).getTime() : null,
+    };
+  },
+
+  async listArticles() {
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .order('published_at', { ascending: false });
+    if (error) { console.error(error); return []; }
+    return (data || []).map(r => this._rowToArticle(r));
+  },
+
+  async getArticleBySlug(slug) {
+    const { data, error } = await supabase
+      .from('articles')
+      .select('*')
+      .eq('slug', slug)
+      .maybeSingle();
+    if (error) { console.error(error); return null; }
+    return data ? this._rowToArticle(data) : null;
+  },
+
+  async saveArticle(article) {
+    const payload = {
+      id: article.id || article.slug,
+      slug: article.slug,
+      title: article.title,
+      cover_image_url: article.coverImageUrl || null,
+      author: (article.author || '').toLowerCase(),
+      body: article.body || '',
+      excerpt: article.excerpt || null,
+      updated_at: new Date().toISOString(),
+    };
+    // Preserve original publish date on edits, set it fresh on first save
+    if (!article.publishedAt) {
+      payload.published_at = new Date().toISOString();
+    } else {
+      payload.published_at = new Date(article.publishedAt).toISOString();
+    }
+    const { data, error } = await supabase
+      .from('articles')
+      .upsert(payload, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToArticle(data);
+  },
+
+  async deleteArticle(id) {
+    const { error } = await supabase.from('articles').delete().eq('id', id);
     if (error) { console.error(error); throw error; }
   },
 

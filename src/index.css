@@ -237,6 +237,17 @@ html[data-theme="dark"] textarea {
   z-index: 50;
 }
 
+/* Team cards on the Teams listing — stable hover. ONLY shadow changes, no
+   transform/translate/scale (which would move the hitbox and could re-trigger
+   hover rapidly = flicker). Shadow transitions are cheap and don't affect
+   layout. */
+.asl-team-card {
+  transition: box-shadow 0.15s ease-out, border-color 0.15s ease-out;
+}
+.asl-team-card:hover {
+  box-shadow: 0 6px 20px rgba(14, 36, 74, 0.18), 0 2px 6px rgba(14, 36, 74, 0.08);
+}
+
 .asl-formation-slot {
   display: inline-flex;
   align-items: flex-start;

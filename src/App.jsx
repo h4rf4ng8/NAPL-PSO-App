@@ -4699,21 +4699,29 @@ const ArticleDetailView = ({ slug, account, onBack }) => {
       </button>
 
       {article.coverImageUrl && (
-        // Image shows at its NATURAL aspect ratio (no crop). We cap the height
-        // and center it on a dark backdrop so wide and tall images both look
-        // intentional — think article hero.
-        <div className="rounded-xl overflow-hidden mb-6 flex items-center justify-center" style={{
-          border: `1px solid ${C.navyLight}66`,
-          boxShadow: `0 4px 24px ${C.brandNavy}22`,
-          background: C.brandNavyDeep,
-          maxHeight: 480,
-        }}>
-          <img
-            src={article.coverImageUrl}
-            alt={article.title}
-            className="max-w-full"
-            style={{ maxHeight: 480, objectFit: 'contain', display: 'block' }}
-          />
+        // Container hugs the actual image (fit-content width) so a portrait
+        // image gets a portrait-shaped frame and a landscape one gets a
+        // landscape frame — no dead space on the sides. Centered in the
+        // column via the outer wrapper.
+        <div className="mb-6 flex justify-center">
+          <div className="rounded-xl overflow-hidden inline-block" style={{
+            border: `1px solid ${C.navyLight}66`,
+            boxShadow: `0 4px 24px ${C.brandNavy}22`,
+            background: C.brandNavyDeep,
+            maxWidth: '100%',
+          }}>
+            <img
+              src={article.coverImageUrl}
+              alt={article.title}
+              style={{
+                display: 'block',
+                maxHeight: 540,
+                maxWidth: '100%',
+                width: 'auto',
+                height: 'auto',
+              }}
+            />
+          </div>
         </div>
       )}
 
@@ -4746,8 +4754,8 @@ const ArticleDetailView = ({ slug, account, onBack }) => {
         )}
       </div>
 
-      <div className="font-body" style={{ color: C.cream, fontSize: 17, lineHeight: 1.7 }}>
-        {renderRulesBody(article.body)}
+      <div className="font-body" style={{ color: C.brandNavy }}>
+        {renderArticleBody(article.body)}
       </div>
 
       {editing && (
@@ -6729,6 +6737,70 @@ const renderRulesBody = (body) => {
     if (b.kind === 'p')  return <p key={i} className="font-body text-sm mb-2 leading-relaxed" style={{ color: C.brandNavy }}>{renderInline(b.text)}</p>;
     if (b.kind === 'ul') return <ul key={i} className="list-disc pl-5 mb-2 space-y-1 font-body text-sm leading-relaxed" style={{ color: C.brandNavy }}>{b.items.map((t, j) => <li key={j}>{renderInline(t)}</li>)}</ul>;
     if (b.kind === 'ol') return <ol key={i} className="list-decimal pl-5 mb-2 space-y-1 font-body text-sm leading-relaxed" style={{ color: C.brandNavy }}>{b.items.map((t, j) => <li key={j}>{renderInline(t)}</li>)}</ol>;
+    return null;
+  });
+};
+
+// Article-sized renderer — same markdown rules as renderRulesBody but
+// bumped typography for a long-form reading experience. Rules stay compact
+// (scannable); articles get magazine-sized paragraphs.
+const renderArticleBody = (body) => {
+  if (!body) return null;
+  const lines = body.split(/\r?\n/);
+  const blocks = [];
+  let listType = null, listItems = [], paraBuf = [];
+  const flushPara = () => { if (paraBuf.length) { blocks.push({ kind: 'p', text: paraBuf.join(' ') }); paraBuf = []; } };
+  const flushList = () => { if (listItems.length) { blocks.push({ kind: listType, items: listItems }); listItems = []; listType = null; } };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (/^##\s+/.test(line))     { flushPara(); flushList(); blocks.push({ kind: 'h2', text: line.replace(/^##\s+/, '') }); continue; }
+    if (/^###\s+/.test(line))    { flushPara(); flushList(); blocks.push({ kind: 'h3', text: line.replace(/^###\s+/, '') }); continue; }
+    if (/^-\s+/.test(line))      { flushPara(); if (listType !== 'ul') { flushList(); listType = 'ul'; } listItems.push(line.replace(/^-\s+/, '')); continue; }
+    if (/^\d+\.\s+/.test(line))  { flushPara(); if (listType !== 'ol') { flushList(); listType = 'ol'; } listItems.push(line.replace(/^\d+\.\s+/, '')); continue; }
+    flushList();
+    paraBuf.push(line);
+  }
+  flushPara(); flushList();
+  // Inline markdown — same as renderRulesBody
+  const renderInline = (text) => {
+    const parts = [];
+    const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
+    let last = 0, m;
+    while ((m = linkRe.exec(text)) !== null) {
+      if (m.index > last) parts.push({ kind: 'text', value: text.slice(last, m.index) });
+      parts.push({ kind: 'link', text: m[1], href: m[2] });
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
+    const applyMarkup = (s, keyPrefix) => {
+      const out = [];
+      const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
+      let i2 = 0, mm, k = 0;
+      while ((mm = re.exec(s)) !== null) {
+        if (mm.index > i2) out.push(s.slice(i2, mm.index));
+        const tok = mm[0];
+        if (tok.startsWith('**')) out.push(<strong key={`${keyPrefix}-${k++}`} style={{ color: C.brandNavyDeep }}>{tok.slice(2, -2)}</strong>);
+        else if (tok.startsWith('*')) out.push(<em key={`${keyPrefix}-${k++}`}>{tok.slice(1, -1)}</em>);
+        else out.push(<code key={`${keyPrefix}-${k++}`} className="font-mono text-sm px-1 py-0.5 rounded" style={{ background: `${C.navyLight}22` }}>{tok.slice(1, -1)}</code>);
+        i2 = mm.index + tok.length;
+      }
+      if (i2 < s.length) out.push(s.slice(i2));
+      return out;
+    };
+    return parts.map((p, i) => {
+      if (p.kind === 'link') {
+        return <a key={i} href={p.href} target="_blank" rel="noopener noreferrer" style={{ color: C.brandNavy, textDecoration: 'underline' }}>{applyMarkup(p.text, `l${i}`)}</a>;
+      }
+      return <span key={i}>{applyMarkup(p.value, `t${i}`)}</span>;
+    });
+  };
+  return blocks.map((b, i) => {
+    if (b.kind === 'h2') return <h3 key={i} className="font-display tracking-wider mt-7 mb-3" style={{ color: C.brandNavyDeep, letterSpacing: '0.08em', fontSize: 28, lineHeight: 1.2 }}>{renderInline(b.text)}</h3>;
+    if (b.kind === 'h3') return <h4 key={i} className="font-heading tracking-wider mt-5 mb-2" style={{ color: C.brandNavy, letterSpacing: '0.12em', fontSize: 20 }}>{renderInline(b.text)}</h4>;
+    if (b.kind === 'p')  return <p key={i} className="font-body mb-4" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.75 }}>{renderInline(b.text)}</p>;
+    if (b.kind === 'ul') return <ul key={i} className="list-disc pl-6 mb-4 space-y-2 font-body" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.7 }}>{b.items.map((t, j) => <li key={j}>{renderInline(t)}</li>)}</ul>;
+    if (b.kind === 'ol') return <ol key={i} className="list-decimal pl-6 mb-4 space-y-2 font-body" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.7 }}>{b.items.map((t, j) => <li key={j}>{renderInline(t)}</li>)}</ol>;
     return null;
   });
 };

@@ -253,6 +253,7 @@ html[data-theme="dark"] textarea {
   left: 50%;
   transform: translateX(-50%);
   opacity: 0;
+  /* Hidden state: can't catch events (so no accidental hover) */
   pointer-events: none;
   transition: opacity 0.12s ease-out;
   z-index: 40;
@@ -261,6 +262,12 @@ html[data-theme="dark"] textarea {
 .asl-formation-slot:hover .asl-formation-preview,
 .asl-formation-slot:focus-visible .asl-formation-preview {
   opacity: 1;
+  /* Visible state: catches mouse events so the parent button's :hover stays
+     active while mouse is over the preview card. Without this, moving from
+     icon → preview takes mouse out of the button hitbox → hover off →
+     preview hides → flicker. Preview is a child of the button so hovering
+     the preview still counts as hovering the button. */
+  pointer-events: auto;
 }
 .asl-formation-slot:hover,
 .asl-formation-slot:focus-visible {

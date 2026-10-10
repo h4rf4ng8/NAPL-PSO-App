@@ -512,8 +512,12 @@ const calcRankings = (allPlayers, customWeights = null) => {
       for (const [statKey, weight] of Object.entries(weights)) {
         score += pctFns[statKey](vals[statKey]) * weight;
       }
-      // score is 0..1 — convert to a 0..100 "overall" number
-      const overall = Math.round(score * 100);
+      // Rescale to a 50-100 OVR curve so numbers feel FIFA-like. A player
+      // scoring 0.50 (average weighted percentile) → OVR 75 (competent).
+      // A player scoring 0.75 (strong) → OVR 87 (star). Perfect 1.00 → 100.
+      // Nothing drops below 50 (anyone with ANY activity is at least a baseline).
+      // Tiers are rank-based so the overall tier distribution is unchanged.
+      const overall = Math.round(50 + score * 50);
       scored.push({ username: p.username.toLowerCase(), overall, percentile: score, games });
     }
     // Rank-based tier assignment within this position pool using ceiling
@@ -5937,6 +5941,10 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
   const [awayTeamId, setAwayTeamId] = useState('');
   // For each strikers player_id → ASL username picked (or '' for skip)
   const [playerMap, setPlayerMap] = useState({});
+  // Manual tackle override — admin can type the correct value from the game
+  // website since the JSON often undercounts poke_tackles_won. Key = player_id,
+  // value = number string (or '' for "use auto-computed from JSON").
+  const [tackleOverrides, setTackleOverrides] = useState({});
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [importResult, setImportResult] = useState(null); // shown on success screen
@@ -6085,8 +6093,16 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
         const opponent = isHome ? awayTeam : homeTeam;
         const ownTeam = isHome ? homeTeam : awayTeam;
         const result = goalsFor > goalsAgainst ? 'W' : (goalsFor < goalsAgainst ? 'L' : 'D');
-        // Tackles = poke_tackles_won + slide_tackles_performed (Q1 = B)
-        const tackles = (s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0);
+        // Tackles — admin can override via the Step 3 field (since the JSON
+        // only partially reports poke_tackles_won). Falls back to the won-only
+        // formula from the JSON: poke_tackles_won + slide_tackles_won. This
+        // excludes repositioning tackles that didn't actually dispossess —
+        // meaningful defense only.
+        const autoTackles = (s.poke_tackles_won || 0) + (s.slide_tackles_won || 0);
+        const overrideRaw = tackleOverrides[p.player_id];
+        const tackles = (overrideRaw !== undefined && overrideRaw !== '')
+          ? (Number(overrideRaw) || 0)
+          : autoTackles;
         // Clean sheet: derived. If your team allowed 0, it's a clean sheet for
         // the whole defense. We apply it to every player on the shutout team.
         const cleanSheet = goalsAgainst === 0;
@@ -6324,6 +6340,15 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
               Auto-matched by Strikers Player ID when linked. Manually pick for anyone unmatched. Players with no ASL account will be skipped.
             </div>
 
+            {/* Reminder for the tackle override system */}
+            <div className="font-mono text-[10px] mb-3 p-2 rounded" style={{
+              color: C.goldLight, background: `${C.gold}11`, border: `1px solid ${C.gold}44`,
+            }}>
+              ◆ TACKLE OVERRIDE — JSON only reports some poke tackles won. Check the game website
+              and type the real number in the TKL field below if it's wrong. Leave blank to use the
+              auto-computed value (poke_won + slide_won from JSON).
+            </div>
+
             <div className="space-y-2">
               {matchData.players.map(p => {
                 const teamBadge = p.team === 'home' ? 'HOME' : 'AWAY';
@@ -6332,11 +6357,16 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
                 const autoMatched = aslByStrikersId[String(p.player_id)];
                 const isAuto = autoMatched && currentPick === autoMatched.username;
                 const s = p.stats || {};
+                const autoTkl = (s.poke_tackles_won || 0) + (s.slide_tackles_won || 0);
+                const overrideVal = tackleOverrides[p.player_id];
+                const effectiveTkl = (overrideVal !== undefined && overrideVal !== '')
+                  ? (Number(overrideVal) || 0)
+                  : autoTkl;
                 const summary = [
                   s.goals ? `${s.goals}G` : null,
                   s.assists ? `${s.assists}A` : null,
                   s.passes ? `${s.passes}p` : null,
-                  ((s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0)) > 0 ? `${(s.poke_tackles_won || 0) + (s.slide_tackles_performed || 0)}T` : null,
+                  effectiveTkl > 0 ? `${effectiveTkl}T` : null,
                   s.deflects ? `${s.deflects}D` : null,
                   s.catches ? `${s.catches}C` : null,
                 ].filter(Boolean).join(' · ') || 'no stats';
@@ -6357,7 +6387,7 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
                     <select
                       value={currentPick}
                       onChange={(e) => setPlayerMap(m => ({ ...m, [p.player_id]: e.target.value }))}
-                      className="px-2 py-1.5 rounded font-heading text-xs w-full sm:w-52"
+                      className="px-2 py-1.5 rounded font-heading text-xs w-full sm:w-44"
                       style={{
                         background: C.navyDeep,
                         color: currentPick ? C.cream : `${C.cream}55`,
@@ -6369,6 +6399,23 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
                         <option key={a.username} value={a.username}>{a.username}</option>
                       ))}
                     </select>
+                    {/* TKL override: shows auto value as placeholder, admin types to override */}
+                    <div className="flex items-center gap-1">
+                      <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}77` }}>TKL</span>
+                      <input
+                        type="number" min="0"
+                        value={overrideVal ?? ''}
+                        placeholder={String(autoTkl)}
+                        onChange={(e) => setTackleOverrides(prev => ({ ...prev, [p.player_id]: e.target.value }))}
+                        className="px-1.5 py-1 rounded font-mono text-xs text-center"
+                        style={{
+                          background: C.navyDeep,
+                          color: overrideVal !== undefined && overrideVal !== '' ? C.goldLight : C.cream,
+                          border: `1px solid ${overrideVal !== undefined && overrideVal !== '' ? C.gold : C.navyLight}66`,
+                          width: 54,
+                        }}
+                      />
+                    </div>
                     {isAuto && <span className="font-mono text-[9px] tracking-wider" style={{ color: C.greenLight }}>AUTO</span>}
                   </div>
                 );

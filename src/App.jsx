@@ -599,22 +599,42 @@ const cardTier = (overallOrName) => {
   }
   if (tierName === 'DIAMOND') return {
     name: 'DIAMOND',
-    from: '#a8c8d8', to: '#e8f4fa', accent: '#1a3a4a', text: '#0f2530', glow: '#ffffff',
+    // Richer, more saturated accents so Diamond pops against the Silver gray
+    from: '#4fb5e8', to: '#c8e8ff', accent: '#0a2838', text: '#061826', glow: '#ffffff',
     material: {
-      // Pure icy white-blue diamond — no warm tones at all, prismatic feel
+      // Holographic prismatic diamond — vivid cyan-blue base with magenta/
+      // purple refractions baked in via a second gradient layer. This makes
+      // it unmistakably "diamond" rather than looking like extra-shiny silver.
       bg: `linear-gradient(135deg,
-        #b8d4e0 0%,
-        #e0eef4 25%,
-        #ffffff 50%,
-        #d8e8f0 75%,
-        #a8c8d8 100%
+        #3fa6e0 0%,
+        #7fcbed 18%,
+        #e4f4fb 42%,
+        #ffffff 52%,
+        #d4e8ff 65%,
+        #a8b8ff 78%,
+        #d8a8ff 92%,
+        #4fb5e8 100%
       )`,
       texture: `
+        /* Prismatic color sheen — subtle rainbow bands cutting across the card */
+        linear-gradient(115deg,
+          transparent 0%,
+          rgba(255,100,220,0.12) 18%,
+          transparent 24%,
+          rgba(100,220,255,0.18) 42%,
+          transparent 50%,
+          rgba(200,180,255,0.15) 70%,
+          transparent 76%,
+          rgba(255,255,255,0.22) 90%,
+          transparent 100%
+        ),
+        /* Bright sparkle specks for the gem feel */
         radial-gradient(circle at 22% 30%, rgba(255,255,255,0.95) 0px, transparent 1.5px),
-        radial-gradient(circle at 73% 18%, rgba(255,255,255,0.85) 0px, transparent 1px),
-        radial-gradient(circle at 45% 65%, rgba(255,255,255,0.9) 0px, transparent 1.5px),
-        radial-gradient(circle at 88% 78%, rgba(255,255,255,0.75) 0px, transparent 1px),
-        radial-gradient(circle at 15% 85%, rgba(255,255,255,0.8) 0px, transparent 1px)
+        radial-gradient(circle at 73% 18%, rgba(255,255,255,0.9) 0px, transparent 1.5px),
+        radial-gradient(circle at 45% 65%, rgba(255,255,255,0.95) 0px, transparent 2px),
+        radial-gradient(circle at 88% 78%, rgba(180,230,255,0.9) 0px, transparent 1.5px),
+        radial-gradient(circle at 15% 85%, rgba(255,255,255,0.85) 0px, transparent 1.5px),
+        radial-gradient(circle at 62% 42%, rgba(255,220,255,0.7) 0px, transparent 1.5px)
       `,
       textureOpacity: 1,
     },
@@ -1086,10 +1106,13 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   // and awardText (used when an award winner gets a black name label).
   const palette = (() => {
     if (tier.name === 'DIAMOND') return {
-      lightest: '#f5fafc', light: '#dceaf2', mid: '#a8c8db', dark: '#5a8aa8', shadow: '#2c4e68',
-      panelLight: '#dceaf2', panelMid: '#b8d0e0', panelDark: '#7c9eb8',
-      text: '#0e1e2e', awardText: '#bfd9e8',
-      stroke: '#2c4e68',
+      // Richer, prismatic diamond — cyan highlight through blue mid into
+      // navy shadow, with a cool-lavender twist in the mid so the whole
+      // thing reads clearly as a gem (not just "shinier silver").
+      lightest: '#f0f8ff', light: '#9ed0ef', mid: '#5a90c8', dark: '#2a5082', shadow: '#0e244a',
+      panelLight: '#d8e8f8', panelMid: '#7098c8', panelDark: '#2a5082',
+      text: '#061826', awardText: '#c8e4ff',
+      stroke: '#0e244a',
     };
     if (tier.name === 'GOLD') return {
       lightest: '#fff5cc', light: '#fde583', mid: '#ecbd35', dark: '#a87a18', shadow: '#5a3e08',
@@ -1348,6 +1371,24 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
       {/* 9. Outer stroke + inner highlight */}
       <path d={cardPath} fill="none" stroke={palette.shadow} strokeWidth="1.8" strokeOpacity="0.8" />
       <path d={cardPath} fill="none" stroke={palette.lightest} strokeWidth="0.5" strokeOpacity="0.8" transform="translate(0 -0.5)" />
+
+      {/* 10. TIER LETTER BADGE — single-letter material-tinted square in the
+          top-right. B/S/G/D for Bronze/Silver/Gold/Diamond. Uses the palette's
+          shadow for background + lightest for the letter so it reads as
+          embossed into the tier material. Hidden for unranked (NR) cards. */}
+      {displayOverall !== 'NR' && (
+        <g transform="translate(272 18)">
+          <rect x="0" y="0" width="34" height="34" rx="6" ry="6"
+            fill={palette.shadow} stroke={palette.lightest} strokeWidth="0.8" strokeOpacity="0.6" />
+          <rect x="1.5" y="1.5" width="31" height="4" rx="3" ry="3"
+            fill={palette.lightest} opacity="0.3" />
+          <text x="17" y="25" textAnchor="middle"
+            fontFamily="Anton, sans-serif" fontSize="21" fontWeight="700"
+            fill={palette.lightest} letterSpacing="0.5">
+            {tier.name.charAt(0)}
+          </text>
+        </g>
+      )}
     </svg>
   );
 
@@ -4965,28 +5006,108 @@ const StatsView = ({ allPlayers = [], allTeams = [], rankings = {}, onPlayerClic
 // for missing positions. Extra players (beyond 8) appear under a BENCH section.
 // FLEX players go on the bench too since they don't map to a formation slot.
 // Clicking any player card opens the PlayerCardModal for full front + back view.
-// Slot keys for the 6v6 pitch — distinct keys for the two STs and two DEFs
-// so each spot in the formation can be independently assigned.
-const LINEUP_SLOTS = ['ST_L', 'ST_R', 'CM', 'DEF_L', 'DEF_R', 'GK'];
-// Position hint for an empty slot (shown as its label on the pitch)
-const SLOT_POSITION_LABEL = { GK: 'GK', DEF_L: 'DEF', DEF_R: 'DEF', CM: 'CM', ST_L: 'ST', ST_R: 'ST' };
-// For auto-fallback: which player position goes in which slot
-const SLOT_PRIMARY_POSITION = { GK: 'GK', DEF_L: 'DEF', DEF_R: 'DEF', CM: 'CM', ST_L: 'ST', ST_R: 'ST' };
+// ============ FORMATIONS ============
+// Each formation defines its 6 slots on the pitch (6v6 — always 1 GK).
+// id = unique slot key stored in team.lineup
+// label = position shown as the slot's placeholder on the pitch
+// pos = primary position used when auto-assigning players by position
+// x, y = % position on the pitch (0,0 top-left; 100,100 bottom-right).
+// y range roughly: 10% = attacking third, 40% = midfield, 65% = defensive, 85% = GK box.
+const FORMATIONS = {
+  '2-1-2': {
+    id: '2-1-2', name: '2-1-2', label: 'Balanced',
+    description: '2 defenders, 1 mid, 2 forwards. The default.',
+    slots: [
+      { id: 'ST_L',  label: 'ST',  pos: 'ST',  x: 32, y: 10 },
+      { id: 'ST_R',  label: 'ST',  pos: 'ST',  x: 68, y: 10 },
+      { id: 'CM',    label: 'CM',  pos: 'CM',  x: 50, y: 38 },
+      { id: 'DEF_L', label: 'DEF', pos: 'DEF', x: 32, y: 62 },
+      { id: 'DEF_R', label: 'DEF', pos: 'DEF', x: 68, y: 62 },
+      { id: 'GK',    label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+  '2-2-1': {
+    id: '2-2-1', name: '2-2-1', label: 'Defensive',
+    description: '2 defenders, 2 mids, 1 forward. Solid shape.',
+    slots: [
+      { id: 'ST',    label: 'ST',  pos: 'ST',  x: 50, y: 10 },
+      { id: 'CM_L',  label: 'CM',  pos: 'CM',  x: 32, y: 40 },
+      { id: 'CM_R',  label: 'CM',  pos: 'CM',  x: 68, y: 40 },
+      { id: 'DEF_L', label: 'DEF', pos: 'DEF', x: 32, y: 65 },
+      { id: 'DEF_R', label: 'DEF', pos: 'DEF', x: 68, y: 65 },
+      { id: 'GK',    label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+  '1-2-2': {
+    id: '1-2-2', name: '1-2-2', label: 'Attacking',
+    description: '1 defender, 2 mids, 2 forwards. Press and go.',
+    slots: [
+      { id: 'ST_L', label: 'ST',  pos: 'ST',  x: 32, y: 10 },
+      { id: 'ST_R', label: 'ST',  pos: 'ST',  x: 68, y: 10 },
+      { id: 'CM_L', label: 'CM',  pos: 'CM',  x: 32, y: 40 },
+      { id: 'CM_R', label: 'CM',  pos: 'CM',  x: 68, y: 40 },
+      { id: 'DEF',  label: 'DEF', pos: 'DEF', x: 50, y: 65 },
+      { id: 'GK',   label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+  '1-3-1': {
+    id: '1-3-1', name: '1-3-1', label: 'Midfield-heavy',
+    description: '1 defender, 3 mids, 1 forward. Control the middle.',
+    slots: [
+      { id: 'ST',   label: 'ST',  pos: 'ST',  x: 50, y: 10 },
+      { id: 'CM_L', label: 'CM',  pos: 'CM',  x: 22, y: 40 },
+      { id: 'CM_C', label: 'CM',  pos: 'CM',  x: 50, y: 40 },
+      { id: 'CM_R', label: 'CM',  pos: 'CM',  x: 78, y: 40 },
+      { id: 'DEF',  label: 'DEF', pos: 'DEF', x: 50, y: 65 },
+      { id: 'GK',   label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+  '3-1-1': {
+    id: '3-1-1', name: '3-1-1', label: 'All-out attack',
+    description: '3 forwards, 1 mid, 1 defender. Pure aggression.',
+    slots: [
+      { id: 'ST_L', label: 'ST',  pos: 'ST',  x: 22, y: 12 },
+      { id: 'ST_C', label: 'ST',  pos: 'ST',  x: 50, y: 10 },
+      { id: 'ST_R', label: 'ST',  pos: 'ST',  x: 78, y: 12 },
+      { id: 'CM',   label: 'CM',  pos: 'CM',  x: 50, y: 42 },
+      { id: 'DEF',  label: 'DEF', pos: 'DEF', x: 50, y: 65 },
+      { id: 'GK',   label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+  '1-1-3': {
+    id: '1-1-3', name: '1-1-3', label: 'Park the bus',
+    description: '3 defenders, 1 mid, 1 forward. Shut it down.',
+    slots: [
+      { id: 'ST',    label: 'ST',  pos: 'ST',  x: 50, y: 10 },
+      { id: 'CM',    label: 'CM',  pos: 'CM',  x: 50, y: 36 },
+      { id: 'DEF_L', label: 'DEF', pos: 'DEF', x: 22, y: 62 },
+      { id: 'DEF_C', label: 'DEF', pos: 'DEF', x: 50, y: 62 },
+      { id: 'DEF_R', label: 'DEF', pos: 'DEF', x: 78, y: 62 },
+      { id: 'GK',    label: 'GK',  pos: 'GK',  x: 50, y: 85 },
+    ],
+  },
+};
 
-// Pure function: given a team's saved lineup and its roster members, resolve
-// each slot to a player (or null if unfilled). If no saved lineup exists,
-// falls back to auto-assigning by position (strongest OVR per position first).
+const getFormation = (id) => FORMATIONS[id] || FORMATIONS['2-1-2'];
+const FORMATION_IDS = Object.keys(FORMATIONS);
+
+// Pure function: given a team's formation + saved lineup + roster members,
+// resolve each slot to a player (or null if unfilled). If no saved lineup
+// exists for the current formation, auto-assigns by matching player positions
+// to the slot's primary position, strongest OVR first.
 const resolveLineup = (team, members, rankings) => {
+  const formation = getFormation(team.formation);
+  const slotIds = formation.slots.map(s => s.id);
   const byUsername = (u) => members.find(p => p.username.toLowerCase() === String(u || '').toLowerCase());
   const saved = team.lineup || {};
-  const hasSaved = LINEUP_SLOTS.some(k => saved[k]);
+  const hasSaved = slotIds.some(k => saved[k]);
   if (hasSaved) {
-    // Use the captain's saved lineup directly
+    // Use the captain's saved lineup directly for this formation's slot ids
     const resolved = {};
-    LINEUP_SLOTS.forEach(k => { resolved[k] = byUsername(saved[k]) || null; });
+    slotIds.forEach(k => { resolved[k] = byUsername(saved[k]) || null; });
     return resolved;
   }
-  // Auto-assign fallback: bucket by position, pick strongest for each slot
+  // Auto-assign fallback: bucket by player position, pick strongest for each slot
   const buckets = { GK: [], DEF: [], CM: [], ST: [], FLEX: [] };
   members.forEach(p => {
     const pos = p.position || 'CM';
@@ -4996,16 +5117,18 @@ const resolveLineup = (team, members, rankings) => {
     const e = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
     return e?.score || 0;
   };
-  const byOvr = (a, b) => ovrOf(b) - ovrOf(a);
-  Object.keys(buckets).forEach(k => buckets[k].sort(byOvr));
-  return {
-    GK: buckets.GK[0] || null,
-    DEF_L: buckets.DEF[0] || null,
-    DEF_R: buckets.DEF[1] || null,
-    CM: buckets.CM[0] || null,
-    ST_L: buckets.ST[0] || null,
-    ST_R: buckets.ST[1] || null,
-  };
+  Object.keys(buckets).forEach(k => buckets[k].sort((a, b) => ovrOf(b) - ovrOf(a)));
+  // Walk the formation's slots in order and pop the strongest matching player
+  const resolved = {};
+  // Track used usernames so a player isn't placed in multiple slots
+  const used = new Set();
+  for (const slot of formation.slots) {
+    const bucket = buckets[slot.pos] || [];
+    const next = bucket.find(p => !used.has(p.username.toLowerCase())) || null;
+    if (next) used.add(next.username.toLowerCase());
+    resolved[slot.id] = next;
+  }
+  return resolved;
 };
 
 const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isCaptain = false, onLineupSaved }) => {
@@ -5017,20 +5140,27 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
   }, [team.members, allPlayers]);
 
   // --- EDIT LINEUP STATE ---
-  // When captain is editing, we keep a draft of the lineup object so changes
-  // are local until they tap SAVE. editingSlot: which slot is being filled.
+  // During edit mode, we keep a draft formation + lineup locally so changes
+  // aren't persisted until SAVE. editingSlot: which slot is being filled.
   const [editingLineup, setEditingLineup] = useState(false);
+  const [draftFormation, setDraftFormation] = useState(team.formation || '2-1-2');
   const [draftLineup, setDraftLineup] = useState({});
   const [editingSlot, setEditingSlot] = useState(null);
   const [savingLineup, setSavingLineup] = useState(false);
 
-  // Starters = resolved lineup. During edit, use the draft; otherwise read saved.
+  // The formation to render — draft while editing, saved otherwise
+  const activeFormation = useMemo(
+    () => getFormation(editingLineup ? draftFormation : team.formation),
+    [team.formation, draftFormation, editingLineup],
+  );
+
+  // Starters = resolved lineup. During edit, use the draft formation + draft lineup.
   const starters = useMemo(() => {
     const source = editingLineup
-      ? { ...team, lineup: draftLineup }
+      ? { ...team, formation: draftFormation, lineup: draftLineup }
       : team;
     return resolveLineup(source, members, rankings);
-  }, [team, draftLineup, editingLineup, members, rankings]);
+  }, [team, draftFormation, draftLineup, editingLineup, members, rankings]);
 
   // Bench = any member not currently in a starter slot
   const bench = useMemo(() => {
@@ -5042,21 +5172,47 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
 
   const beginEdit = () => {
     // Snapshot current resolved lineup (so if nothing was saved, draft starts
-    // with the auto-assignment the captain is looking at — easier to tweak)
+    // with the auto-assignment the captain is looking at — easier to tweak).
+    // Uses the current formation's slot ids.
     const snapshot = {};
-    LINEUP_SLOTS.forEach(k => { snapshot[k] = starters[k]?.username || null; });
+    activeFormation.slots.forEach(s => { snapshot[s.id] = starters[s.id]?.username || null; });
+    setDraftFormation(team.formation || '2-1-2');
     setDraftLineup(snapshot);
     setEditingLineup(true);
   };
   const cancelEdit = () => {
+    setDraftFormation(team.formation || '2-1-2');
     setDraftLineup({});
     setEditingLineup(false);
+    setEditingSlot(null);
+  };
+  // When captain switches formation mid-edit, auto-remap players by position.
+  // Any player who was in a slot of position P goes to the new formation's
+  // first available slot of position P (keeps the "attack-heavy = 3 STs"
+  // intent intact when switching to 3-1-1, say). Overflow goes to bench.
+  const changeDraftFormation = (newId) => {
+    const oldSlots = getFormation(draftFormation).slots;
+    const newSlots = getFormation(newId).slots;
+    // Group currently assigned players by their old slot's position
+    const byPos = { ST: [], CM: [], DEF: [], GK: [] };
+    for (const s of oldSlots) {
+      const u = draftLineup[s.id];
+      if (u && byPos[s.pos]) byPos[s.pos].push(u);
+    }
+    // Fill the new formation's slots in order
+    const newLineup = {};
+    for (const s of newSlots) {
+      const bucket = byPos[s.pos] || [];
+      newLineup[s.id] = bucket.length > 0 ? bucket.shift() : null;
+    }
+    setDraftFormation(newId);
+    setDraftLineup(newLineup);
     setEditingSlot(null);
   };
   const saveEdit = async () => {
     setSavingLineup(true);
     try {
-      await db.saveTeam({ ...team, lineup: draftLineup });
+      await db.saveTeam({ ...team, formation: draftFormation, lineup: draftLineup });
       setEditingLineup(false);
       setEditingSlot(null);
       onLineupSaved && onLineupSaved();
@@ -5257,39 +5413,32 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
             how the lineup is stored. In edit mode slots become clickable to
             swap/empty them via a picker. */}
         <div className="relative w-full" style={{ aspectRatio: '4 / 5' }}>
-          {/* Row 1: STs — right below halfway line, top of own half. */}
-          <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '9%' }}>
-            <div onClick={() => handleSlotEdit('ST_L')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.ST_L} positionLabel="ST" popDown />
-            </div>
-            <div onClick={() => handleSlotEdit('ST_R')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.ST_R} positionLabel="ST" popDown />
-            </div>
-          </div>
-          {/* Row 2: CM — center of own half */}
-          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '36%' }}>
-            <div onClick={() => handleSlotEdit('CM')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.CM} positionLabel="CM" />
-            </div>
-          </div>
-          {/* Row 3: DEFs — defensive third */}
-          <div className="absolute left-0 right-0 flex justify-center gap-6 sm:gap-10" style={{ top: '60%' }}>
-            <div onClick={() => handleSlotEdit('DEF_L')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.DEF_L} positionLabel="DEF" />
-            </div>
-            <div onClick={() => handleSlotEdit('DEF_R')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.DEF_R} positionLabel="DEF" />
-            </div>
-          </div>
-          {/* Row 4: GK — inside own penalty area */}
-          <div className="absolute left-0 right-0 flex justify-center" style={{ top: '82%' }}>
-            <div onClick={() => handleSlotEdit('GK')} style={editingLineup ? { cursor: 'pointer' } : {}}>
-              <Slot player={starters.GK} positionLabel="GK" />
-            </div>
-          </div>
+          {/* Each slot renders at its formation-defined x/y %. We center the
+              slot on its anchor point via translate(-50%, -50%). popDown is
+              set for slots in the attacking third (y < 20%) so hover preview
+              drops downward instead of up off the top edge. */}
+          {activeFormation.slots.map(slot => {
+            const player = starters[slot.id];
+            const popDown = slot.y < 20;
+            return (
+              <div
+                key={slot.id}
+                onClick={() => handleSlotEdit(slot.id)}
+                style={{
+                  position: 'absolute',
+                  left: `${slot.x}%`,
+                  top: `${slot.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  cursor: editingLineup ? 'pointer' : undefined,
+                }}
+              >
+                <Slot player={player} positionLabel={slot.label} popDown={popDown} />
+              </div>
+            );
+          })}
 
-          {/* Edit mode overlay: pulsing dashed border around each slot area to
-              signal they're tappable */}
+          {/* Edit mode overlay: pulsing dashed border around the pitch to
+              signal that slots are tappable */}
           {editingLineup && (
             <div className="absolute inset-0 pointer-events-none" style={{
               border: `2px dashed ${C.gold}99`,
@@ -5300,13 +5449,21 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
         </div>
       </div>
 
+      {/* FORMATION LABEL — shown to everyone above the pitch area */}
+      <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
+        <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99` }}>
+          FORMATION: <span style={{ color: C.goldLight, fontWeight: 700 }}>{activeFormation.name}</span>
+          <span style={{ color: `${C.cream}66`, marginLeft: 8 }}>— {activeFormation.label}</span>
+        </div>
+      </div>
+
       {/* CAPTAIN'S EDIT LINEUP CONTROLS — only visible to the captain of this team */}
       {isCaptain && (
         <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
           {!editingLineup ? (
             <>
               <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}99` }}>
-                As captain, you can arrange your starting XI by position.
+                As captain, you can pick a formation and arrange your starting XI.
               </div>
               <button
                 onClick={beginEdit}
@@ -5335,6 +5492,40 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* FORMATION PICKER — only in edit mode. Horizontal chip row showing
+          every preset. Changing formation remaps players by position so
+          most of the lineup is preserved automatically. */}
+      {isCaptain && editingLineup && (
+        <div className="mb-4 rounded-lg p-3" style={{
+          background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33`,
+        }}>
+          <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: `${C.cream}99` }}>
+            FORMATION
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {FORMATION_IDS.map(id => {
+              const f = getFormation(id);
+              const active = draftFormation === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => changeDraftFormation(id)}
+                  className="px-3 py-1.5 rounded text-left transition-all"
+                  style={active
+                    ? { background: C.gold, color: C.brandNavyDeep, border: `1px solid ${C.goldLight}` }
+                    : { background: `${C.navyLight}44`, color: C.cream, border: `1px solid ${C.navyLight}66` }
+                  }
+                  title={f.description}
+                >
+                  <div className="font-display tracking-wider text-sm leading-none">{f.name}</div>
+                  <div className="font-mono text-[9px] mt-0.5 opacity-80">{f.label.toUpperCase()}</div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 

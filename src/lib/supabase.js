@@ -838,4 +838,83 @@ export const db = {
       season: season || 'S1', kind, windowType, createdBy,
     });
   },
+
+  // ============ POSITION CHANGE REQUESTS ============
+  _rowToPosRequest(r) {
+    return {
+      id: r.id,
+      accountId: r.account_id,
+      username: r.username,
+      fromPos: r.from_pos,
+      toPos: r.to_pos,
+      reason: r.reason || '',
+      status: r.status,
+      reviewedBy: r.reviewed_by || null,
+      reviewedAt: r.reviewed_at ? new Date(r.reviewed_at).getTime() : null,
+      reviewNote: r.review_note || '',
+      createdAt: r.created_at ? new Date(r.created_at).getTime() : null,
+    };
+  },
+
+  async listPositionRequests(statusFilter = null) {
+    let q = supabase.from('position_change_requests').select('*').order('created_at', { ascending: false });
+    if (statusFilter) q = q.eq('status', statusFilter);
+    const { data, error } = await q;
+    if (error) { console.error(error); throw error; }
+    return (data || []).map(r => this._rowToPosRequest(r));
+  },
+
+  async createPositionRequest({ accountId, username, fromPos, toPos, reason = '' }) {
+    const { data, error } = await supabase.from('position_change_requests').insert({
+      account_id: accountId,
+      username,
+      from_pos: fromPos,
+      to_pos: toPos,
+      reason,
+      status: 'pending',
+    }).select().single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToPosRequest(data);
+  },
+
+  // Admin approves — updates the request, then flips the account's position.
+  // Also sets position_locked = false (if applicable) so player can request again later.
+  async approvePositionRequest(request, { reviewedBy, reviewNote = '' }) {
+    // 1. Flip the account position
+    const { error: accErr } = await supabase.from('accounts')
+      .update({ position: request.toPos })
+      .eq('id', request.accountId);
+    if (accErr) { console.error(accErr); throw accErr; }
+    // 2. Mark request approved
+    const { data, error } = await supabase.from('position_change_requests')
+      .update({
+        status: 'approved',
+        reviewed_by: reviewedBy,
+        review_note: reviewNote,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', request.id)
+      .select().single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToPosRequest(data);
+  },
+
+  async denyPositionRequest(request, { reviewedBy, reviewNote = '' }) {
+    const { data, error } = await supabase.from('position_change_requests')
+      .update({
+        status: 'denied',
+        reviewed_by: reviewedBy,
+        review_note: reviewNote,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq('id', request.id)
+      .select().single();
+    if (error) { console.error(error); throw error; }
+    return this._rowToPosRequest(data);
+  },
+
+  async deletePositionRequest(id) {
+    const { error } = await supabase.from('position_change_requests').delete().eq('id', id);
+    if (error) { console.error(error); throw error; }
+  },
 };

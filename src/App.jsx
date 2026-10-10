@@ -182,7 +182,7 @@ const flagUrl = (country) => {
 // ============ AWARDS SYSTEM ============
 const AWARD_TYPES = [
   { id: 'glove',     name: 'Golden Glove',     short: 'GG', desc: 'Best Goalkeeper',    pos: 'GK' },
-  { id: 'striker',   name: 'Golden Striker',   short: 'GS', desc: 'Top Scorer',         pos: 'ST' },
+  { id: 'striker',   name: 'Golden Boot',      short: 'GB', desc: 'Top Scorer',         pos: 'ST' },
   { id: 'defender',  name: 'Golden Defender',  short: 'GD', desc: 'Best Defender',      pos: 'DEF' },
   { id: 'playmaker', name: 'Golden Playmaker', short: 'GP', desc: 'Best Playmaker',     pos: 'CM' },
 ];
@@ -1399,7 +1399,7 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
   // ---- BACK OF THE CARD: trophies + join date ----
   const AWARD_FULL_NAMES = {
     glove: 'Golden Glove',
-    striker: 'Golden Striker',
+    striker: 'Golden Boot',
     defender: 'Golden Defender',
     playmaker: 'Golden Playmaker',
   };
@@ -2118,22 +2118,119 @@ const UploadImageModal = ({ account, onClose, onSave }) => {
 
 const EditPositionModal = ({ account, onClose, onSave }) => {
   const [pos, setPos] = useState(account.position);
-  const handleSave = async () => {
-    const updated = { ...account, position: pos };
-    await db.saveAccount(updated);
-    onSave(updated);
-    onClose();
+  const [reason, setReason] = useState('');
+  const [pending, setPending] = useState(null);   // {toPos} if request is already pending
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  // If the player has already played games on their current position, changing
+  // it directly would mix stats across positions and skew rankings. In that
+  // case we require admin approval. Brand-new players (0 games) can switch
+  // freely — nothing to mess up.
+  const games = account.stats?.games || 0;
+  const needsApproval = games > 0;
+
+  // Check if a pending request already exists for this account
+  useEffect(() => {
+    (async () => {
+      try {
+        const reqs = await db.listPositionRequests('pending');
+        const mine = reqs.find(r => r.accountId === account.id);
+        if (mine) setPending(mine);
+      } catch (e) { /* table may not exist yet, ignore */ }
+    })();
+  }, [account.id]);
+
+  const handleSubmit = async () => {
+    setError(''); setInfo('');
+    if (pos === account.position) { onClose(); return; }
+    setBusy(true);
+    try {
+      if (needsApproval) {
+        // Submit a request for admin review
+        await db.createPositionRequest({
+          accountId: account.id,
+          username: account.username,
+          fromPos: account.position,
+          toPos: pos,
+          reason: reason.trim(),
+        });
+        setInfo('✓ Request submitted — an admin will review it shortly.');
+        setTimeout(() => onClose(), 1800);
+      } else {
+        // No games played yet — change directly, no approval needed
+        const updated = { ...account, position: pos };
+        await db.saveAccount(updated);
+        onSave(updated);
+        onClose();
+      }
+    } catch (e) {
+      setError('Could not save: ' + (e?.message || e));
+    }
+    setBusy(false);
   };
+
+  const withdrawRequest = async () => {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await db.deletePositionRequest(pending.id);
+      setPending(null);
+      setInfo('Request withdrawn.');
+    } catch (e) {
+      setError('Could not withdraw: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
   return (
     <ModalShell onClose={onClose} title="POSITION" maxWidth="max-w-sm">
+      {/* Current pending request — show status + withdraw option */}
+      {pending && (
+        <div className="rounded-lg p-3 mb-3" style={{
+          background: `${C.gold}22`, border: `1px solid ${C.gold}66`,
+        }}>
+          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: C.goldLight }}>
+            ◆ PENDING ADMIN REVIEW
+          </div>
+          <div className="font-body text-sm mb-2" style={{ color: C.cream }}>
+            Your request to change from <b>{pending.fromPos}</b> → <b style={{ color: C.goldLight }}>{pending.toPos}</b> is awaiting approval.
+          </div>
+          <button
+            onClick={withdrawRequest}
+            disabled={busy}
+            className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+            style={{ background: `${C.red}66`, color: C.cream }}
+          >{busy ? 'WITHDRAWING…' : 'WITHDRAW REQUEST'}</button>
+        </div>
+      )}
+
+      {/* Approval notice — tells player what will happen */}
+      {!pending && needsApproval && (
+        <div className="rounded-lg p-3 mb-3" style={{
+          background: `${C.brandNavy}44`, border: `1px solid ${C.navyLight}66`,
+        }}>
+          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: C.goldLight }}>
+            ◆ NEEDS APPROVAL
+          </div>
+          <div className="font-body text-sm" style={{ color: C.cream }}>
+            You've played {games} game{games === 1 ? '' : 's'} as <b>{account.position}</b>. Changing positions
+            after playing requires admin approval to keep stats consistent.
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-2 mb-2">
         {POSITIONS.map(p => {
           const active = pos === p;
+          const disabled = !!pending;
           return (
             <button
               key={p}
+              disabled={disabled}
               onClick={() => setPos(p)}
-              className="py-4 font-display text-2xl transition-all rounded"
+              className="py-4 font-display text-2xl transition-all rounded disabled:opacity-40"
               style={{
                 background: active ? C.green : `${C.navyDeep}`,
                 color: active ? C.onColor : `${C.cream}88`,
@@ -2144,19 +2241,37 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
           );
         })}
       </div>
-      {/* FLEX hint — explains why someone might pick it over a specific role */}
-      <div className="font-body text-sm mb-4 leading-relaxed px-1" style={{ color: C.cream }}>
+      {/* FLEX hint */}
+      <div className="font-body text-sm mb-3 leading-relaxed px-1" style={{ color: C.cream }}>
         Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
       </div>
-      <button
-        onClick={handleSave}
-        className="w-full py-3 font-display tracking-widest text-lg rounded"
-        style={{
-          background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-          color: C.onColor,
-          boxShadow: `0 4px 16px ${C.green}66`,
-        }}
-      >SAVE POSITION</button>
+
+      {/* Reason field — only shown if submitting a request */}
+      {!pending && needsApproval && pos !== account.position && (
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value.slice(0, 200))}
+          placeholder="Optional: why do you want to change position? (max 200 chars)"
+          className="w-full px-3 py-2 font-body text-sm rounded mb-3"
+          style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy, resize: 'vertical', minHeight: 60 }}
+        />
+      )}
+
+      {error && <div className="font-mono text-xs mb-2 px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
+      {info && <div className="font-mono text-xs mb-2 px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.greenLight }}>{info}</div>}
+
+      {!pending && (
+        <button
+          onClick={handleSubmit}
+          disabled={busy || pos === account.position}
+          className="w-full py-3 font-display tracking-widest text-lg rounded disabled:opacity-50"
+          style={{
+            background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
+            color: C.onColor,
+            boxShadow: `0 4px 16px ${C.green}66`,
+          }}
+        >{busy ? 'SAVING…' : needsApproval ? 'SUBMIT REQUEST' : 'SAVE POSITION'}</button>
+      )}
     </ModalShell>
   );
 };
@@ -5431,6 +5546,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
             return (
               <div
                 key={slot.id}
+                className="asl-slot-wrapper"
                 onClick={() => handleSlotEdit(slot.id)}
                 style={{
                   position: 'absolute',
@@ -5670,7 +5786,7 @@ const PlayerCardModal = ({ player, team, rankings, onClose }) => {
 };
 
 // ============ TEAMS VIEW ============
-const TeamsView = ({ account, onUpdate, rankings }) => {
+const TeamsView = ({ account, onUpdate, rankings, currentSeason = 'S1' }) => {
   const [teams, setTeams] = useState([]);
   const [showSubmit, setShowSubmit] = useState(false);
   const [selected, setSelected] = useState(null);
@@ -5690,10 +5806,21 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
 
   const joinTeam = async (team) => {
     if (team.members.includes(account.username)) return;
+    const oldTeamId = account.teamId || null;
     const updatedTeam = { ...team, members: [...team.members, account.username] };
     await db.saveTeam(updatedTeam);
     const updatedAccount = { ...account, teamId: team.id };
     await db.saveAccount(updatedAccount);
+    // Log to transfer market — signing (or transfer if moving from another team)
+    try {
+      await db.logTransfer({
+        playerUsername: account.username,
+        fromTeamId: oldTeamId,
+        toTeamId: team.id,
+        season: currentSeason,
+        createdBy: account.username,
+      });
+    } catch (e) { console.error('transfer log failed:', e); }
     onUpdate(updatedAccount);
     refresh();
   };
@@ -5703,6 +5830,16 @@ const TeamsView = ({ account, onUpdate, rankings }) => {
     await db.saveTeam(updatedTeam);
     const updatedAccount = { ...account, teamId: null };
     await db.saveAccount(updatedAccount);
+    // Log to transfer market — release
+    try {
+      await db.logTransfer({
+        playerUsername: account.username,
+        fromTeamId: team.id,
+        toTeamId: null,
+        season: currentSeason,
+        createdBy: account.username,
+      });
+    } catch (e) { console.error('transfer log failed:', e); }
     onUpdate(updatedAccount);
     refresh();
   };
@@ -9024,7 +9161,40 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
   const [teamEditing, setTeamEditing] = useState(null); // account whose team is being changed
   const [sidEditing, setSidEditing] = useState(null); // account whose Strikers ID is being changed
   const [newSid, setNewSid] = useState('');
+  const [posEditing, setPosEditing] = useState(null); // account whose position is being changed
+  const [pendingPosRequests, setPendingPosRequests] = useState([]);
   const [busy, setBusy] = useState(false);
+
+  // Load pending position change requests for admin review
+  const loadPendingPosRequests = async () => {
+    try {
+      const reqs = await db.listPositionRequests('pending');
+      setPendingPosRequests(reqs);
+    } catch (e) { /* table may not exist yet */ setPendingPosRequests([]); }
+  };
+  useEffect(() => { loadPendingPosRequests(); }, []);
+
+  const approvePosRequest = async (req) => {
+    setBusy(true);
+    try {
+      await db.approvePositionRequest(req, { reviewedBy: account.username });
+      setInfo(`✓ Approved: ${req.username} is now ${req.toPos}`);
+      await loadPendingPosRequests();
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) { setError('Could not approve: ' + (e?.message || e)); }
+    setBusy(false);
+  };
+  const denyPosRequest = async (req) => {
+    setBusy(true);
+    try {
+      await db.denyPositionRequest(req, { reviewedBy: account.username });
+      setInfo(`✓ Denied: ${req.username}'s request`);
+      await loadPendingPosRequests();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) { setError('Could not deny: ' + (e?.message || e)); }
+    setBusy(false);
+  };
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
@@ -9076,6 +9246,23 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
       onRefresh && onRefresh();
     } catch (e) {
       setError('Could not toggle cheater: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const changePosition = async (player, newPos) => {
+    setError('');
+    if (!newPos || newPos === player.position) { setPosEditing(null); return; }
+    if (!['ST', 'CM', 'DEF', 'GK', 'FLEX'].includes(newPos)) { setError('Invalid position'); return; }
+    setBusy(true);
+    try {
+      await db.saveAccount({ ...player, position: newPos });
+      setInfo(`✓ ${player.username}'s position changed to ${newPos}`);
+      setPosEditing(null);
+      onRefresh && onRefresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (e) {
+      setError('Could not change position: ' + (e?.message || e));
     }
     setBusy(false);
   };
@@ -9203,6 +9390,54 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
       )}
 
+      {/* POSITION CHANGE REQUESTS — pending queue for admin review */}
+      {pendingPosRequests.length > 0 && (
+        <div className="rounded-xl p-4" style={{
+          background: `${C.gold}11`, border: `1px solid ${C.gold}66`,
+        }}>
+          <div className="font-display tracking-wider text-sm mb-3 flex items-center gap-2" style={{ color: C.brandNavy }}>
+            <span style={{ color: C.goldLight }}>◆</span>
+            POSITION CHANGE REQUESTS ({pendingPosRequests.length})
+          </div>
+          <div className="space-y-2">
+            {pendingPosRequests.map(req => (
+              <div key={req.id} className="rounded-lg p-3" style={{
+                background: C.white, border: `1px solid ${C.navyLight}66`,
+              }}>
+                <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
+                  <div>
+                    <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
+                      {req.username.toUpperCase()}
+                    </div>
+                    <div className="font-mono text-[10px] tracking-widest mt-1" style={{ color: `${C.brandNavy}88` }}>
+                      <b>{req.fromPos}</b> → <b style={{ color: C.goldLight }}>{req.toPos}</b>
+                      <span style={{ marginLeft: 10 }}>{fmtDate(req.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={() => approvePosRequest(req)} disabled={busy}
+                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                      style={{ background: C.green, color: C.onColor }}
+                    >APPROVE</button>
+                    <button
+                      onClick={() => denyPosRequest(req)} disabled={busy}
+                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                      style={{ background: `${C.red}cc`, color: C.cream }}
+                    >DENY</button>
+                  </div>
+                </div>
+                {req.reason && (
+                  <div className="font-body text-xs italic px-2 py-1.5 rounded" style={{ background: `${C.navyLight}22`, color: `${C.brandNavy}cc` }}>
+                    "{req.reason}"
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <input
         type="text"
         value={search}
@@ -9275,6 +9510,32 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 >CANCEL</button>
               </div>
+            ) : posEditing && (posEditing.id === p.id) ? (
+              <div className="space-y-2">
+                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
+                  POSITION — {p.username.toUpperCase()}
+                </div>
+                <div className="flex gap-1.5 flex-wrap">
+                  {['ST', 'CM', 'DEF', 'GK', 'FLEX'].map(pos => (
+                    <button
+                      key={pos}
+                      disabled={busy}
+                      onClick={() => changePosition(p, pos)}
+                      className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+                      style={pos === p.position
+                        ? { background: C.gold, color: C.brandNavyDeep, border: `1px solid ${C.goldLight}` }
+                        : { background: `${C.navyLight}44`, color: C.brandNavy, border: `1px solid ${C.navyLight}66` }
+                      }
+                    >{pos}{pos === p.position ? ' ✓' : ''}</button>
+                  ))}
+                </div>
+                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
+                <button
+                  onClick={() => { setPosEditing(null); setError(''); }}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                >CANCEL</button>
+              </div>
             ) : sidEditing && (sidEditing.id === p.id) ? (
               <div className="space-y-2">
                 <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
@@ -9321,7 +9582,12 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
                   </div>
                 </div>
                 <button
-                  onClick={() => { setTeamEditing(p); setEditing(null); setSidEditing(null); setError(''); }}
+                  onClick={() => { setPosEditing(p); setEditing(null); setTeamEditing(null); setSidEditing(null); setError(''); }}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
+                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                >POS</button>
+                <button
+                  onClick={() => { setTeamEditing(p); setEditing(null); setSidEditing(null); setPosEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 ><Users size={11} /> TEAM</button>
@@ -12189,7 +12455,7 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
         )}
 
         {/* TEAMS */}
-        {view === 'teams' && <TeamsView account={account} onUpdate={onUpdate} rankings={rankings} />}
+        {view === 'teams' && <TeamsView account={account} onUpdate={onUpdate} rankings={rankings} currentSeason={currentSeason} />}
 
         {/* STATS — sortable NHL-style table replacing the old OVR-only leaderboard.
             Has its own season selector (ALL TIME + each season with data). */}

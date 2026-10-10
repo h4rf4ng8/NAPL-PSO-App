@@ -225,6 +225,18 @@ html[data-theme="dark"] textarea {
 /* ============ FORMATION SLOT — ICON + HOVER POPUP ============
    Default: small avatar icon. On hover: full-size PlayerCard fades in as a
    floating overlay above the avatar. Click still opens the modal. */
+/* Each slot wrapper gets its own stacking context (from the translate
+   transform in the inline style). To prevent sibling wrappers from painting
+   on top of a hovered slot's preview card, raise the wrapper's z-index on
+   hover/focus. Default z-index: 1 so non-hovered slots still stack cleanly. */
+.asl-slot-wrapper {
+  z-index: 1;
+}
+.asl-slot-wrapper:hover,
+.asl-slot-wrapper:focus-within {
+  z-index: 50;
+}
+
 .asl-formation-slot {
   display: inline-flex;
   align-items: flex-start;

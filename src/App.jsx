@@ -9483,12 +9483,16 @@ const WeightingsManager = ({ onRefresh }) => {
   // Which stats apply to which position (must match DEFAULT_POSITION_WEIGHTS keys)
   // Strikers-Club stat set only — no shot%, interceptions, or pass accuracy.
   const POSITION_STATS = {
-    ST:  ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
-    CM:  ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
-    DEF: ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
-    GK:  ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
+    ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
+    CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
+    DEF:  ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
+    GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
+    FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
   };
-  const POSITION_NAMES = { ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE' };
+  const POSITION_NAMES = {
+    ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
+    FLEX: 'FLEX (STRIKER + DEFENDER)',
+  };
 
   // weights stored as whole-number percentages (0-100) for the UI
   const [weights, setWeights] = useState(null);

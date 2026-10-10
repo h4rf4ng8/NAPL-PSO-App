@@ -4584,16 +4584,20 @@ const ArticleDetailView = ({ slug, account, onBack }) => {
       </button>
 
       {article.coverImageUrl && (
-        <div className="rounded-xl overflow-hidden mb-6" style={{
+        // Image shows at its NATURAL aspect ratio (no crop). We cap the height
+        // and center it on a dark backdrop so wide and tall images both look
+        // intentional — think article hero.
+        <div className="rounded-xl overflow-hidden mb-6 flex items-center justify-center" style={{
           border: `1px solid ${C.navyLight}66`,
           boxShadow: `0 4px 24px ${C.brandNavy}22`,
-          background: `${C.navyLight}22`,
+          background: C.brandNavyDeep,
+          maxHeight: 480,
         }}>
           <img
             src={article.coverImageUrl}
             alt={article.title}
-            className="w-full object-cover"
-            style={{ maxHeight: 420 }}
+            className="max-w-full"
+            style={{ maxHeight: 480, objectFit: 'contain', display: 'block' }}
           />
         </div>
       )}

@@ -296,12 +296,57 @@ export const db = {
     if (existing && existing.id !== accountId) {
       return { ok: false, reason: 'That username is already taken.' };
     }
+    // Fetch the OLD username first so we can update every place that
+    // references it by name (teams.members, teams.lineup, transfers).
+    const { data: oldRow } = await supabase
+      .from('accounts').select('username').eq('id', accountId).maybeSingle();
+    const oldUsername = oldRow?.username || '';
+    const oldLower = oldUsername.toLowerCase();
+
+    // 1. Rename the account itself
     const { error } = await supabase
       .from('accounts')
       .update({ username: trimmed, username_lower: lower })
       .eq('id', accountId);
     if (error) return { ok: false, reason: error.message };
-    // Keep auth metadata in sync if this is the current user
+
+    // 2. Propagate through teams.members + teams.lineup. Teams store roster
+    //    + lineup as usernames (not ids) so without this step, renaming
+    //    appears to "kick" the player from their team AND keeps the stale
+    //    old name on the roster forever (= phantom roster-cap problem).
+    if (oldLower && oldLower !== lower) {
+      try {
+        const { data: allTeams } = await supabase.from('teams').select('id, members, lineup');
+        if (Array.isArray(allTeams)) {
+          for (const t of allTeams) {
+            const members = Array.isArray(t.members) ? t.members : [];
+            const hasOld = members.some(m => (m || '').toLowerCase() === oldLower);
+            const lineup = t.lineup || {};
+            const lineupHasOld = Object.values(lineup).some(u => (u || '').toLowerCase() === oldLower);
+            if (!hasOld && !lineupHasOld) continue;
+            const newMembers = members.map(m => (m || '').toLowerCase() === oldLower ? trimmed : m);
+            const newLineup = {};
+            for (const [slot, u] of Object.entries(lineup)) {
+              newLineup[slot] = (u || '').toLowerCase() === oldLower ? trimmed : u;
+            }
+            await supabase.from('teams').update({
+              members: newMembers,
+              lineup: newLineup,
+            }).eq('id', t.id);
+          }
+        }
+      } catch (e) { console.error('team rename propagation failed:', e); }
+
+      // 3. Propagate through transfers.player_username so transfer history
+      //    stays correctly attributed.
+      try {
+        await supabase.from('transfers')
+          .update({ player_username: trimmed })
+          .ilike('player_username', oldUsername);
+      } catch (e) { console.error('transfer rename propagation failed:', e); }
+    }
+
+    // 4. Keep auth metadata in sync if this is the current user
     try {
       const { data: sess } = await supabase.auth.getSession();
       if (sess?.session?.user?.id === accountId) {

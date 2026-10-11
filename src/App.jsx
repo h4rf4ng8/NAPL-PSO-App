@@ -12238,12 +12238,30 @@ const Dashboard = ({ account, onLogout, onUpdate }) => {
     setCurrentVotingPeriod(open || null);
     // Also update the signed-in user's own account record so MY CARD + their
     // own OVR reflects freshly-imported matches without needing a hard refresh.
+    // IMPORTANT: only sync if the fresh data is MEANINGFULLY different —
+    // otherwise onUpdate → setAccount → new object reference → re-triggers
+    // this effect → INFINITE LOOP → every card re-mounts → flicker.
     if (account && onUpdate) {
       const my = fresh.find(a => a.id === account.id || (a.username && account.username && a.username.toLowerCase() === account.username.toLowerCase()));
-      if (my) onUpdate(my);
+      if (my) {
+        // Compare the handful of fields that actually matter. If they match,
+        // skip the setAccount call — React doesn't re-render.
+        const changed =
+          (my.stats?.games || 0) !== (account.stats?.games || 0) ||
+          (my.matches?.length || 0) !== (account.matches?.length || 0) ||
+          my.position !== account.position ||
+          my.teamId !== account.teamId ||
+          my.imageUrl !== account.imageUrl ||
+          my.pendingImageUrl !== account.pendingImageUrl ||
+          my.username !== account.username;
+        if (changed) onUpdate(my);
+      }
     }
   };
-  useEffect(() => { refresh(); }, [account]);
+  // Depend on account.id (stable per user) rather than the whole account
+  // object (new reference on every re-render). This stops the refresh from
+  // re-firing when onUpdate rotates the account prop.
+  useEffect(() => { refresh(); }, [account?.id]);
 
   // Compute position-relative rankings whenever the player pool or weightings change
   const rankings = useMemo(() => calcRankings(allPlayers, weightings), [allPlayers, weightings]);

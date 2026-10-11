@@ -12883,6 +12883,13 @@ export default function App() {
     // inside this callback — it deadlocks. We read the username from the
     // session object the callback already provides, and load the profile
     // in a separate async task (setTimeout breaks out of the callback lock).
+    // Guard against Supabase re-firing SIGNED_IN on every tab visibility
+    // change, cross-tab sync, or token refresh. Without this guard, every
+    // re-fire calls setAccount(newObject) → React treats it as a prop change
+    // → entire app re-renders → cards unmount/remount → images flicker.
+    // We keep the last-loaded user id and skip reloads for the same user.
+    let lastLoadedUserId = null;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (event === 'PASSWORD_RECOVERY') {
@@ -12892,13 +12899,22 @@ export default function App() {
         return;
       }
       if (event === 'SIGNED_OUT') {
+        lastLoadedUserId = null;
         setAccount(null);
         setPasswordRecovery(false);
         return;
       }
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      // TOKEN_REFRESHED means the access token was refreshed — the session is
+      // still the same user, no profile reload needed. Returning here avoids
+      // the hourly re-render that would otherwise flash every card.
+      if (event === 'TOKEN_REFRESHED') return;
+      if (event === 'SIGNED_IN') {
         const user = session?.user;
         if (!user) return;
+        // Skip repeated SIGNED_IN events for the SAME user (tab visibility,
+        // cross-tab sync, etc.). First sign-in per user still loads normally.
+        if (lastLoadedUserId === user.id) return;
+        lastLoadedUserId = user.id;
         // Two sign-in paths:
         // 1. Classic email/password: user_metadata.username is set at signup
         // 2. Discord OAuth: user_metadata comes from Discord (name, full_name,

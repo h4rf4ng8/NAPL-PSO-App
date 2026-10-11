@@ -2449,21 +2449,24 @@ const EditTeamModal = ({ team, onClose, onSaved }) => {
         </div>
 
         <div>
-          <Lbl>SEASONS</Lbl>
-          <div className="font-mono text-[10px] mb-2" style={{ color: `${C.cream}77` }}>
-            Pick the seasons this team competes in. Empty = all seasons.
+          <Lbl>EXCLUDE FROM SEASONS</Lbl>
+          <div className="font-mono text-[10px] mb-2 leading-relaxed" style={{ color: `${C.cream}aa` }}>
+            Teams participate in <b>all seasons by default</b>. Click a season chip to <b style={{ color: C.redLight }}>EXCLUDE</b> this team from that season (won't show in standings/stats for it).
           </div>
           <div className="flex gap-1.5 flex-wrap mb-2">
             {['S1', 'S2', 'S3', 'S4', ...seasons.filter(s => !['S1', 'S2', 'S3', 'S4'].includes(s))].map(s => {
-              const active = seasons.includes(s);
+              const excluded = seasons.includes(s);
               return (
                 <button key={s} type="button" onClick={() => toggleSeason(s)}
-                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded"
-                  style={active
-                    ? { background: C.goldLight, color: C.brandNavyDeep, border: `1px solid ${C.gold}` }
+                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
+                  style={excluded
+                    ? { background: `${C.red}cc`, color: C.cream, border: `1px solid ${C.red}` }
                     : { background: C.navyDeep, color: `${C.cream}88`, border: `1px solid ${C.navyLight}66` }
                   }
-                >{s}</button>
+                >
+                  {excluded && <XCircle size={11} />}
+                  {s}
+                </button>
               );
             })}
           </div>
@@ -2477,6 +2480,13 @@ const EditTeamModal = ({ team, onClose, onSaved }) => {
               style={{ background: `${C.navyLight}88`, color: C.brandNavy }}
             >ADD</button>
           </div>
+          {seasons.length > 0 && (
+            <div className="font-mono text-[10px] mt-2 px-2 py-1.5 rounded" style={{
+              background: `${C.red}22`, color: C.redLight, border: `1px solid ${C.red}44`,
+            }}>
+              EXCLUDED FROM: {seasons.join(', ')}
+            </div>
+          )}
         </div>
 
         <div>
@@ -4103,15 +4113,15 @@ const TeamStandings = ({ allTeams = [], allPlayers = [] }) => {
     season === 'all' ? teamMatches : teamMatches.filter(m => (m.season || 'S1') === season)
   ), [teamMatches, season]);
 
-  // Aggregate stats per team. When viewing a specific season, hide teams
-  // that aren't participating in it (team.seasons includes the season, OR
-  // team.seasons is empty meaning "all seasons").
+  // Aggregate stats per team. team.seasons is an EXCLUSION list — if the
+  // current season is in it, the team is hidden from this view. Empty list
+  // means "participates in all seasons" (default).
   const standings = useMemo(() => {
     const approvedTeams = allTeams.filter(t => {
       if (t.status !== 'approved') return false;
       if (season === 'all') return true;
-      const participates = !t.seasons || t.seasons.length === 0 || t.seasons.includes(season);
-      return participates;
+      const excluded = Array.isArray(t.seasons) && t.seasons.includes(season);
+      return !excluded;
     });
     const table = {};
     approvedTeams.forEach(t => {

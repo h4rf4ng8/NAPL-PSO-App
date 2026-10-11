@@ -1303,37 +1303,46 @@ const PlayerCard = React.forwardRef(({ account, size = 'md', team = null, hideTe
         </g>
       )}
 
-      {/* 7. STATS GRID 3x2 — center-anchored numbers, symmetric around x=160 */}
-      {/* Only shows stats tracked by Strikers Club. For GK cards, right column
-          swaps to SAV/CAT/CS%; for field players it's TKL/W-L/GP. */}
-      <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
-        <text x="62" y="364" fontSize="20" textAnchor="middle">{displayStats.goals}</text>
-        <text x="100" y="364" fontSize="11" letterSpacing="1.5">GOALS</text>
-        <text x="62" y="390" fontSize="20" textAnchor="middle">{displayStats.assists}</text>
-        <text x="100" y="390" fontSize="11" letterSpacing="1.5">ASSIST</text>
-        <text x="62" y="416" fontSize="20" textAnchor="middle">{Number(displayStats.passes || 0).toFixed(1)}</text>
-        <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS</text>
+      {/* 7. STATS GRID 3x2 — center-anchored numbers, symmetric around x=160.
+          Discrete events (goals, assists, clean sheets) show as TOTALS.
+          Volume stats (passes, tackles, deflects, catches) show as PER-GAME
+          averages — that's what the OVR actually ranks on and it's more
+          meaningful (e.g. "2.5 passes/game" tells you more than "10 total"). */}
+      {(() => {
+        const gp = Math.max(displayStats.games || 0, 1);
+        const perGame = (n) => (Number(n || 0) / gp).toFixed(1);
+        const posSuffix = (displayStats.games || 0) > 0 ? '/g' : '';
+        return (
+          <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
+            <text x="62" y="364" fontSize="20" textAnchor="middle">{displayStats.goals || 0}</text>
+            <text x="100" y="364" fontSize="11" letterSpacing="1.5">GOALS</text>
+            <text x="62" y="390" fontSize="20" textAnchor="middle">{displayStats.assists || 0}</text>
+            <text x="100" y="390" fontSize="11" letterSpacing="1.5">ASSIST</text>
+            <text x="62" y="416" fontSize="20" textAnchor="middle">{perGame(displayStats.passes)}</text>
+            <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS{posSuffix.toUpperCase()}</text>
 
-        {account.position === 'GK' ? (
-          <>
-            <text x="220" y="364" fontSize="20" textAnchor="middle">{displayStats.deflects || 0}</text>
-            <text x="256" y="364" fontSize="11" letterSpacing="1.5">DFL</text>
-            <text x="220" y="390" fontSize="20" textAnchor="middle">{displayStats.catches || 0}</text>
-            <text x="256" y="390" fontSize="11" letterSpacing="1.5">CATCH</text>
-            <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.cleanSheets || 0}</text>
-            <text x="256" y="416" fontSize="11" letterSpacing="1.5">CS</text>
-          </>
-        ) : (
-          <>
-            <text x="220" y="364" fontSize="20" textAnchor="middle">{Number(displayStats.tackles || 0).toFixed(1)}</text>
-            <text x="256" y="364" fontSize="11" letterSpacing="1.5">TKL</text>
-            <text x="220" y="390" fontSize="20" textAnchor="middle">{(displayStats.wins || 0)}-{(displayStats.losses || 0)}</text>
-            <text x="256" y="390" fontSize="11" letterSpacing="1.5">W-L</text>
-            <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.games || 0}</text>
-            <text x="256" y="416" fontSize="11" letterSpacing="1.5">GP</text>
-          </>
-        )}
-      </g>
+            {account.position === 'GK' ? (
+              <>
+                <text x="220" y="364" fontSize="20" textAnchor="middle">{perGame(displayStats.deflects)}</text>
+                <text x="256" y="364" fontSize="11" letterSpacing="1.5">DFL{posSuffix.toUpperCase()}</text>
+                <text x="220" y="390" fontSize="20" textAnchor="middle">{perGame(displayStats.catches)}</text>
+                <text x="256" y="390" fontSize="11" letterSpacing="1.5">CAT{posSuffix.toUpperCase()}</text>
+                <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.cleanSheets || 0}</text>
+                <text x="256" y="416" fontSize="11" letterSpacing="1.5">CS</text>
+              </>
+            ) : (
+              <>
+                <text x="220" y="364" fontSize="20" textAnchor="middle">{perGame(displayStats.tackles)}</text>
+                <text x="256" y="364" fontSize="11" letterSpacing="1.5">TKL{posSuffix.toUpperCase()}</text>
+                <text x="220" y="390" fontSize="20" textAnchor="middle">{(displayStats.wins || 0)}-{(displayStats.losses || 0)}</text>
+                <text x="256" y="390" fontSize="11" letterSpacing="1.5">W-L</text>
+                <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.games || 0}</text>
+                <text x="256" y="416" fontSize="11" letterSpacing="1.5">GP</text>
+              </>
+            )}
+          </g>
+        );
+      })()}
       <line x1="160" y1="348" x2="160" y2="422" stroke={palette.shadow} strokeWidth="0.7" strokeOpacity="0.55" />
 
       {/* 8. ASL logo at bottom center */}

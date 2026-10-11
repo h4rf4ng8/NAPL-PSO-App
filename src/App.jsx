@@ -2133,12 +2133,12 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
-  // If the player has already played games on their current position, changing
-  // it directly would mix stats across positions and skew rankings. In that
-  // case we require admin approval. Brand-new players (0 games) can switch
-  // freely — nothing to mess up.
+  // Every self-service position change requires admin approval, no exceptions.
+  // (Previously 0-game players could switch freely, but that let people
+  // slip through — simpler and safer to route everyone through the queue.)
+  // Admins can still change any player's position directly via ADMIN → PLAYERS.
   const games = account.stats?.games || 0;
-  const needsApproval = games > 0;
+  const needsApproval = true;
 
   // Check if a pending request already exists for this account
   useEffect(() => {
@@ -2216,7 +2216,7 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
       )}
 
       {/* Approval notice — tells player what will happen */}
-      {!pending && needsApproval && (
+      {!pending && (
         <div className="rounded-lg p-3 mb-3" style={{
           background: `${C.brandNavy}44`, border: `1px solid ${C.navyLight}66`,
         }}>
@@ -2224,8 +2224,8 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
             ◆ NEEDS APPROVAL
           </div>
           <div className="font-body text-sm" style={{ color: C.cream }}>
-            You've played {games} game{games === 1 ? '' : 's'} as <b>{account.position}</b>. Changing positions
-            after playing requires admin approval to keep stats consistent.
+            You're currently <b>{account.position}</b>{games > 0 ? ` with ${games} game${games === 1 ? '' : 's'} played` : ''}.
+            Position changes require admin approval to keep stats consistent and prevent abuse.
           </div>
         </div>
       )}
@@ -2255,8 +2255,8 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
         Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
       </div>
 
-      {/* Reason field — only shown if submitting a request */}
-      {!pending && needsApproval && pos !== account.position && (
+      {/* Reason field — shown whenever a change is being prepared */}
+      {!pending && pos !== account.position && (
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value.slice(0, 200))}
@@ -2279,7 +2279,7 @@ const EditPositionModal = ({ account, onClose, onSave }) => {
             color: C.onColor,
             boxShadow: `0 4px 16px ${C.green}66`,
           }}
-        >{busy ? 'SAVING…' : needsApproval ? 'SUBMIT REQUEST' : 'SAVE POSITION'}</button>
+        >{busy ? 'SAVING…' : 'SUBMIT REQUEST'}</button>
       )}
     </ModalShell>
   );
@@ -10491,6 +10491,120 @@ const TierPreview = () => {
             </div>
           </div>
         ))}
+      </div>
+      <WeightingsPublicView />
+    </div>
+  );
+};
+
+// Public, read-only view of how each position's OVR is weighted. Pulls the
+// current DB values (so admin changes show up here immediately for everyone).
+// Admins still edit via ADMIN → WEIGHTINGS; this is the players' view.
+const WeightingsPublicView = () => {
+  const POSITION_STATS = {
+    ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
+    CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
+    DEF:  ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
+    GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
+    FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
+  };
+  const POSITION_NAMES = {
+    ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
+    FLEX: 'FLEX',
+  };
+  const STAT_LABELS = {
+    goalsPerGame: 'GOALS',
+    assistsPerGame: 'ASSISTS',
+    passesPerGame: 'PASSES',
+    tacklesPerGame: 'TACKLES',
+    deflectsPerGame: 'DEFLECTIONS',
+    cleanSheetPct: 'CLEAN SHEETS',
+    catchesPerGame: 'CATCHES',
+  };
+  // Position accent colors — same system used elsewhere so the chips feel
+  // consistent across the app (ST red/orange, CM gold, DEF blue, GK green, FLEX purple).
+  const POS_COLOR = {
+    ST: '#ff6b4a', CM: '#f5cc3e', DEF: '#4a90e2', GK: '#4caf50', FLEX: '#b887ff',
+  };
+
+  const [weights, setWeights] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await db.getWeightings();
+        setWeights(saved || null);
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
+
+  return (
+    <div className="mt-10 rounded-xl p-5" style={{
+      background: `${C.navyDeep}aa`,
+      border: `1px solid ${C.navyLight}66`,
+    }}>
+      <div className="flex items-start justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h3 className="font-display tracking-wider text-xl mb-1" style={{ color: C.cream }}>
+            HOW OVR IS SCORED
+          </h3>
+          <p className="font-body text-sm max-w-xl" style={{ color: `${C.cream}aa`, lineHeight: 1.6 }}>
+            Every player's OVR is a weighted blend of their per-game stat averages,
+            compared to peers in their position. Weights differ per position so
+            a defender isn't ranked by goals and a striker isn't ranked by tackles.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {Object.keys(POSITION_STATS).map(pos => {
+          const posColor = POS_COLOR[pos];
+          return (
+            <div key={pos} className="rounded-lg p-4" style={{
+              background: C.white,
+              border: `1px solid ${C.navyLight}66`,
+              borderTop: `3px solid ${posColor}`,
+            }}>
+              <div className="flex items-baseline gap-2 mb-3">
+                <div className="font-display tracking-widest text-xl" style={{ color: C.brandNavyDeep }}>
+                  {pos}
+                </div>
+                <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.brandNavy}77` }}>
+                  {POSITION_NAMES[pos]}
+                </div>
+              </div>
+              <div className="space-y-2">
+                {POSITION_STATS[pos].map(stat => {
+                  const w = weights?.[pos]?.[stat];
+                  const pct = w !== undefined && w !== null ? Math.round(w * 100) : null;
+                  return (
+                    <div key={stat}>
+                      <div className="flex items-baseline justify-between mb-1">
+                        <div className="font-body text-sm" style={{ color: C.brandNavy }}>
+                          {STAT_LABELS[stat] || stat}
+                        </div>
+                        <div className="font-display text-base tracking-wider tabular-nums" style={{ color: posColor }}>
+                          {pct !== null ? `${pct}%` : '—'}
+                        </div>
+                      </div>
+                      {/* Bar graph that fills proportional to weight */}
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: `${C.navyLight}22` }}>
+                        <div className="h-full rounded-full" style={{
+                          width: pct !== null ? `${pct}%` : '0%',
+                          background: posColor,
+                          transition: 'width 0.3s ease-out',
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="font-mono text-[10px] tracking-wider mt-4 text-center" style={{ color: `${C.cream}66` }}>
+        WEIGHTS SUM TO 100% PER POSITION · UPDATED BY LEAGUE ADMINS
       </div>
     </div>
   );

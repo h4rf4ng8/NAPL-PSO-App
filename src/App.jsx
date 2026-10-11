@@ -9298,6 +9298,16 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
   const [posEditing, setPosEditing] = useState(null); // account whose position is being changed
   const [pendingPosRequests, setPendingPosRequests] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  // Local date formatter — fmtDate is defined inside other components (not
+  // global), so we need our own here.
+  const fmtDate = (ms) => {
+    if (!ms) return '';
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   // Load pending position change requests for admin review
   const loadPendingPosRequests = async () => {
@@ -9329,8 +9339,6 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
     } catch (e) { setError('Could not deny: ' + (e?.message || e)); }
     setBusy(false);
   };
-  const [error, setError] = useState('');
-  const [info, setInfo] = useState('');
 
   const approvedTeams = allTeams.filter(t => t.status === 'approved');
   const teamById = (id) => allTeams.find(t => t.id === id);

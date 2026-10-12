@@ -870,7 +870,7 @@ export const db = {
 
   // Convenience helper used by auto-log hooks. Call this whenever a player's
   // teamId changes to record it as a transfer. kind is derived from the
-  // from/to team IDs.
+  // from/to team IDs. Also POSTs to the Discord webhook if one is configured.
   async logTransfer({ playerUsername, fromTeamId, toTeamId, season, createdBy, windowType = null }) {
     if (!playerUsername) return null;
     // No-op if the team didn't actually change
@@ -881,10 +881,82 @@ export const db = {
     if (!from && to) kind = 'signing';
     else if (from && !to) kind = 'release';
     else kind = 'transfer';
-    return this.saveTransfer({
+    const saved = await this.saveTransfer({
       playerUsername, fromTeamId: from, toTeamId: to,
       season: season || 'S1', kind, windowType, createdBy,
     });
+    // Fire-and-forget Discord notification. Done in the background so a
+    // slow/failing webhook doesn't block the UI.
+    this._postTransferToDiscord({ playerUsername, from, to, kind, season: season || 'S1' })
+      .catch(e => console.error('discord webhook failed:', e));
+    return saved;
+  },
+
+  // ====== DISCORD WEBHOOK ======
+  async getDiscordWebhookUrl() {
+    const { data } = await supabase.from('settings').select('value')
+      .eq('key', 'discord_transfer_webhook').maybeSingle();
+    return data?.value || '';
+  },
+  async setDiscordWebhookUrl(url) {
+    await supabase.from('settings').upsert({
+      key: 'discord_transfer_webhook',
+      value: (url || '').trim(),
+    });
+  },
+
+  // Posts a formatted embed to the Discord webhook for one transfer event.
+  // Signing → green, Transfer → blue, Release → red. Looks up team names so
+  // the message reads human-naturally.
+  async _postTransferToDiscord({ playerUsername, from, to, kind, season }) {
+    const url = await this.getDiscordWebhookUrl();
+    if (!url) return; // not configured — silently skip
+    // Resolve team names for the embed. Falls back to 'Free Agent' when null.
+    const teamName = async (id) => {
+      if (!id) return 'Free Agent';
+      try {
+        const { data } = await supabase.from('teams').select('name, tag').eq('id', id).maybeSingle();
+        if (!data) return 'Unknown Team';
+        return data.tag ? `${data.name} [${data.tag}]` : data.name;
+      } catch { return 'Unknown Team'; }
+    };
+    const [fromName, toName] = await Promise.all([teamName(from), teamName(to)]);
+    // Colors (decimal) for the embed stripe
+    const COLORS = {
+      signing:  0x4caf50, // green
+      transfer: 0x4a90e2, // blue
+      release:  0xd4493d, // red
+    };
+    const KIND_LABEL = {
+      signing: '🟢 SIGNING',
+      transfer: '🔄 TRANSFER',
+      release: '🔴 RELEASE',
+    };
+    const title = KIND_LABEL[kind] || 'ROSTER MOVE';
+    // Human-friendly line, e.g. "harfang signs for Night Owls [NOW]" or
+    // "harfang moves from Night Owls → Day Wolves" or "harfang released from Night Owls".
+    let description;
+    if (kind === 'signing') description = `**${playerUsername}** signs for **${toName}**`;
+    else if (kind === 'release') description = `**${playerUsername}** released from **${fromName}** → Free Agent`;
+    else description = `**${playerUsername}** moves from **${fromName}** → **${toName}**`;
+    const payload = {
+      embeds: [{
+        title,
+        description,
+        color: COLORS[kind] || 0x999999,
+        footer: { text: `Season ${season} · Alliance Strikers League` },
+        timestamp: new Date().toISOString(),
+      }],
+    };
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Discord webhook returned ${res.status}: ${text}`);
+    }
   },
 
   // ============ POSITION CHANGE REQUESTS ============

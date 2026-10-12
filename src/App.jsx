@@ -423,7 +423,10 @@ const MIN_GAMES_FOR_RANKING = 1;
 const DEFAULT_POSITION_WEIGHTS = {
   ST:   { goalsPerGame: 0.55, assistsPerGame: 0.20, passesPerGame: 0.10, tacklesPerGame: 0.15 },
   CM:   { assistsPerGame: 0.35, passesPerGame: 0.30, goalsPerGame: 0.15, tacklesPerGame: 0.20 },
-  DEF:  { tacklesPerGame: 0.55, assistsPerGame: 0.15, passesPerGame: 0.20, goalsPerGame: 0.10 },
+  // Defenders now get credit for clean sheets — if the team shut the other
+  // side out, the back line earned it. Rebalanced so tackles still dominate
+  // but shutouts carry real weight.
+  DEF:  { tacklesPerGame: 0.40, cleanSheetPct: 0.20, passesPerGame: 0.15, assistsPerGame: 0.15, goalsPerGame: 0.10 },
   GK:   { deflectsPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.30 },
   // FLEX: true even split (25% × 4) for players who play multiple roles
   FLEX: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.25, passesPerGame: 0.25 },
@@ -10055,7 +10058,7 @@ const WeightingsManager = ({ onRefresh }) => {
   const POSITION_STATS = {
     ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
     CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
-    DEF:  ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
+    DEF:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
     GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
     FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
   };
@@ -10662,7 +10665,7 @@ const WeightingsPublicView = () => {
   const POSITION_STATS = {
     ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
     CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
-    DEF:  ['tacklesPerGame', 'assistsPerGame', 'passesPerGame', 'goalsPerGame'],
+    DEF:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
     GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
     FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
   };

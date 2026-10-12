@@ -325,7 +325,7 @@ const getPlayerAwards = (account) => account?.awards || [];
 const hasAnyAward = (account) => (account?.awards?.length || 0) > 0;
 
 // ============ STAT CALCS ============
-const POSITIONS = ['ST', 'CM', 'DEF', 'GK', 'FLEX'];
+const POSITIONS = ['ST', 'WG', 'CM', 'DEF', 'GK', 'FLEX'];
 
 const emptyStats = () => ({
   games: 0, goals: 0, assists: 0, tackles: 0,
@@ -422,6 +422,9 @@ const MIN_GAMES_FOR_RANKING = 1;
 // Only Strikers-Club-tracked stats — no shot%, interceptions, or pass accuracy.
 const DEFAULT_POSITION_WEIGHTS = {
   ST:   { goalsPerGame: 0.55, assistsPerGame: 0.20, passesPerGame: 0.10, tacklesPerGame: 0.15 },
+  // Wingers: attack-minded wide players who create and finish. Assist-heavy
+  // (set up goals from the flanks) with meaningful goal share.
+  WG:   { assistsPerGame: 0.35, goalsPerGame: 0.30, passesPerGame: 0.20, tacklesPerGame: 0.15 },
   CM:   { assistsPerGame: 0.35, passesPerGame: 0.30, goalsPerGame: 0.15, tacklesPerGame: 0.20 },
   // Defenders now get credit for clean sheets — if the team shut the other
   // side out, the back line earned it. Rebalanced so tackles still dominate
@@ -483,7 +486,7 @@ const calcRankings = (allPlayers, customWeights = null) => {
   const weightsByPos = customWeights || DEFAULT_POSITION_WEIGHTS;
   // Group players by position. FLEX gets its own pool with its own weights
   // so FLEX players don't go unranked.
-  const byPos = { ST: [], CM: [], DEF: [], GK: [], FLEX: [] };
+  const byPos = { ST: [], WG: [], CM: [], DEF: [], GK: [], FLEX: [] };
   allPlayers.forEach(p => {
     if (byPos[p.position]) byPos[p.position].push(p);
   });
@@ -5116,7 +5119,7 @@ const StatsView = ({ allPlayers = [], allTeams = [], rankings = {}, onPlayerClic
           </div>
           {/* Position filter chips */}
           <div className="flex gap-1 rounded p-0.5" style={{ background: `${C.navyLight}33` }}>
-            {['ALL', 'ST', 'CM', 'DEF', 'GK', 'FLEX'].map(p => (
+            {['ALL', 'ST', 'WG', 'CM', 'DEF', 'GK', 'FLEX'].map(p => (
               <button
                 key={p}
                 onClick={() => setPosFilter(p)}
@@ -5315,7 +5318,7 @@ const resolveLineup = (team, members, rankings) => {
     return resolved;
   }
   // Auto-assign fallback: bucket by player position, pick strongest for each slot
-  const buckets = { GK: [], DEF: [], CM: [], ST: [], FLEX: [] };
+  const buckets = { GK: [], DEF: [], CM: [], ST: [], WG: [], FLEX: [] };
   members.forEach(p => {
     const pos = p.position || 'CM';
     if (buckets[pos]) buckets[pos].push(p); else buckets.CM.push(p);
@@ -5401,7 +5404,7 @@ const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isC
     const oldSlots = getFormation(draftFormation).slots;
     const newSlots = getFormation(newId).slots;
     // Group currently assigned players by their old slot's position
-    const byPos = { ST: [], CM: [], DEF: [], GK: [] };
+    const byPos = { ST: [], WG: [], CM: [], DEF: [], GK: [] };
     for (const s of oldSlots) {
       const u = draftLineup[s.id];
       if (u && byPos[s.pos]) byPos[s.pos].push(u);
@@ -9412,7 +9415,7 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
   const changePosition = async (player, newPos) => {
     setError('');
     if (!newPos || newPos === player.position) { setPosEditing(null); return; }
-    if (!['ST', 'CM', 'DEF', 'GK', 'FLEX'].includes(newPos)) { setError('Invalid position'); return; }
+    if (!['ST', 'WG', 'CM', 'DEF', 'GK', 'FLEX'].includes(newPos)) { setError('Invalid position'); return; }
     setBusy(true);
     try {
       await db.saveAccount({ ...player, position: newPos });
@@ -9675,7 +9678,7 @@ const PlayersManager = ({ account, allPlayers, allTeams = [], currentSeason = 'S
                   POSITION — {p.username.toUpperCase()}
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
-                  {['ST', 'CM', 'DEF', 'GK', 'FLEX'].map(pos => (
+                  {['ST', 'WG', 'CM', 'DEF', 'GK', 'FLEX'].map(pos => (
                     <button
                       key={pos}
                       disabled={busy}
@@ -10057,13 +10060,14 @@ const WeightingsManager = ({ onRefresh }) => {
   // Strikers-Club stat set only — no shot%, interceptions, or pass accuracy.
   const POSITION_STATS = {
     ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
+    WG:   ['assistsPerGame', 'goalsPerGame', 'passesPerGame', 'tacklesPerGame'],
     CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
     DEF:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
     GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
     FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
   };
   const POSITION_NAMES = {
-    ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
+    ST: 'STRIKER', WG: 'WINGER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
     FLEX: 'FLEX (STRIKER + DEFENDER)',
   };
 
@@ -10664,13 +10668,14 @@ const TierPreview = () => {
 const WeightingsPublicView = () => {
   const POSITION_STATS = {
     ST:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
+    WG:   ['assistsPerGame', 'goalsPerGame', 'passesPerGame', 'tacklesPerGame'],
     CM:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
     DEF:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
     GK:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
     FLEX: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
   };
   const POSITION_NAMES = {
-    ST: 'STRIKER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
+    ST: 'STRIKER', WG: 'WINGER', CM: 'MIDFIELDER', DEF: 'DEFENDER', GK: 'GOALIE',
     FLEX: 'FLEX',
   };
   const STAT_LABELS = {
@@ -10682,10 +10687,9 @@ const WeightingsPublicView = () => {
     cleanSheetPct: 'CLEAN SHEETS',
     catchesPerGame: 'CATCHES',
   };
-  // Position accent colors — same system used elsewhere so the chips feel
-  // consistent across the app (ST red/orange, CM gold, DEF blue, GK green, FLEX purple).
+  // Position accent colors — ST red, WG orange, CM gold, DEF blue, GK green, FLEX purple.
   const POS_COLOR = {
-    ST: '#ff6b4a', CM: '#f5cc3e', DEF: '#4a90e2', GK: '#4caf50', FLEX: '#b887ff',
+    ST: '#ff6b4a', WG: '#ff9a3c', CM: '#f5cc3e', DEF: '#4a90e2', GK: '#4caf50', FLEX: '#b887ff',
   };
 
   const [weights, setWeights] = useState(null);

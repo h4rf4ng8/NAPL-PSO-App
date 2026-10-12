@@ -3,7 +3,8 @@ import {
   Trophy, Target, Zap, Shield, Activity, User, LogOut, Plus, TrendingUp,
   Award, Users, ChevronRight, X, Edit3, Crown, CheckCircle, XCircle,
   Clock, Swords, Calendar, Flag, Star, BarChart3, Hand, Footprints, Sparkles,
-  Share2, Download, Copy, Check, Home as HomeIcon, BookOpen, Sun, Moon
+  Share2, Download, Copy, Check, Home as HomeIcon, BookOpen, Sun, Moon,
+  MessageSquare
 } from 'lucide-react';
 
 // ============ ASL THEME (LIGHT) ============
@@ -6356,12 +6357,12 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
         // matches[] to keep everything in sync (safer than incrementing).
         const updatedMatches = [...(player.matches || []), matchRecord];
         const lifetime = emptyStats();
-        let totalPasses = 0;
         for (const m of updatedMatches) {
           lifetime.games += 1;
           lifetime.goals += m.goals || 0;
           lifetime.assists += m.assists || 0;
           lifetime.tackles += m.tackles || 0;
+          lifetime.passes += m.passes || 0; // TOTAL, not average — card divides by games for per-game display
           lifetime.deflects += m.deflects || 0;
           lifetime.catches += m.catches || 0;
           if (m.cleanSheet) lifetime.cleanSheets += 1;
@@ -6369,9 +6370,7 @@ const ImportMatchManager = ({ account, allPlayers, allTeams, currentSeason, onRe
           if (m.result === 'W') lifetime.wins += 1;
           else if (m.result === 'L') lifetime.losses += 1;
           else lifetime.draws += 1;
-          totalPasses += m.passes || 0;
         }
-        if (lifetime.games > 0) lifetime.passes = Math.round(totalPasses / lifetime.games);
 
         // Persist strikersId if the player didn't have one yet (teach once)
         const patch = { ...player, matches: updatedMatches, stats: lifetime };
@@ -7305,6 +7304,7 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
           ...(isSuperAdmin(account) ? [
             { id: 'admins', label: 'ADMINS', icon: Crown },
             { id: 'weights', label: 'WEIGHTS', icon: Sparkles },
+            { id: 'integrations', label: 'DISCORD', icon: MessageSquare },
           ] : []),
         ].map(s => {
           const active = section === s.id;
@@ -7329,6 +7329,10 @@ const AdminPanel = ({ account, dynamicAdmins, onRefreshAdmins }) => {
 
       {section === 'weights' && isSuperAdmin(account) && (
         <WeightingsManager onRefresh={refresh} />
+      )}
+
+      {section === 'integrations' && isSuperAdmin(account) && (
+        <IntegrationsManager />
       )}
 
       {section === 'stats' && (
@@ -9901,6 +9905,150 @@ const PicturesManager = ({ allPlayers, onRefresh }) => {
 
 // ============ WEIGHTINGS MANAGER (super-admin only) ============
 // Lets super admins tune the per-position stat weights used for rankings.
+// ============ INTEGRATIONS (super-admin only) ============
+// Manages the Discord webhook URL for #roster-transactions auto-posts.
+// Every signing / transfer / release logged via db.logTransfer fires a
+// POST to this URL with a formatted embed. Clear the field to disable.
+const IntegrationsManager = () => {
+  const [url, setUrl] = useState('');
+  const [saved, setSaved] = useState('');
+  const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const u = await db.getDiscordWebhookUrl();
+        setUrl(u || '');
+        setSaved(u || '');
+      } catch (e) { console.error(e); }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setStatus(''); setBusy(true);
+    try {
+      const trimmed = (url || '').trim();
+      // Basic shape check so admins don't paste something random
+      if (trimmed && !/^https:\/\/(discord\.com|discordapp\.com)\/api\/webhooks\//.test(trimmed)) {
+        setStatus('⚠ That doesn\'t look like a Discord webhook URL. Should start with https://discord.com/api/webhooks/');
+        setBusy(false);
+        return;
+      }
+      await db.setDiscordWebhookUrl(trimmed);
+      setSaved(trimmed);
+      setStatus(trimmed ? '✓ Saved. Transfers will post to Discord automatically.' : '✓ Webhook cleared — Discord posts disabled.');
+      setTimeout(() => setStatus(''), 4000);
+    } catch (e) {
+      setStatus('Could not save: ' + (e?.message || e));
+    }
+    setBusy(false);
+  };
+
+  const handleTest = async () => {
+    setStatus(''); setTesting(true);
+    try {
+      const trimmed = (url || '').trim();
+      if (!trimmed) { setStatus('Enter a webhook URL first.'); setTesting(false); return; }
+      // Post a test embed directly
+      const payload = {
+        embeds: [{
+          title: '✅ ASL WEBHOOK TEST',
+          description: 'If you can see this in Discord, the webhook is configured correctly. Transfer market posts will appear here from now on.',
+          color: 0xf5cc3e, // gold
+          footer: { text: 'Alliance Strikers League · Admin test' },
+          timestamp: new Date().toISOString(),
+        }],
+      };
+      const res = await fetch(trimmed, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        setStatus(`Test failed (${res.status}): ${text.slice(0, 120)}`);
+      } else {
+        setStatus('✓ Test message sent. Check your Discord channel.');
+      }
+    } catch (e) {
+      setStatus('Test failed: ' + (e?.message || e));
+    }
+    setTesting(false);
+  };
+
+  const dirty = (url || '').trim() !== (saved || '').trim();
+
+  return (
+    <div className="rounded-xl p-5 space-y-4" style={{
+      background: C.white, border: `1px solid ${C.navyLight}`,
+    }}>
+      <div>
+        <div className="flex items-center gap-2 mb-1">
+          <MessageSquare size={18} style={{ color: C.brandNavy }} />
+          <h3 className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>
+            DISCORD WEBHOOK — ROSTER TRANSACTIONS
+          </h3>
+        </div>
+        <p className="font-body text-sm" style={{ color: `${C.cream}cc`, lineHeight: 1.55 }}>
+          When a player signs, transfers, or is released, an embed will post
+          automatically to the Discord channel this webhook points at. Leave empty
+          to disable Discord notifications.
+        </p>
+      </div>
+
+      <div>
+        <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: `${C.brandNavy}99` }}>
+          WEBHOOK URL
+        </div>
+        <input
+          type="text"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          placeholder="https://discord.com/api/webhooks/..."
+          className="w-full px-3 py-2 font-mono text-xs rounded"
+          style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
+        />
+      </div>
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={handleSave} disabled={busy || !dirty}
+          className="px-4 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-40"
+          style={{ background: C.gold, color: C.brandNavyDeep }}
+        >{busy ? 'SAVING…' : 'SAVE WEBHOOK'}</button>
+        <button
+          onClick={handleTest} disabled={testing || !(url || '').trim()}
+          className="px-4 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-40"
+          style={{ background: `${C.navyLight}88`, color: C.brandNavy }}
+        >{testing ? 'TESTING…' : 'SEND TEST MESSAGE'}</button>
+      </div>
+
+      {status && (
+        <div className="font-mono text-xs px-3 py-2 rounded" style={{
+          background: status.startsWith('✓') ? `${C.green}22` : `${C.red}22`,
+          color: status.startsWith('✓') ? C.greenLight : C.redLight,
+        }}>{status}</div>
+      )}
+
+      <div className="rounded-lg p-3" style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}44` }}>
+        <div className="font-mono text-[10px] tracking-widest mb-1.5" style={{ color: C.goldLight }}>
+          ◆ HOW TO GET A WEBHOOK URL
+        </div>
+        <ol className="font-body text-sm space-y-1 list-decimal pl-5" style={{ color: `${C.cream}cc` }}>
+          <li>Open your Discord server → right-click <b>#roster-transactions</b> → Edit Channel</li>
+          <li>Integrations → Webhooks → <b>New Webhook</b></li>
+          <li>Name it "ASL Transactions" (or anything), pick an avatar</li>
+          <li>Click <b>Copy Webhook URL</b></li>
+          <li>Paste it here and SAVE</li>
+          <li>Hit <b>SEND TEST MESSAGE</b> to verify it works</li>
+        </ol>
+      </div>
+    </div>
+  );
+};
+
 const WeightingsManager = ({ onRefresh }) => {
   // Which stats apply to which position (must match DEFAULT_POSITION_WEIGHTS keys)
   // Strikers-Club stat set only — no shot%, interceptions, or pass accuracy.

@@ -11810,7 +11810,7 @@ const HallOfFameView = ({ allPlayers, allTeams, onPlayerClick }) => {
   useEffect(() => { db.getChampions().then(c => setChampions(c || {})); }, []);
   const teamById = (id) => (allTeams || []).find(t => t.id === id);
 
-  // Build a map: { season -> { awardId -> { player, award } } }
+  // Build a map: { season → { awardId → { player, award } } }
   const bySeason = {};
   allPlayers.forEach(p => {
     (p.awards || []).forEach(aw => {

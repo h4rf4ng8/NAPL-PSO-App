@@ -239,8 +239,10 @@ const rowToSubmission = (row) => row ? ({
 export const db = {
   // ====== ACCOUNTS ======
   async getAccount(username) {
+    // Public view (no email). Use getAccountById for the signed-in user when
+    // email access is needed.
     const { data, error } = await supabase
-      .from('accounts')
+      .from('accounts_public')
       .select('*')
       .eq('username_lower', username.toLowerCase())
       .maybeSingle();
@@ -357,7 +359,10 @@ export const db = {
   },
 
   async listAccounts() {
-    const { data, error } = await supabase.from('accounts').select('*');
+    // Reads from accounts_public view which excludes email + other sensitive
+    // columns. The accounts table itself only returns the signed-in user's
+    // own row under RLS (see protect-emails.sql).
+    const { data, error } = await supabase.from('accounts_public').select('*');
     if (error) { console.error(error); return []; }
     return (data || []).map(rowToAccount);
   },

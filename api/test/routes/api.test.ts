@@ -156,6 +156,47 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         await ok('POST', '/api/teams/away/review', admin, {
             status: 'approved'
         });
+        await t.test('content CRUD keeps public reads, admin writes, field mappings and server metadata', async () => {
+            const date = 1_700_000_000_000;
+            const fixtures = [
+                { path: 'news', input: { id: 'content_news', type: 'result', title: 'Before', body: 'Body', pinned: true, homeTeamId: 'home', awayTeamId: 'away', homeScore: 2, awayScore: 1, date, notes: 'Note', autoFromSubmission: 'source' }, patch: { title: null, date: null }, expected: { title: '', date: null, body: 'Body', homeScore: 2, autoFromSubmission: 'source' } },
+                { path: 'rules', input: { id: 'content_rules', title: 'Before', body: 'Body', sortOrder: 7 }, patch: { title: 'After', body: 'Updated body', sortOrder: 3 }, expected: { title: 'After', body: 'Updated body', sortOrder: 3 } },
+                { path: 'articles', input: { id: 'content_article', slug: 'content-article', title: 'Before', body: 'Body', coverImageUrl: 'https://example.test/cover.png', excerpt: 'Excerpt', publishedAt: date }, patch: { title: 'After', body: 'Updated body', publishedAt: null }, expected: { title: 'After', body: 'Updated body', publishedAt: null, excerpt: 'Excerpt', coverImageUrl: 'https://example.test/cover.png' } },
+                { path: 'schedule', input: { id: 'content_schedule', season: 'Content test', week: 1, homeTeamId: 'home', awayTeamId: 'away', scheduledDate: date, streamUrl: 'https://example.test/live', matchType: 'playoff', playoffRound: 'Final', status: 'completed', homeScore: 2, awayScore: 1, linkedMatchId: 'source', notes: 'Note' }, patch: { week: 2, scheduledDate: null }, expected: { week: 2, scheduledDate: null, streamUrl: 'https://example.test/live', playoffRound: 'Final', homeScore: 2, linkedMatchId: 'source', notes: 'Note' } },
+            ];
+            for (const fixture of fixtures) {
+                const url = `/api/${fixture.path}`, itemUrl = `${url}/${fixture.input.id}`;
+                for (const user of [undefined, alice]) {
+                    const denied = user ? 403 : 401;
+                    assert.equal((await call('POST', url, user, fixture.input)).statusCode, denied);
+                    assert.equal((await call('PATCH', itemUrl, user, fixture.patch)).statusCode, denied);
+                    assert.equal((await call('DELETE', itemUrl, user)).statusCode, denied);
+                }
+                assert.equal((await call('POST', url, admin, { ...fixture.input, author: 'Forged' })).statusCode, 400);
+                const before = Date.now();
+                const saved = await ok('POST', url, admin, fixture.input);
+                assert.equal(saved.id, fixture.input.id);
+                if (fixture.path !== 'news') assert.ok(Number(saved.updatedAt) >= before);
+                if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(saved.author, 'Admin');
+                if (fixture.path === 'news') await database.execute(Prisma.sql`UPDATE public.news SET author='Original writer' WHERE id=${fixture.input.id}`);
+                else if (fixture.path === 'articles') await database.execute(Prisma.sql`UPDATE public.articles SET author='Original writer' WHERE id=${fixture.input.id}`);
+                assert.equal((await call('PATCH', itemUrl, admin, { id: 'forged', ...fixture.patch })).statusCode, 400);
+                const patched = await ok('PATCH', itemUrl, admin, fixture.patch);
+                for (const [key, value] of Object.entries(fixture.expected)) assert.deepEqual(patched[key], value, `${fixture.path}.${key}`);
+                if (saved.createdAt !== undefined) assert.equal(patched.createdAt, saved.createdAt);
+                if (fixture.path !== 'news') assert.ok(Number(patched.updatedAt) >= Number(saved.updatedAt));
+                if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(patched.author, 'Original writer');
+                const listed = (await call('GET', url)).json<Row[]>();
+                assert.deepEqual(listed.find(row => row.id === fixture.input.id), patched);
+                if (fixture.path === 'articles') assert.deepEqual(await ok('GET', '/api/articles/slug/content-article'), patched);
+                const replaced = await ok('POST', url, admin, fixture.input);
+                if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(replaced.author, 'Admin');
+                assert.equal((await call('GET', url)).json<Row[]>().filter(row => row.id === fixture.input.id).length, 1);
+                assert.deepEqual(await ok('DELETE', itemUrl, admin), { ok: true });
+                assert.equal((await call('GET', url)).json<Row[]>().some(row => row.id === fixture.input.id), false);
+                assert.equal((await call('PATCH', itemUrl, admin, fixture.patch)).statusCode, 404);
+            }
+        });
         await t.test('schedule replacement validates before writing and rolls back partial inserts', async () => {
             const season = 'Replacement test';
             const url = `/api/schedule/season/${encodeURIComponent(season)}`;

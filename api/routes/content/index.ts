@@ -29,74 +29,90 @@ const maps = {
     },
 };
 export function registerContent(app: FastifyInstance, { db, webhookUrl }: Dependencies): void {
-    const resources = [{
-            path: 'news', table: 'news', schema: newsInput, patchSchema: newsInput.omit({
-                id: true
-            }).partial(), map: maps.news, format: newsDto
-        }, {
-            path: 'rules', table: 'rules_sections', schema: ruleInput, patchSchema: ruleInput.omit({
-                id: true
-            }).partial(), map: maps.rules, format: ruleDto
-        }, {
-            path: 'articles', table: 'articles', schema: articleInput, patchSchema: articleInput.omit({
-                id: true
-            }).partial(), map: maps.articles, format: articleDto
-        }, {
-            path: 'schedule', table: 'scheduled_matches', schema: scheduleInput, patchSchema: scheduleInput.omit({
-                id: true
-            }).partial(), map: maps.schedule, format: scheduleDto
-        }];
-    for (const resource of resources) {
-        app.get(`/api/${resource.path}`, {
-            config: {
-                public: true
-            }
-        }, async (request) => {
-            if (resource.path === 'news')
-                return listNews(db);
-            let rows = await list(db, resource.table);
-            const { season } = query(request);
-            if (season && resource.path === 'schedule')
-                rows = rows.filter(r => r.season === season);
-            if (resource.path === 'rules')
-                rows.sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
-            return rows.map(value => resource.format(value));
-        });
-        app.post(`/api/${resource.path}`, {
-            config: {
-                role: 'admin'
-            }
-        }, async (request) => {
-            const input = resource.schema.parse(request.body);
-            const fields = toColumns(input, resource.map);
-            if (resource.path === 'articles' || resource.path === 'news')
-                fields.author = await actorName(db, request);
-            if (resource.path !== 'news')
-                fields.updated_at = new Date();
-            return db.transaction(async (tx) => resource.format(await upsert(tx, resource.table, input.id, fields)));
-        });
-        app.patch(`/api/${resource.path}/:id`, {
-            config: {
-                role: 'admin'
-            }
-        }, async (request) => {
-            const input = resource.patchSchema.parse(request.body);
-            const fields = toColumns(input, resource.map);
-            if (resource.path !== 'news')
-                fields.updated_at = new Date();
-            return resource.format(await patch(db, resource.table, parameters(request).id!, fields));
-        });
-        app.delete(`/api/${resource.path}/:id`, {
-            config: {
-                role: 'admin'
-            }
-        }, async (request) => {
-            await remove(db, resource.table, parameters(request).id!);
-            return {
-                ok: true
-            };
-        });
-    }
+    app.get('/api/news', { config: { public: true } }, async () => listNews(db));
+    app.post('/api/news', { config: { role: 'admin' } }, async (request) => {
+        const input = newsInput.parse(request.body);
+        const fields = toColumns(input, maps.news);
+        fields.author = await actorName(db, request);
+        return db.transaction(async (tx) => newsDto(await upsert(tx, 'news', input.id, fields)));
+    });
+    app.patch('/api/news/:id', { config: { role: 'admin' } }, async (request) => {
+        const input = newsInput.omit({ id: true }).partial().parse(request.body);
+        return newsDto(await patch(db, 'news', parameters(request).id!, toColumns(input, maps.news)));
+    });
+    app.delete('/api/news/:id', { config: { role: 'admin' } }, async (request) => {
+        await remove(db, 'news', parameters(request).id!);
+        return { ok: true };
+    });
+
+    app.get('/api/rules', { config: { public: true } }, async (request) => {
+        const rows = await list(db, 'rules_sections');
+        query(request);
+        rows.sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+        return rows.map(value => ruleDto(value));
+    });
+    app.post('/api/rules', { config: { role: 'admin' } }, async (request) => {
+        const input = ruleInput.parse(request.body);
+        const fields = toColumns(input, maps.rules);
+        fields.updated_at = new Date();
+        return db.transaction(async (tx) => ruleDto(await upsert(tx, 'rules_sections', input.id, fields)));
+    });
+    app.patch('/api/rules/:id', { config: { role: 'admin' } }, async (request) => {
+        const input = ruleInput.omit({ id: true }).partial().parse(request.body);
+        const fields = toColumns(input, maps.rules);
+        fields.updated_at = new Date();
+        return ruleDto(await patch(db, 'rules_sections', parameters(request).id!, fields));
+    });
+    app.delete('/api/rules/:id', { config: { role: 'admin' } }, async (request) => {
+        await remove(db, 'rules_sections', parameters(request).id!);
+        return { ok: true };
+    });
+
+    app.get('/api/articles', { config: { public: true } }, async (request) => {
+        const rows = await list(db, 'articles');
+        query(request);
+        return rows.map(value => articleDto(value));
+    });
+    app.post('/api/articles', { config: { role: 'admin' } }, async (request) => {
+        const input = articleInput.parse(request.body);
+        const fields = toColumns(input, maps.articles);
+        fields.author = await actorName(db, request);
+        fields.updated_at = new Date();
+        return db.transaction(async (tx) => articleDto(await upsert(tx, 'articles', input.id, fields)));
+    });
+    app.patch('/api/articles/:id', { config: { role: 'admin' } }, async (request) => {
+        const input = articleInput.omit({ id: true }).partial().parse(request.body);
+        const fields = toColumns(input, maps.articles);
+        fields.updated_at = new Date();
+        return articleDto(await patch(db, 'articles', parameters(request).id!, fields));
+    });
+    app.delete('/api/articles/:id', { config: { role: 'admin' } }, async (request) => {
+        await remove(db, 'articles', parameters(request).id!);
+        return { ok: true };
+    });
+
+    app.get('/api/schedule', { config: { public: true } }, async (request) => {
+        let rows = await list(db, 'scheduled_matches');
+        const { season } = query(request);
+        if (season) rows = rows.filter(row => row.season === season);
+        return rows.map(value => scheduleDto(value));
+    });
+    app.post('/api/schedule', { config: { role: 'admin' } }, async (request) => {
+        const input = scheduleInput.parse(request.body);
+        const fields = toColumns(input, maps.schedule);
+        fields.updated_at = new Date();
+        return db.transaction(async (tx) => scheduleDto(await upsert(tx, 'scheduled_matches', input.id, fields)));
+    });
+    app.patch('/api/schedule/:id', { config: { role: 'admin' } }, async (request) => {
+        const input = scheduleInput.omit({ id: true }).partial().parse(request.body);
+        const fields = toColumns(input, maps.schedule);
+        fields.updated_at = new Date();
+        return scheduleDto(await patch(db, 'scheduled_matches', parameters(request).id!, fields));
+    });
+    app.delete('/api/schedule/:id', { config: { role: 'admin' } }, async (request) => {
+        await remove(db, 'scheduled_matches', parameters(request).id!);
+        return { ok: true };
+    });
     app.get('/api/articles/slug/:slug', {
         config: {
             public: true

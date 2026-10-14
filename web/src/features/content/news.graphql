@@ -1,0 +1,16 @@
+fragment NewsFields on News {
+  id
+  type
+  title
+  body
+  pinned
+  homeTeamId
+  awayTeamId
+  homeScore
+  awayScore
+  date
+  notes
+  author
+  createdAt
+  autoFromSubmission
+}

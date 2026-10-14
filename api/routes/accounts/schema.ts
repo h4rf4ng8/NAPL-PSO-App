@@ -5,50 +5,38 @@ import { read, type GraphQLContext } from '../graphql/context.js';
 import { getCurrentAccount, listAccounts } from './queries.js';
 import { accountIdSchema, accountMatches, accountOpponents } from './history.js';
 
+const publicAccountFields = {
+  id: { type: nonNull(GraphQLID), description: 'Stable account identifier.' },
+  username: { type: nonNull(GraphQLString), description: 'Public display name.' },
+  position: { type: nonNull(GraphQLString), description: 'League position.' },
+  teamId: { type: GraphQLID, description: 'Current team identifier, if assigned.' },
+  imageUrl: { type: GraphQLString, description: 'Public profile image URL.' },
+  country: { type: GraphQLString, description: 'Country code, if provided.' },
+  stats: { type: nonNull(JSONScalar), description: 'Aggregate league statistics.' },
+  seasonStats: { type: nonNull(JSONScalar), description: 'Statistics grouped by season, including all-time totals.' },
+  awards: { type: nonNull(JSONScalar), description: 'Player awards.' },
+  championships: { type: nonNull(JSONScalar), description: 'Team championship placements.' },
+  totwUntil: { type: GraphQLFloat, description: 'Epoch milliseconds when the current selection expires.' },
+  cheater: { type: nonNull(GraphQLBoolean), description: 'Whether the profile is marked as cheating.' },
+  strikersId: { type: GraphQLString, description: 'Linked Strikers identifier.' },
+  steamUrl: { type: GraphQLString, description: 'Linked Steam profile URL.' },
+  createdAt: { type: GraphQLFloat, description: 'Creation time in epoch milliseconds.' },
+};
+
 const Account = new GraphQLObjectType({
   name: 'Account',
   description: 'Public account profile and league statistics.',
-  fields: {
-    id: { type: nonNull(GraphQLID), description: 'Stable account identifier.' },
-    username: { type: nonNull(GraphQLString), description: 'Public display name.' },
-    position: { type: nonNull(GraphQLString), description: 'League position.' },
-    teamId: { type: GraphQLID, description: 'Current team identifier, if assigned.' },
-    imageUrl: { type: GraphQLString, description: 'Public profile image URL.' },
-    country: { type: GraphQLString, description: 'Country code, if provided.' },
-    stats: { type: nonNull(JSONScalar), description: 'Aggregate league statistics.' },
-    seasonStats: { type: nonNull(JSONScalar), description: 'Statistics grouped by season, including all-time totals.' },
-    awards: { type: nonNull(JSONScalar), description: 'Player awards.' },
-    championships: { type: nonNull(JSONScalar), description: 'Team championship placements.' },
-    totwUntil: { type: GraphQLFloat, description: 'Epoch milliseconds when the current selection expires.' },
-    cheater: { type: nonNull(GraphQLBoolean), description: 'Whether the profile is marked as cheating.' },
-    strikersId: { type: GraphQLString, description: 'Linked Strikers identifier.' },
-    steamUrl: { type: GraphQLString, description: 'Linked Steam profile URL.' },
-    createdAt: { type: GraphQLFloat, description: 'Creation time in epoch milliseconds.' },
-  },
+  fields: publicAccountFields,
 });
 
 const CurrentAccount = new GraphQLObjectType({
   name: 'CurrentAccount',
   description: 'The authenticated viewer and their private account fields.',
   fields: {
-    id: { type: nonNull(GraphQLID), description: 'Stable account identifier.' },
-    username: { type: nonNull(GraphQLString), description: 'Public display name.' },
-    position: { type: nonNull(GraphQLString), description: 'League position.' },
-    teamId: { type: GraphQLID, description: 'Current team identifier, if assigned.' },
-    imageUrl: { type: GraphQLString, description: 'Public profile image URL.' },
+    ...publicAccountFields,
     pendingImageUrl: { type: GraphQLString, description: 'Pending image visible only to the account owner.' },
-    country: { type: GraphQLString, description: 'Country code, if provided.' },
     email: { type: GraphQLString, description: 'Email visible only to the account owner.' },
     roles: { type: nonNullList(GraphQLString), description: 'Current server-verified roles.' },
-    stats: { type: nonNull(JSONScalar), description: 'Aggregate league statistics.' },
-    seasonStats: { type: nonNull(JSONScalar), description: 'Statistics grouped by season, including all-time totals.' },
-    awards: { type: nonNull(JSONScalar), description: 'Player awards.' },
-    championships: { type: nonNull(JSONScalar), description: 'Team championship placements.' },
-    totwUntil: { type: GraphQLFloat, description: 'Epoch milliseconds when the current selection expires.' },
-    cheater: { type: nonNull(GraphQLBoolean), description: 'Whether the profile is marked as cheating.' },
-    strikersId: { type: GraphQLString, description: 'Linked Strikers identifier.' },
-    steamUrl: { type: GraphQLString, description: 'Linked Steam profile URL.' },
-    createdAt: { type: GraphQLFloat, description: 'Creation time in epoch milliseconds.' },
   },
 });
 

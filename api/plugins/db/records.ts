@@ -41,6 +41,11 @@ export async function patch(database: Database, name: string, key: string, data:
         throw new HttpError(404, 'not_found');
     return row;
 }
+export async function upsert(database: Database, table: string, key: string, fields: Row): Promise<Row> {
+    return (await get(database, table, 'id', key, true)) ? patch(database, table, key, fields) : insert(database, table, {
+        id: key, ...fields
+    });
+}
 export async function remove(database: Database, name: string, key: string): Promise<void> {
     await database.execute(Prisma.sql `DELETE FROM ${table(name)} WHERE id::text=${key}`);
 }

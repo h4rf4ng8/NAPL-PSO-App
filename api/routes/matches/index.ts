@@ -5,8 +5,7 @@ import type { Dependencies } from '../../app.js';
 import { params as parameters } from '../../plugins/request.js';
 import { HttpError, actorName, isAdmin } from '../../plugins/auth/identity.js';
 import { type Row } from '../../plugins/db/client.js';
-import { list, get, need, patch, remove, dto, object, array, string } from '../../plugins/db/records.js';
-import { upsert } from '../content/index.js';
+import { list, get, need, patch, remove, dto, object, array, string, upsert } from '../../plugins/db/records.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
         games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0, motm: 0

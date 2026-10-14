@@ -5,17 +5,12 @@ import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import type { Dependencies } from '../../app.js';
 import { actorName } from '../../plugins/auth/identity.js';
 import { params as parameters, query } from '../../plugins/request.js';
-import { Prisma, type Database, type Row } from '../../plugins/db/client.js';
-import { list, get, insert, patch, remove, toColumns } from '../../plugins/db/records.js';
+import { Prisma } from '../../plugins/db/client.js';
+import { list, get, insert, patch, remove, toColumns, upsert } from '../../plugins/db/records.js';
 import { listNews } from './queries.js';
 import { newsDto, ruleDto, articleDto } from './dto.js';
 import { scheduleDto } from '../matches/dto.js';
 import { transferDto } from '../teams/dto.js';
-export async function upsert(database: Database, table: string, key: string, fields: Row): Promise<Row> {
-    return (await get(database, table, 'id', key, true)) ? patch(database, table, key, fields) : insert(database, table, {
-        id: key, ...fields
-    });
-}
 const maps = {
     news: {
         type: 'type', title: 'title', body: 'body', pinned: 'pinned', homeTeamId: 'home_team_id', awayTeamId: 'away_team_id', homeScore: 'home_score', awayScore: 'away_score', date: 'event_date', notes: 'notes', autoFromSubmission: 'auto_from_submission'

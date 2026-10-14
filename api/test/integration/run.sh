@@ -13,10 +13,11 @@ for attempt in {1..30}; do
   if docker exec "$db_container" pg_isready -h 127.0.0.1 -U postgres -d napl_test >/dev/null 2>&1; then break; fi
   sleep 1
 done
-for sql in api/test/bootstrap.sql supabase/fixtures/legacy.sql supabase/migrations/202610130001_gateway.sql supabase/migrations/202610130002_cutover.sql supabase/migrations/202610130003_rbac.sql supabase/migrations/202610140002_auth_state.sql api/test/seed.sql; do
+for sql in api/test/bootstrap.sql supabase/fixtures/legacy.sql supabase/migrations/202610130001_gateway.sql supabase/migrations/202610130002_cutover.sql supabase/migrations/202610130003_rbac.sql supabase/migrations/202610140001_role_audit.sql supabase/migrations/202610140002_auth_state.sql api/test/seed.sql; do
   docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < "$sql" >/dev/null
 done
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/rbac.sql >/dev/null
+docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/role_audit.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test >/dev/null <<'SQL'
 CREATE ROLE gateway_test LOGIN PASSWORD 'napl_test_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT;
 GRANT gateway_runtime TO gateway_test;

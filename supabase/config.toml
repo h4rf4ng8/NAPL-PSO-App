@@ -1,0 +1,17 @@
+project_id = "napl"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+
+[db]
+major_version = 15
+
+[auth]
+enable_signup = true
+jwt_expiry = 600
+
+[auth.hook.custom_access_token]
+enabled = true
+uri = "pg-functions://postgres/auth_gateway/custom_access_token_hook"

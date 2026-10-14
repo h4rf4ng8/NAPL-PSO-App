@@ -1,7 +1,8 @@
 import { GraphQLFloat, GraphQLID, GraphQLObjectType, GraphQLString } from 'graphql';
 import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
-import { resolvers } from './resolvers.js';
+import { read, type GraphQLContext } from '../graphql/context.js';
+import { listVotingPeriods } from './queries.js';
 
 const VotingPeriod = new GraphQLObjectType({
   name: 'VotingPeriod',
@@ -23,6 +24,7 @@ export const queryFields = {
   votingPeriods: {
     type: nonNullList(VotingPeriod),
     description: 'Public voting periods in storage order.',
-    resolve: resolvers.Query.votingPeriods,
+    resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
+      read(context, 'votingPeriods', () => listVotingPeriods(context.db)),
   },
 };

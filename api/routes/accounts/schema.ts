@@ -1,7 +1,9 @@
 import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLInt, GraphQLNonNull, GraphQLObjectType, GraphQLString } from 'graphql';
 import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
-import { resolvers } from './resolvers.js';
+import { read, type GraphQLContext } from '../graphql/context.js';
+import { getCurrentAccount, listAccounts } from './queries.js';
+import { accountIdSchema, accountMatches, accountOpponents } from './history.js';
 
 const Account = new GraphQLObjectType({
   name: 'Account',
@@ -70,12 +72,14 @@ export const queryFields = {
   accounts: {
     type: nonNullList(Account),
     description: 'Public account profiles.',
-    resolve: resolvers.Query.accounts,
+    resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
+      read(context, 'accounts', () => listAccounts(context.db, context.request)),
   },
   me: {
     type: CurrentAccount,
     description: 'The current authenticated account, if provisioned.',
-    resolve: resolvers.Query.me,
+    resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
+      read(context, 'current-account', () => getCurrentAccount(context.db, context.request)),
   },
   accountMatches: {
     type: nonNull(AccountMatchPage),
@@ -84,13 +88,18 @@ export const queryFields = {
       id: { type: new GraphQLNonNull(GraphQLID) }, first: { type: GraphQLInt, defaultValue: 25 }, after: { type: GraphQLString },
       season: { type: GraphQLString }, opponent: { type: GraphQLString },
     },
-    resolve: resolvers.Query.accountMatches,
+    resolve: (_source: unknown, args: { id: string; first?: number; after?: string; season?: string; opponent?: string }, context: GraphQLContext) =>
+      read(context, `account-matches:${args.id}:${args.after ?? ''}:${args.first ?? ''}:${args.season ?? ''}:${args.opponent ?? ''}`, () => accountMatches(context.db, args)),
   },
   accountOpponents: {
     type: nonNull(JSONScalar),
     description: 'Opponent totals for a public account.',
     args: { id: { type: new GraphQLNonNull(GraphQLID) } },
-    resolve: resolvers.Query.accountOpponents,
+    resolve: (_source: unknown, args: { id: string }, context: GraphQLContext) =>
+      read(context, `account-opponents:${args.id}`, async () => {
+        const id = accountIdSchema.parse(args.id);
+        return accountOpponents(context.db, id);
+      }),
   },
 };
 

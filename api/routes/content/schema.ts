@@ -1,6 +1,7 @@
 import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLObjectType, GraphQLString } from 'graphql';
 import { nonNull, nonNullList } from '../graphql/types.js';
-import { resolvers } from './resolvers.js';
+import { read, type GraphQLContext } from '../graphql/context.js';
+import { listNews } from './queries.js';
 
 const News = new GraphQLObjectType({
   name: 'News',
@@ -27,6 +28,7 @@ export const queryFields = {
   news: {
     type: nonNullList(News),
     description: 'Public news items in storage order.',
-    resolve: resolvers.Query.news,
+    resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
+      read(context, 'news', () => listNews(context.db)),
   },
 };

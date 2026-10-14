@@ -1,7 +1,8 @@
 import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLObjectType, GraphQLString } from 'graphql';
 import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
-import { resolvers } from './resolvers.js';
+import { read, type GraphQLContext } from '../graphql/context.js';
+import { listTeams } from './queries.js';
 
 const Invitation = new GraphQLObjectType({
   name: 'Invitation',
@@ -44,7 +45,8 @@ export const queryFields = {
   teams: {
     type: nonNullList(Team),
     description: 'Teams visible to the current viewer.',
-    resolve: resolvers.Query.teams,
+    resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
+      read(context, 'teams', () => listTeams(context.db, context.request)),
   },
 };
 

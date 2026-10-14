@@ -3,7 +3,7 @@ import React, { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
 import { inStandings } from '../teams/selectors';
 import { useResource } from '../../hooks/use-resource';
-import { loadTeamRecords } from './records';
+import { loadTeamRecords } from './api';
 import type { TeamRecord } from '@napl/contracts/matches';
 
 import type { Account } from '../accounts/models';

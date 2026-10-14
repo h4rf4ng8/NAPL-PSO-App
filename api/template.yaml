@@ -1,0 +1,203 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform:
+  - AWS::LanguageExtensions
+  - AWS::Serverless-2016-10-31
+Description: NAPL API Lambda function. Frontend hosting remains on Vercel.
+
+Parameters:
+  DatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL application runtime connection URL for API queries.
+  AuthDatabaseUrl:
+    Type: String
+    NoEcho: true
+    Description: PostgreSQL runtime connection URL; inject through a protected deployment channel.
+  SupabaseUrl:
+    Type: String
+    Description: Supabase project URL.
+  SupabasePublishableKey:
+    Type: String
+    Description: Supabase publishable key used for Auth requests.
+  SupabaseSecretKey:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional Supabase secret key for trusted original-IP forwarding.
+  SupabaseJwtAudience:
+    Type: String
+    Default: authenticated
+  PublicOrigin:
+    Type: String
+    Description: Exact public Vercel site origin, including https scheme.
+  VercelTeamSlug:
+    Type: String
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{0,62}$'
+    Description: Vercel team slug used to scope the OIDC issuer and audience.
+  VercelProjectName:
+    Type: String
+    AllowedPattern: '^[a-z0-9][a-z0-9-]{0,99}$'
+    Description: Vercel project name allowed to assume the invocation role.
+  ExistingVercelOidcProviderArn:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:oidc-provider/oidc[.]vercel[.]com/[a-z0-9][a-z0-9-]{0,62}$'
+    Description: Optional existing team-scoped Vercel OIDC provider ARN for this account.
+  CookieKeys:
+    Type: String
+    NoEcho: true
+    Description: JSON key ring for encrypted session cookies.
+  DiscordClientId:
+    Type: String
+    Description: Discord OAuth application client ID.
+  DiscordClientSecret:
+    Type: String
+    NoEcho: true
+  DiscordGuildId:
+    Type: String
+    Description: Discord membership guild ID.
+  OriginSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 32
+    Description: Origin secret shared with the Vercel signing proxy and checked by the API.
+  DiscordTransferWebhook:
+    Type: String
+    NoEcho: true
+    Default: ''
+    Description: Optional Discord webhook URL.
+  ReservedConcurrency:
+    Type: Number
+    Default: 20
+    MinValue: 1
+    MaxValue: 1000
+  FunctionMemorySize:
+    Type: Number
+    Default: 512
+    MinValue: 128
+    MaxValue: 10240
+  FunctionTimeout:
+    Type: Number
+    Default: 60
+    MinValue: 1
+    MaxValue: 900
+
+Conditions:
+  HasSupabaseSecretKey: !Not [!Equals [!Ref SupabaseSecretKey, '']]
+  HasDiscordTransferWebhook: !Not [!Equals [!Ref DiscordTransferWebhook, '']]
+  HasExistingVercelOidcProvider: !Not [!Equals [!Ref ExistingVercelOidcProviderArn, '']]
+  CreateVercelOidcProvider: !Equals [!Ref ExistingVercelOidcProviderArn, '']
+
+Resources:
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AWS::StackName}-api
+      RetentionInDays: 14
+
+  ApiRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: WriteFunctionLogs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub ${ApiLogGroup.Arn}:*
+
+  VercelOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: CreateVercelOidcProvider
+    Properties:
+      Url: !Sub https://oidc.vercel.com/${VercelTeamSlug}
+      ClientIdList:
+        - !Sub https://vercel.com/${VercelTeamSlug}
+
+  VercelInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument: !Sub
+        - |
+          {
+            "Version": "2012-10-17",
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {"Federated": "${ProviderArn}"},
+              "Action": "sts:AssumeRoleWithWebIdentity",
+              "Condition": {"StringEquals": {
+                "oidc.vercel.com/${VercelTeamSlug}:aud": "https://vercel.com/${VercelTeamSlug}",
+                "oidc.vercel.com/${VercelTeamSlug}:sub": "owner:${VercelTeamSlug}:project:${VercelProjectName}:environment:production"
+              }}
+            }]
+          }
+        - ProviderArn: !If
+            - HasExistingVercelOidcProvider
+            - !Ref ExistingVercelOidcProviderArn
+            - !Ref VercelOidcProvider
+      Policies:
+        - PolicyName: InvokeLiveFunctionUrl
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunctionUrl
+                Resource: !GetAtt ApiFunctionAliaslive.AliasArn
+                Condition:
+                  StringEquals:
+                    lambda:FunctionUrlAuthType: AWS_IAM
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt ApiFunctionAliaslive.AliasArn
+                Condition:
+                  Bool:
+                    lambda:InvokedViaFunctionUrl: true
+
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: dist/api.zip
+      FunctionName: !Sub ${AWS::StackName}-api
+      Handler: lambda.handler
+      Runtime: nodejs24.x
+      Architectures: [arm64]
+      AutoPublishAlias: live
+      AutoPublishAliasAllProperties: true
+      FunctionUrlConfig:
+        AuthType: AWS_IAM
+        InvokeMode: BUFFERED
+      MemorySize: !Ref FunctionMemorySize
+      Timeout: !Ref FunctionTimeout
+      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      Role: !GetAtt ApiRole.Arn
+      Environment:
+        Variables:
+          NODE_ENV: production
+          DATABASE_URL: !Ref DatabaseUrl
+          AUTH_DATABASE_URL: !Ref AuthDatabaseUrl
+          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
+          SUPABASE_SECRET_KEY: !If [HasSupabaseSecretKey, !Ref SupabaseSecretKey, !Ref AWS::NoValue]
+          SUPABASE_JWT_AUDIENCE: !Ref SupabaseJwtAudience
+          PUBLIC_ORIGIN: !Ref PublicOrigin
+          COOKIE_KEYS: !Ref CookieKeys
+          ORIGIN_SECRET: !Ref OriginSecret
+          DISCORD_CLIENT_ID: !Ref DiscordClientId
+          DISCORD_CLIENT_SECRET: !Ref DiscordClientSecret
+          DISCORD_GUILD_ID: !Ref DiscordGuildId
+          DISCORD_TRANSFER_WEBHOOK: !If [HasDiscordTransferWebhook, !Ref DiscordTransferWebhook, !Ref AWS::NoValue]
+
+Outputs:
+  FunctionUrl:
+    Description: Set this as the Vercel production API_URL.
+    Value: !GetAtt ApiFunctionUrl.FunctionUrl
+  VercelInvokeRoleArn:
+    Description: Set this as the Vercel production AWS_ROLE_ARN.
+    Value: !GetAtt VercelInvokeRole.Arn

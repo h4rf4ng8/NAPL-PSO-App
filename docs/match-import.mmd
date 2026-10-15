@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant User as User (web app)
+    participant API as Lambda API
+    participant DB as Supabase (PostgreSQL)
+    User->>API: POST /api/import-match<br/>Match data, player mappings, teams, season
+    API->>DB: Read selected teams and mapped player accounts
+    DB-->>API: Teams and current player match histories
+    API->>DB: Save new match records and updated stats atomically
+    DB-->>API: Player updates committed
+    API-->>User: Import summary with match ID and updated player count

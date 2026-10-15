@@ -1,0 +1,11 @@
+sequenceDiagram
+    participant User as User (web app)
+    participant API as Lambda API
+    participant DB as Supabase (PostgreSQL)
+    User->>User: Open league dashboard
+    User->>API: POST /api/graphql with query and variables
+    API->>API: Validate query and field permissions
+    API->>DB: Read requested teams, players and records
+    DB-->>API: League data
+    API-->>User: 200 OK with GraphQL data
+    User->>User: Display dashboard

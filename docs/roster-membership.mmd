@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant User as User (web app)
+    participant API as Lambda API
+    participant DB as Supabase (PostgreSQL)
+    User->>API: POST /api/teams/:id/invitation<br/>accept: true
+    API->>DB: Read approved team, invitation and player account
+    DB-->>API: Valid invitation and eligible player
+    API->>DB: Save acceptance, roster membership and transfer atomically
+    DB-->>API: Team and account updates committed
+    API-->>User: Updated team including the new member

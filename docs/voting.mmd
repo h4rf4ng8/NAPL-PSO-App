@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant User as User (web app)
+    participant API as Lambda API
+    participant DB as Supabase (PostgreSQL)
+    User->>API: PUT /api/voting/periods/:id/votes<br/>gk, def, cm, st player usernames
+    API->>DB: Read voting window and candidate eligibility
+    DB-->>API: Open period and eligible players
+    API->>DB: Save the member's complete ballot atomically
+    DB-->>API: Ballot committed
+    API-->>User: Votes accepted

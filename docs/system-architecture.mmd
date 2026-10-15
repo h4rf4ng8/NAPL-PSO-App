@@ -1,0 +1,27 @@
+flowchart LR
+    User["User<br/>Web app"]
+    subgraph AWS["AWS"]
+        API["Lambda API<br/>Validate requests and permissions<br/>Run league operations"]
+    end
+    subgraph Supabase["Supabase"]
+        DB[("Supabase (PostgreSQL)<br/>League data and authentication state")]
+        Auth["Supabase Auth<br/>Sessions, tokens and Discord sign-in"]
+    end
+    Discord["Discord<br/>OAuth identity and guild membership"]
+
+    User <-->|"HTTPS /api/* and /auth/*<br/>JSON, cookies and CSRF"| API
+    API <-->|"SQL over TLS<br/>Read and persist data"| DB
+    API <-->|"HTTPS<br/>Exchange codes, refresh tokens, verify JWTs"| Auth
+    API <-->|"HTTPS<br/>Check membership and refresh Discord tokens"| Discord
+    Auth <-->|"OAuth 2.0<br/>Discord authorization"| Discord
+
+    classDef user fill:#f8fafc,stroke:#475569,color:#0f172a
+    classDef api fill:#ccfbf1,stroke:#0f766e,color:#134e4a
+    classDef database fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef auth fill:#ede9fe,stroke:#7c3aed,color:#4c1d95
+    classDef external fill:#fff7ed,stroke:#c2410c,color:#7c2d12
+    class User user
+    class API api
+    class DB database
+    class Auth auth
+    class Discord external

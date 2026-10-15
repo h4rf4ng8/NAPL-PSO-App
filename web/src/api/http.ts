@@ -36,6 +36,11 @@ export async function request<T>(path:string, method='GET', body?:unknown, retry
     signal?.throwIfAborted();
     const response=await fetch(path,{method,headers,signal,credentials:'same-origin',...(body!==undefined&&{body:JSON.stringify(body)})});
     if(response.ok) {
+      if(mutates && path !== '/api/graphql' && path.startsWith('/api/')) {
+        // Reuse session reset: cancel pre-command reads so they cannot refill stale data.
+        const { resetClient } = await import('./client');
+        resetClient();
+      }
       return response.status===204?undefined as T:response.json();
     }
     let problem:unknown;

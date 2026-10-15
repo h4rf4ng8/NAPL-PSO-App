@@ -33,4 +33,9 @@ if [[ "${1:-}" == "--api" ]]; then
   npm test -w @napl/api
 else
   npm test
+  npm run test:package -w @napl/api
+fi
+
+if [[ "${NAPL_SAM_TEST:-0}" == "1" ]]; then
+  SAM_TEST_NETWORK="$test_network" node api/test/integration/sam.mjs
 fi

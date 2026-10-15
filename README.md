@@ -41,9 +41,18 @@ npm run typecheck
 npm run lint
 npm run build
 npm run test:integration
+sam validate --lint --template-file api/template.yaml
 ```
 
-The integration runner creates disposable PostgreSQL containers, applies fixtures and migrations, and runs the workspace tests, including authorization, schedule rollback/concurrency, server commands, GraphQL validation, session isolation, and theme behavior. It does not modify live data.
+The integration runner creates disposable PostgreSQL containers, applies fixtures and migrations, and runs the workspace tests, including authorization, schedule rollback/concurrency, server commands, GraphQL validation, session isolation, and theme behavior. It also checks the bundled Lambda package outside the repository. It does not modify live data. `npm run test:sam` additionally invokes the package through SAM's local container.
+
+## Production deployment
+
+[The deployment guide](docs/lambda.md) covers the Lambda API and Vercel frontend, required configuration, connection sizing, validation, and rollback. [api/template.yaml](api/template.yaml) creates an IAM-protected Function URL and a Vercel production OIDC role scoped to the live alias. Vercel's server-only proxy signs requests and forwards the shared origin secret; application authentication and authorization still apply.
+
+`npm run env:sam` validates production settings and writes a private, ignored parameter file using the saved cookie key ring. The guide shows how to pass that file to SAM without copying secret values into shell arguments. It does not deploy anything itself. The [archived NGINX/Redis diagram](docs/history/system.png) is historical and does not describe this deployment.
+
+`npm run test:load -- --help` describes the optional read-only staging load runner. It requires an explicit staging target and database budget; see the deployment guide before running it. Historical container measurements are not evidence of Lambda capacity.
 
 ## Rollout
 

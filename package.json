@@ -28,7 +28,10 @@
     "gql:generate": "npm run gql:generate -w @napl/web",
     "gql:check": "npm run gql:check -w @napl/web",
     "prisma:generate": "npm run prisma:generate -w @napl/api",
-    "dev:api": "npm run dev -w @napl/api"
+    "dev:api": "npm run dev -w @napl/api",
+    "env:sam": "npm run env:sam -w @napl/api",
+    "test:sam": "NAPL_SAM_TEST=1 bash api/test/integration/run.sh",
+    "test:load": "node --import tsx api/test/load/run-staging.mjs"
   },
   "overrides": {
     "deepmerge-ts": "8.0.2",

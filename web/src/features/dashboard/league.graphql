@@ -1,0 +1,29 @@
+query PublicLeagueData {
+  accounts {
+    ...PublicAccountFields
+  }
+  teams {
+    ...TeamFields
+  }
+  teamRecords
+}
+
+query MemberLeagueData {
+  accounts {
+    ...PublicAccountFields
+  }
+  teams {
+    ...TeamFields
+  }
+  season
+  weightings
+  news {
+    ...NewsFields
+  }
+  votingPeriods {
+    ...VotingPeriodFields
+  }
+  me {
+    ...CurrentAccountFields
+  }
+}

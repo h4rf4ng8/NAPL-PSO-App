@@ -1,0 +1,52 @@
+fragment PublicAccountFields on Account {
+  id
+  username
+  position
+  teamId
+  imageUrl
+  country
+  stats
+  seasonStats
+  awards
+  championships
+  totwUntil
+  cheater
+  strikersId
+  steamUrl
+  createdAt
+}
+
+fragment CurrentAccountFields on CurrentAccount {
+  id
+  username
+  position
+  teamId
+  imageUrl
+  pendingImageUrl
+  country
+  email
+  roles
+  stats
+  seasonStats
+  awards
+  championships
+  totwUntil
+  cheater
+  strikersId
+  steamUrl
+  createdAt
+}
+
+query AccountMatches($id: ID!, $first: Int = 25, $after: String, $season: String, $opponent: String) {
+  accountMatches(id: $id, first: $first, after: $after, season: $season, opponent: $opponent) {
+    nodes
+    pageInfo {
+      endCursor
+      hasNextPage
+    }
+  }
+}
+
+query AccountOpponents($id: ID!) {
+  accountOpponents(id: $id)
+}

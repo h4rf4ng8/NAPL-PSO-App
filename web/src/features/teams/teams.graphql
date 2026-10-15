@@ -1,0 +1,26 @@
+fragment TeamFields on Team {
+  id
+  name
+  tag
+  color
+  description
+  ownerUsername
+  members
+  invitations {
+    username
+    status
+    respondedAt
+  }
+  pendingMembers
+  totw
+  totwSetAt
+  seasons
+  formation
+  lineup
+  status
+  logoUrl
+  createdAt
+  reviewedAt
+  reviewedBy
+  rejectionReason
+}

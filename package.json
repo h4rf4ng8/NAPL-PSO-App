@@ -1,39 +1,40 @@
 {
-  "name": "asl-stats",
+  "name": "napl",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11"
+  },
+  "workspaces": [
+    "web",
+    "api",
+    "pkgs/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
     "setup:env": "npm run setup:env -w @napl/api",
-    "dev:api": "npm run dev -w @napl/api",
-    "build:api": "npm run build -w @napl/contracts && npm run build -w @napl/api",
-    "generate": "npm run prisma:generate",
-    "prisma:generate": "npm run prisma:generate -w @napl/api",
+    "predev": "npm run build -w @napl/contracts",
+    "dev": "npm run dev -w @napl/web",
+    "generate": "npm run prisma:generate && npm run gql:generate",
+    "build": "npm run build -w @napl/contracts && npm run build -w @napl/api && npm run build -w @napl/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "pretest": "npm run build -w @napl/contracts",
     "test": "npm run test --workspaces --if-present",
     "test:integration": "bash api/test/integration/run.sh",
-    "lint": "eslint api pkgs eslint.config.js --max-warnings 0",
-    "lint:fix": "eslint api pkgs eslint.config.js --fix",
-    "check": "npm run generate && npm run typecheck && npm run lint && npm test && npm run build:api && npm run build"
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "check": "npm run prisma:generate && npm run gql:check && npm run typecheck && npm run lint && npm test && npm run build",
+    "gql:generate": "npm run gql:generate -w @napl/web",
+    "gql:check": "npm run gql:check -w @napl/web",
+    "prisma:generate": "npm run prisma:generate -w @napl/api",
+    "dev:api": "npm run dev -w @napl/api"
   },
-  "dependencies": {
-    "@supabase/supabase-js": "^2.45.0",
-    "lucide-react": "^0.383.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+  "overrides": {
+    "deepmerge-ts": "8.0.2",
+    "mysql2": "3.24.6"
   },
   "devDependencies": {
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.1",
-    "autoprefixer": "^10.4.19",
-    "postcss": "^8.4.39",
-    "tailwindcss": "^3.4.4",
-    "vite": "^5.3.1",
     "@eslint/js": "10.0.1",
     "eslint": "10.12.0",
     "eslint-plugin-unicorn": "78.0.0",
@@ -41,17 +42,5 @@
     "tsx": "4.20.6",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2"
-  },
-  "engines": {
-    "node": ">=24 <25",
-    "npm": ">=11"
-  },
-  "overrides": {
-    "deepmerge-ts": "8.0.2",
-    "mysql2": "3.24.6"
-  },
-  "workspaces": [
-    "api",
-    "pkgs/*"
-  ]
+  }
 }

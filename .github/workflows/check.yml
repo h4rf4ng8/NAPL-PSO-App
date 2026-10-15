@@ -10,9 +10,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: 24, cache: npm}
       - run: npm ci
-      - run: npm run generate
+      - run: npm run prisma:generate
+      - run: npm run gql:check
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm run build:api
       - run: npm run build
       - run: npm run test:integration

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account, PositionRequest } from './models';
 import { ModalShell } from '../../components/Ui';

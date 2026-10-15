@@ -1,7 +1,7 @@
 import { BarChart3 } from 'lucide-react';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import type { Account, Rankings } from './models';
+import type { Account } from './models';
 import type { Team } from '../teams/models';
 import { CaptainStar } from '../../components/Icons';
 
@@ -11,7 +11,7 @@ import { isTeamCaptain } from '../../utils/league';
 import { getStatsForSeason } from '../../utils/rankings';
 import { POSITIONS, POS } from '@napl/contracts/league';
 // Stats View
-export const StatsView = ({ allPlayers = [], allTeams = [], rankings = new Map(), onPlayerClick }: { allPlayers?: Account[]; allTeams?: Team[]; rankings?: Rankings | null; onPlayerClick?: (account:Account) => void }) => {
+export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { allPlayers?: Account[]; allTeams?: Team[]; onPlayerClick?: (account:Account) => void }) => {
   // Default sort: OVR descending (same as the old leaderboard default)
   const [sortBy, setSortBy] = useState('ovr');
   const [sortDir, setSortDir] = useState('desc');
@@ -48,8 +48,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], rankings = new Map()
         // (Per-season "form" OVRs would need their own ranking pool — not
         // worth the complexity for now; the season filter still filters
         // every other stat column, just not the OVR itself.)
-        const rankingEntry = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
-        const ovr = rankingEntry?.score || 0;
+        const ovr = p.ranking.score;
         return {
           player: p,
           team: teamByUsername(p.username),
@@ -69,7 +68,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], rankings = new Map()
           _seasonStats: s, // passed through if player card is opened
         };
       });
-  }, [allPlayers, allTeams, rankings, posFilter, seasonFilter]);
+  }, [allPlayers, allTeams, posFilter, seasonFilter]);
 
   const sorted = useMemo(() => {
     const sorted = [...rows].sort((x, y) => {
@@ -207,7 +206,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], rankings = new Map()
             {sorted.map((row, i) => (
               <tr
                 key={row.player.username}
-                onClick={() => onPlayerClick?.({ ...row.player, stats: row._seasonStats, _team: row.team })}
+                onClick={() => onPlayerClick?.({ ...row.player, stats: row._seasonStats, _cardSeason: seasonFilter, _team: row.team })}
                 className="cursor-pointer transition-colors hover:opacity-90"
                 style={{
                   background: i % 2 === 0 ? `${C.navyDeep}44` : 'transparent',

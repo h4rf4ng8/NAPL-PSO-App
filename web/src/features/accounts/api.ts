@@ -1,8 +1,9 @@
 import { optional,request,segment } from '../../api/http';
 import { graphql } from '../../api/graphql';
-import { AccountMatchesDocument, AccountOpponentsDocument, type PublicAccountFieldsFragment } from '../../api/generated/graphql';
-import { AWARD_IDS, accountMatchPageSchema, accountOpponentsSchema, awardSchema, championshipSchema, matchSchema, seasonStatsSchema } from '@napl/contracts/accounts';
-import type { Account, Championship, Match, PlayerAward, PositionRequest, Stats } from './models';
+import { AccountCardPreviewsDocument, AccountMatchesDocument, AccountOpponentsDocument, DefaultPositionWeightsDocument, type PublicAccountFieldsFragment } from '../../api/generated/graphql';
+import { AWARD_IDS, accountCardStatsSchema, accountMatchPageSchema, accountOpponentsSchema, accountRankingSchema, accountStatsSchema, awardSchema, championshipSchema, matchSchema, seasonStatsSchema } from '@napl/contracts/accounts';
+import type { Account, PositionRequest, Stats } from './models';
+import { z } from 'zod';
 type AwardId = (typeof AWARD_IDS)[number];
 export const accounts={
  getAccount:(username:string)=>optional<Account>(`/api/accounts/${segment(username)}`),
@@ -19,16 +20,13 @@ export const accounts={
  deletePositionRequest:(id:string)=>request<void>(`/api/position-requests/${segment(id)}`,'DELETE'),
 };
 
-type JsonRecord = Record<string, unknown>;
-const isRecord = (value: unknown): value is JsonRecord => value !== null && typeof value === 'object' && !Array.isArray(value);
-const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+const accountStatDefaults = accountStatsSchema.parse(Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key => [key, 0])));
+const accountStatsRecordSchema = z.record(z.string(), z.number().finite());
 const invalid = (field: string): never => { throw new Error(`Invalid GraphQL ${field} data.`); };
 
 function accountStats(value: unknown): Stats {
-  const required = ['games', 'wins', 'draws', 'losses', 'goals', 'assists', 'passes', 'tackles', 'deflects', 'catches', 'cleanSheets', 'motm'];
-  return isRecord(value) && Object.values(value).every(isFiniteNumber)
-    ? { ...Object.fromEntries(required.map(key => [key, value[key] ?? 0])), ...value } as Stats
-    : invalid('account stats');
+  const parsed = accountStatsRecordSchema.safeParse(value);
+  return parsed.success ? { ...accountStatDefaults, ...parsed.data } : invalid('account stats');
 }
 
 export function mapAccount(row: PublicAccountFieldsFragment): Account {
@@ -37,12 +35,15 @@ export function mapAccount(row: PublicAccountFieldsFragment): Account {
   const seasonStats = row.seasonStats == null ? null : seasonStatsSchema.safeParse(row.seasonStats);
   const awards = awardSchema.array().safeParse(row.awards);
   const championships = championshipSchema.array().safeParse(row.championships);
-  if (!matches.success || (seasonStats && !seasonStats.success) || !awards.success || !championships.success) return invalid('account JSON');
+  const ranking = accountRankingSchema.safeParse(row.ranking);
+  const cardStats = accountCardStatsSchema.safeParse(row.cardStats);
+  if (!matches.success || (seasonStats && !seasonStats.success) || !awards.success || !championships.success || !ranking.success || !cardStats.success) return invalid('account JSON');
   return {
     id: row.id, username: row.username, position: row.position, teamId: row.teamId,
     imageUrl: row.imageUrl, country: row.country, stats: accountStats(row.stats),
     ...(seasonStats?.data && { seasonStats: seasonStats.data }),
-    matches: matches.data as Match[], awards: awards.data as PlayerAward[], championships: championships.data as Championship[],
+    ranking: ranking.data, cardStats: cardStats.data,
+    matches: matches.data, awards: awards.data, championships: championships.data,
     totwUntil: row.totwUntil, cheater: row.cheater, strikersId: row.strikersId,
     steamUrl: row.steamUrl, createdAt: row.createdAt ?? 0,
   };
@@ -59,5 +60,17 @@ export async function loadAccountOpponents(id: string, force = false) {
   const data = await graphql(AccountOpponentsDocument, { id }, { force });
   const parsed = accountOpponentsSchema.safeParse(data.accountOpponents);
   if (!parsed.success) throw new Error('Invalid GraphQL opponent summary data.');
+  return parsed.data;
+}
+
+export async function loadAccountCardPreviews() {
+  const data = await graphql(AccountCardPreviewsDocument, {});
+  return data.accountCardPreviews.map(preview => ({ ...preview, account: mapAccount(preview.account) }));
+}
+
+export async function loadDefaultPositionWeights() {
+  const data = await graphql(DefaultPositionWeightsDocument, {});
+  const parsed = z.record(z.string(), z.record(z.string(), z.number().finite())).safeParse(data.defaultPositionWeights);
+  if (!parsed.success) throw new Error('Invalid GraphQL default position weights data.');
   return parsed.data;
 }

@@ -62,6 +62,16 @@ export const accountStatsSchema = z.object({
 
 export const seasonStatsSchema = z.record(z.string(), accountStatsSchema);
 
+export const accountRankingSchema = z.object({
+  score: z.number().finite(), percentile: z.number().finite(), ranked: z.boolean(),
+  gamesPlayed: z.number().finite(), tier: z.enum(['DIAMOND', 'GOLD', 'SILVER', 'BRONZE']),
+});
+export const accountCardStatCellSchema = z.object({ label: z.string(), value: z.string() });
+export const accountCardStatSeasonSchema = z.object({
+  season: z.string().nullable(), cells: z.array(accountCardStatCellSchema).length(6),
+});
+export const accountCardStatsSchema = z.array(accountCardStatSeasonSchema);
+
 export const accountMatchPageSchema = z.object({
   nodes: z.array(matchSchema),
   pageInfo: z.object({ endCursor: z.string().nullable(), hasNextPage: z.boolean() }),
@@ -77,5 +87,9 @@ export type PlayerAward = z.infer<typeof awardSchema>;
 export type Championship = z.infer<typeof championshipSchema>;
 export type AccountStats = z.infer<typeof accountStatsSchema>;
 export type SeasonStats = z.infer<typeof seasonStatsSchema>;
+export type AccountRanking = z.infer<typeof accountRankingSchema>;
+export type AccountCardStatCell = z.infer<typeof accountCardStatCellSchema>;
+export type AccountCardStatSeason = z.infer<typeof accountCardStatSeasonSchema>;
+export type AccountCardStats = z.infer<typeof accountCardStatsSchema>;
 export type AccountMatchPage = z.infer<typeof accountMatchPageSchema>;
 export type AccountOpponent = z.infer<typeof accountOpponentsSchema>[number];

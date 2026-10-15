@@ -1,5 +1,5 @@
 import { Trophy } from 'lucide-react';
-import React, { useEffect,useMemo,useState } from 'react';
+import { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
 import { inStandings } from '../teams/selectors';
 import { useResource } from '../../hooks/use-resource';

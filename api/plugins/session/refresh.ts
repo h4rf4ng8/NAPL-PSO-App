@@ -103,7 +103,7 @@ export class SessionRefresher {
       if (!eligible) throw new GatewayError(403, 'discord_membership_required');
     } catch (error) {
       const known = error instanceof GatewayError && error.status !== 400 ? error : new GatewayError(503, 'membership_unavailable', 1);
-      failure = { status: known.status as 401 | 403 | 429 | 503, code: known.code, retryAfter: known.retryAfter };
+      failure = { status: known.status === 400 ? 503 : known.status, code: known.code, retryAfter: known.retryAfter };
     }
     session.expiresAt = Math.floor(Date.now() / 1000) + 30 * 86_400;
     return { accessToken, session, authCookie: await this.crypto.seal('session', session), ...(failure && { error: failure }) };

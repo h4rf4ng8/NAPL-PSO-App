@@ -8,13 +8,6 @@ import type { News,Team } from '../api/models';
 import { C } from '../theme/theme';
 import { ASLCrest } from './Icons';
 
-export const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <div>
-    <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}88` }}>{label}</label>
-    {children}
-  </div>
-);
-
 const focusableSelector = 'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 /**

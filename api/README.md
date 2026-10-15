@@ -46,7 +46,7 @@ The browser sends GraphQL queries to `POST /api/graphql`. The [query handler](ro
 
 | Component | What it does |
 | --- | --- |
-| [Account fields](routes/accounts/schema.ts) | Serve player summaries, paginated match history, opponent records, and the current account, with permissions applied to private data. |
+| [Account fields](routes/accounts/schema.ts) | Serve player summaries, API-computed rankings and card-stat season rows, paginated match history, opponent records, and the current account, with permissions applied to private data. Rankings use stored account statistics and configured position weights; card rows use season aggregates from stored match history. |
 | [Team fields](routes/teams/schema.ts) | Return the teams the caller is allowed to see. |
 | [Match fields](routes/matches/schema.ts) | Return team records calculated from imported player match histories. |
 | [read()](routes/graphql/context.ts) | Reuses matching loads within one query request and converts database errors into GraphQL errors. |
@@ -56,6 +56,8 @@ The frontend owns named queries such as [PublicLeagueData and MemberLeagueData](
 ### Saving Changes
 
 REST handlers check permissions and validate submitted data with Zod. Shared command schemas live in [the contracts package](../pkgs/contracts/src/index.ts); some handlers define their input schemas locally.
+
+Account and team write routes enforce name and team-tag rules on the server. These checks apply to new or edited values; they do not rewrite existing stored names. OAuth provisioning uses a safe fallback when a provider username is disallowed, and the documented administrator username bypass remains available for intentional moderation changes.
 
 For example, the [match import handler](routes/matches/index.ts#L147) handles `POST /api/import-match`. It validates the imported match, locks mapped player accounts, adds match records, and recalculates player statistics. These account changes commit together before the API returns the match ID and import counts.
 

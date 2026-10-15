@@ -16,7 +16,6 @@ query MemberLeagueData {
     ...TeamFields
   }
   season
-  weightings
   news {
     ...NewsFields
   }

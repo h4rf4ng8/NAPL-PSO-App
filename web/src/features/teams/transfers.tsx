@@ -1,5 +1,5 @@
 import { Swords, User } from 'lucide-react';
-import React, { useMemo,useState } from 'react';
+import { useMemo,useState } from 'react';
 import { teams as teamApi } from './api';
 import { useResource } from '../../hooks/use-resource';
 import type { Account } from '../accounts/models';

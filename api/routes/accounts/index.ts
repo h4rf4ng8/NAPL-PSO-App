@@ -9,7 +9,8 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import { Prisma, type Database } from '../../plugins/db/client.js';
 import { list, get, need, insert, patch, remove, dto, string, array, object, toColumns } from '../../plugins/db/records.js';
 import { accountDto } from './dto.js';
-import { getCurrentAccount, listAccounts } from './queries.js';
+import { getCurrentAccount, listAccounts, loadRankedAccounts } from './queries.js';
+import { checkBlockedName } from '../name-validation.js';
 const accountColumns = {
     country: 'country', steamUrl: 'steam_url', pendingImageUrl: 'pending_image_url', strikersId: 'strikers_id', position: 'position', imageUrl: 'image_url', stats: 'stats', matches: 'matches', championships: 'championships', totwUntil: 'totw_until', cheater: 'cheater'
 };
@@ -59,7 +60,10 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         if (actor(request).id !== id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
         const row = await need(db, 'accounts', id);
-        return accountDto(row, true);
+        const population = await loadRankedAccounts(db);
+        const calculated = population.find(account => account.id === id);
+        if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
+        return { ...accountDto(row, true), ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats };
     });
     app.get('/api/accounts/:username', {
         config: {
@@ -67,7 +71,11 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         }
     }, async (request) => {
         const row = await get(db, 'accounts', 'username_lower', parameters(request).username!.toLowerCase());
-        return row ? accountDto(row) : null;
+        if (!row) return null;
+        const population = await loadRankedAccounts(db);
+        const calculated = population.find(account => account.id === row.id);
+        if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
+        return { ...accountDto(row), ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats };
     });
     app.get('/api/users/me', {
         config: {
@@ -78,8 +86,12 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         z.object({}).strict().parse(request.body ?? {});
         const identity = actor(request);
         const row = await provisionAccount(db, identity);
+        const population = await loadRankedAccounts(db);
+        const calculated = population.find(account => account.id === row.id);
+        if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
         return {
-            ...accountDto(row, true), roles: request.userRoles
+            ...accountDto(row, true), ranking: calculated.ranking, cardStats: calculated.cardStats,
+            seasonStats: calculated.seasonStats, roles: request.userRoles
         };
     });
     app.patch('/api/accounts/:id', async (request) => {
@@ -87,7 +99,7 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         if (!admin && actor(request).id !== id)
             throw new HttpError(403, 'forbidden');
         const input = (admin ? adminAccountPatch : profilePatch).parse(request.body);
-        const row = await db.transaction(async (tx) => {
+        const { row, calculated } = await db.transaction(async (tx) => {
             const existing = await need(tx, 'accounts', id, true);
             if (!admin && input.position !== undefined && (!input.strikersId || existing.strikers_id || existing.team_id || array(existing.matches).length > 0))
                 throw new HttpError(403, 'position_review_required');
@@ -95,9 +107,17 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
                 throw new HttpError(403, 'strikers_id_locked');
             if (input.strikersId && !/^\d{2,15}$/.test(input.strikersId))
                 throw new HttpError(400, 'invalid_strikers_id');
-            return patch(tx, 'accounts', id, toColumns(input, accountColumns));
+            const row = await patch(tx, 'accounts', id, toColumns(input, accountColumns));
+            const population = await loadRankedAccounts(tx);
+            const calculated = population.find(account => account.id === id);
+            if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
+            return { row, calculated };
         });
-        return { ...accountDto(row, actor(request).id === id || admin), ...((actor(request).id === id) && {roles:request.userRoles}) };
+        return {
+            ...accountDto(row, actor(request).id === id || admin),
+            ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats,
+            ...((actor(request).id === id) && {roles:request.userRoles})
+        };
     });
     app.put('/api/accounts/:id/awards/:awardId/:season', {
         config: { role: 'admin' }
@@ -150,6 +170,8 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         const input = z.object({
             username
         }).strict().parse(request.body);
+        if (!isAdmin(request) && checkBlockedName(input.username))
+            throw new HttpError(400, 'name_not_allowed', 'That username isn\'t allowed. Please choose a different one.');
         await db.transaction(tx => rename(tx, id, input.username));
         return {
             ok: true

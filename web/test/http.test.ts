@@ -39,6 +39,41 @@ test('rejects arbitrary upstream URLs',async()=>{
  await assert.rejects(request('https://app:3000/api/teams'),/Invalid API path/);
 });
 
+test('validates CSRF bootstrap data and preserves REST error precedence',async()=>{
+ mock.method(globalThis,'fetch',async()=>json({csrfToken:42}));
+ await assert.rejects(request('/api/teams','POST',{}),/Could not initialize secure session/);
+
+ mock.restoreAll();
+ fixture.cookie='napl-csrf=present';
+ mock.method(globalThis,'fetch',async()=>json({
+  message:'top-level',error:{code:'rest_code',message:'REST message'},
+  errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}}],
+ },409));
+ await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
+  &&error.code==='rest_code'&&error.message==='top-level');
+});
+
+test('falls back from malformed REST fields to the first GraphQL error object',async()=>{
+ fixture.cookie='napl-csrf=present';
+ mock.method(globalThis,'fetch',async()=>json({
+  error:{code:3,message:'REST message'},
+  errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}},{message:'later',extensions:{code:'later_code'}}],
+ },400));
+ await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
+  &&error.code==='graphql_code'&&error.message==='REST message');
+});
+
+test('keeps the first object error authoritative and handles malformed error bodies',async()=>{
+ for (const body of [null, [], {errors:[{}, {extensions:{code:'session_expired'}}]}, {errors:[[], {extensions:{code:'session_expired'}}]}]) {
+  let calls=0;
+  mock.method(globalThis,'fetch',async()=>{calls++;return json(body,400);});
+  await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
+   &&error.code==='request_failed'&&error.message==='Request failed (400)');
+  assert.equal(calls,1);
+  mock.restoreAll();
+ }
+});
+
 test('reads GraphQL error extensions.code for session refresh and reuses the request key',async()=>{
  fixture.cookie='napl-csrf=before';
  const calls:{url:string;headers:Headers}[]=[];

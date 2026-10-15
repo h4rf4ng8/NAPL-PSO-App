@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Database } from '../../plugins/db/client.js';
 import { HttpError } from '../../plugins/auth/identity.js';
 import { get, string } from '../../plugins/db/records.js';
+import { DEFAULT_POSITION_WEIGHTS } from '../accounts/ranking.js';
 
 export const settingKey = z.enum(['current_season', 'season_champions', 'position_weights']);
 export type SettingKey = z.infer<typeof settingKey>;
@@ -11,7 +12,7 @@ export async function getSetting(database: Database, key: SettingKey): Promise<u
   if (key === 'current_season')
     return row?.value ?? 'S1';
   if (!row?.value)
-    return key === 'position_weights' ? null : {};
+    return key === 'position_weights' ? DEFAULT_POSITION_WEIGHTS : {};
   try {
     return JSON.parse(string(row.value)) as unknown;
   }

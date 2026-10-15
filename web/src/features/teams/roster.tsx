@@ -1,7 +1,7 @@
 import { Check, Edit3, Users, X } from 'lucide-react';
-import React, { useMemo,useState } from 'react';
+import { useMemo,useState } from 'react';
 import { teams as teamApi } from './api';
-import type { Account, Rankings } from '../accounts/models';
+import type { Account } from '../accounts/models';
 import type { Team } from './models';
 import { CaptainStar } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
@@ -10,9 +10,9 @@ import { C } from '../../theme/theme';
 
 import { DEFAULT_FORMATION, FORMATION_IDS, getFormation, isTeamCaptain, resolveLineup } from '../../utils/league';
 import { POS } from '@napl/contracts/league';
-import { cardTier, getPlayerRanking, tierForAccount } from '../../utils/rankings';
+import { cardTier } from '../../utils/rankings';
 
-export const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardClick, isCaptain = false, onLineupSaved }: { team: Team; allPlayers?: Account[]; rankings?: Rankings | null; onCardClick: (account:Account) => void; isCaptain?: boolean; onLineupSaved?: () => void }) => {
+export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCaptain = false, onLineupSaved }: { team: Team; allPlayers?: Account[]; onCardClick: (account:Account) => void; isCaptain?: boolean; onLineupSaved?: () => void }) => {
   // Fetch full account records for each roster member
   const members = useMemo(() => {
     return (team.members || [])
@@ -40,8 +40,8 @@ export const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardCli
     const source = editingLineup
       ? { ...team, formation: draftFormation, lineup: draftLineup }
       : team;
-    return resolveLineup(source, members, rankings || null);
-  }, [team, draftFormation, draftLineup, editingLineup, members, rankings]);
+    return resolveLineup(source, members);
+  }, [team, draftFormation, draftLineup, editingLineup, members]);
 
   // Bench = any member not currently in a starter slot
   const bench = useMemo(() => {
@@ -223,7 +223,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardCli
                   cursor: editingLineup ? 'pointer' : undefined,
                 }}
               >
-                <FormationSlot player={player} positionLabel={slot.label} popDown={popDown} rankings={rankings} team={team} onCardClick={onCardClick} />
+                <FormationSlot player={player} positionLabel={slot.label} popDown={popDown} team={team} onCardClick={onCardClick} />
               </div>
             );
           })}
@@ -399,7 +399,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardCli
           </h4>
           <div className="flex flex-wrap gap-x-3 gap-y-8 sm:gap-x-4 justify-center sm:justify-start" style={{ paddingTop: 20 }}>
             {bench.map(p => (
-              <FormationSlot key={p.username} player={p} positionLabel={p.position} rankings={rankings} team={team} onCardClick={onCardClick} />
+              <FormationSlot key={p.username} player={p} positionLabel={p.position} team={team} onCardClick={onCardClick} />
             ))}
           </div>
         </div>
@@ -411,7 +411,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], rankings, onCardCli
 // Stable component identity preserves the roster button while a nested card opens.
 const SLOT_W = 76;
 const SLOT_H = 100;
-const FormationSlot = ({ player, positionLabel, popDown = false, rankings, team, onCardClick }: { player: Account | null; positionLabel: string; popDown?: boolean; rankings?: Rankings | null; team: Team; onCardClick: (account: Account) => void }) => {
+const FormationSlot = ({ player, positionLabel, popDown = false, team, onCardClick }: { player: Account | null; positionLabel: string; popDown?: boolean; team: Team; onCardClick: (account: Account) => void }) => {
   if (!player) {
     return (
       <div
@@ -429,13 +429,10 @@ const FormationSlot = ({ player, positionLabel, popDown = false, rankings, team,
       </div>
     );
   }
-  const ranking = getPlayerRanking(player, rankings);
-  // Only show a real OVR score if the player meets the minimum-games threshold.
-  // Below that, the legacy fallback would show ~52 for every unplayed player
-  // which looks misleading on the pitch — show "NR" (Not Ranked) instead.
-  const isRanked = !!ranking?.ranked;
-  const ovr = isRanked ? (ranking.score || 0) : 'NR';
-  const tierName = isRanked ? tierForAccount(player, ranking) : 'BRONZE';
+  const ranking = player.ranking;
+  const isRanked = ranking.ranked;
+  const ovr = isRanked ? ranking.score : 'NR';
+  const tierName = isRanked ? ranking.tier : 'BRONZE';
   const tier = cardTier(tierName);
   const ringColor = tier.from || C.goldLight;
   const ovrTextColor = tier.accent || C.navyDeep;
@@ -497,7 +494,7 @@ const FormationSlot = ({ player, positionLabel, popDown = false, rankings, team,
 
       {/* Hover preview: full-size PlayerCard as floating overlay */}
       <div className="asl-formation-preview" aria-hidden="true">
-        <PlayerCard account={player} size="sm" team={team} rankings={rankings} hideTeam={true} />
+        <PlayerCard account={player} size="sm" team={team} hideTeam={true} />
       </div>
     </button>
   );

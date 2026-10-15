@@ -7,6 +7,8 @@ fragment PublicAccountFields on Account {
   country
   stats
   seasonStats
+  ranking { score percentile ranked gamesPlayed tier }
+  cardStats { season cells { label value } }
   awards
   championships
   totwUntil
@@ -28,6 +30,8 @@ fragment CurrentAccountFields on CurrentAccount {
   roles
   stats
   seasonStats
+  ranking { score percentile ranked gamesPlayed tier }
+  cardStats { season cells { label value } }
   awards
   championships
   totwUntil
@@ -49,4 +53,16 @@ query AccountMatches($id: ID!, $first: Int = 25, $after: String, $season: String
 
 query AccountOpponents($id: ID!) {
   accountOpponents(id: $id)
+}
+
+query AccountCardPreviews {
+  accountCardPreviews {
+    label
+    description
+    account { ...PublicAccountFields }
+  }
+}
+
+query DefaultPositionWeights {
+  defaultPositionWeights
 }

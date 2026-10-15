@@ -1,5 +1,5 @@
 import { Activity, Calendar, Edit3, Share2, Shield, Sparkles, Target, TrendingUp, Trophy, User, Zap } from 'lucide-react';
-import type { Account, Rankings } from '../accounts/models';
+import type { Account } from '../accounts/models';
 import type { Team } from '../teams/models';
 import { AWARD_BY_ID, AwardIcon } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
@@ -10,16 +10,16 @@ import { getStatsForSeason } from '../../utils/rankings';
 export type CardAction = 'share' | 'image' | 'pos' | 'name';
 interface Props {
   account: Account; season: string; currentSeason: string; allSeasons: string[];
-  setSeason: (season: string) => void; myTeam: Team | undefined; rankings: Rankings;
+  setSeason: (season: string) => void; myTeam: Team | undefined;
   onEdit: (action: CardAction) => void;
 }
-export function MyCard({ account, season, currentSeason, allSeasons, setSeason, myTeam, rankings, onEdit }: Props) {
+export function MyCard({ account, season, currentSeason, allSeasons, setSeason, myTeam, onEdit }: Props) {
   const seasonStats = getStatsForSeason(account, season);
   const games = seasonStats.games || 0;
   const wr = games > 0 ? Math.round(seasonStats.wins / games * 100) : 0;
   const gpg = games > 0 ? (seasonStats.goals / games).toFixed(2) : '0.00';
   const apg = games > 0 ? (seasonStats.assists / games).toFixed(2) : '0.00';
-  const accountForCard = { ...account, stats: seasonStats };
+  const accountForCard = { ...account, stats: seasonStats, _cardSeason: season };
   return (
           <div className="space-y-6">
             {/* SEASON FILTER BANNER */}
@@ -62,7 +62,7 @@ export function MyCard({ account, season, currentSeason, allSeasons, setSeason, 
 
             <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-start">
               <div className="flex flex-col items-center gap-3">
-                <PlayerCard account={accountForCard} size="lg" team={myTeam} rankings={rankings} />
+                <PlayerCard account={accountForCard} size="lg" team={myTeam} />
                 <div className="flex gap-2 flex-wrap justify-center">
                   <button
                     onClick={() => onEdit('share')}

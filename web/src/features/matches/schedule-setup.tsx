@@ -1,5 +1,5 @@
 import { Check } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { matches as matchApi } from './api';
 

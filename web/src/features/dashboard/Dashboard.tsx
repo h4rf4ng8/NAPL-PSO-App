@@ -4,7 +4,7 @@ import { ShareableCardModal, TierPreview } from '../../components/PlayerCard';
 import { C } from '../../theme/theme';
 import { useTheme } from '../../theme/use-theme';
 import { isAdmin } from '../../utils/league';
-import { calcRankings, getStatsForSeason } from '../../utils/rankings';
+import { getStatsForSeason } from '../../utils/rankings';
 import { EditNameModal, EditPositionModal, OnboardingModal, StatsView, UploadImageModal } from '../accounts';
 import { AdminPanel } from '../admin';
 import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
@@ -33,13 +33,19 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const players = data?.players ?? [];
   const teams = data?.teams ?? [];
   const currentSeason = data?.currentSeason ?? 'S1';
-  const rankings = useMemo(() => calcRankings(players, data?.weightings), [players, data?.weightings]);
   const allSeasons = useMemo(() => collectSeasons(players, currentSeason), [players, currentSeason]);
   const myTeam = teams.find(team => team.id === account.teamId && team.status === 'approved');
   const period = activePeriod(data?.periods ?? []);
-  const cardAccount = { ...account, stats: getStatsForSeason(account, season) };
+  const cardAccount = { ...(data?.me ?? account), stats: getStatsForSeason(data?.me ?? account, season), _cardSeason: season };
   const closeModal = () => setModal(null);
-  const savedAccount = (updated: Account) => { onUpdate(updated); void reload(); };
+  const savedAccount = (updated: Account) => {
+    onUpdate({
+      ...updated,
+      ranking: updated.ranking ?? data?.me.ranking ?? account.ranking,
+      cardStats: updated.cardStats ?? data?.me.cardStats ?? account.cardStats,
+    });
+    void reload();
+  };
 
   return (
     <div className="min-h-screen pitch-bg" style={{ color: C.cream }}>
@@ -51,11 +57,11 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
       <main className="relative max-w-6xl mx-auto px-4 py-6 fade-in">
         {loading && !data && <p role="status">Loading league…</p>}
         {error && <p role="alert">{error} <button onClick={() => void reload()}>Try again</button></p>}
-        {view === 'home' && <HomeView account={account} allPlayers={players} allTeams={teams} news={data?.news ?? []} rankings={rankings} currentSeason={currentSeason} onJump={setView} onUpdate={savedAccount} />}
-        {view === 'me' && <MyCard account={account} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} rankings={rankings} onEdit={setModal} />}
+        {data && view === 'home' && <HomeView account={data.me} allPlayers={players} allTeams={teams} news={data.news} currentSeason={currentSeason} onJump={setView} onUpdate={savedAccount} />}
+        {data && view === 'me' && <MyCard account={data.me} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} onEdit={setModal} />}
         {view === 'matches' && <MatchLog account={account} season={season} />}
-        {view === 'teams' && <TeamsView account={account} onUpdate={savedAccount} rankings={rankings} currentSeason={currentSeason} />}
-        {view === 'leaderboard' && <StatsView allPlayers={players} allTeams={teams} rankings={rankings} onPlayerClick={setSelectedPlayer} />}
+        {data && view === 'teams' && <TeamsView account={data.me} onUpdate={savedAccount} currentSeason={currentSeason} />}
+        {data && view === 'leaderboard' && <StatsView allPlayers={players} allTeams={teams} onPlayerClick={setSelectedPlayer} />}
         {view === 'hof' && <HallOfFameView allPlayers={players} allTeams={teams} onPlayerClick={setSelectedPlayer} />}
         {view === 'tiers' && <TierPreview />}
         {view === 'standings' && <StandingsView />}
@@ -63,14 +69,14 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         {view === 'transfers' && <TransfersView account={account} />}
         {view === 'rules' && <RulesView onJump={setView} />}
         {view === 'news' && <NewsHub account={account} allTeams={teams} />}
-        {view === 'vote' && (period ? <VotingTab account={account} period={period} allPlayers={players} rankings={rankings} onRefresh={reload} /> : <p>No voting period is open.</p>)}
+        {data && view === 'vote' && (period ? <VotingTab account={data.me} period={period} allPlayers={players} onRefresh={reload} /> : <p>No voting period is open.</p>)}
         {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} onLeagueChanged={reload} /> : <p role="alert">Administrator access is required.</p>)}
       </main>
       {modal === 'pos' && <EditPositionModal account={account} onClose={closeModal} />}
       {modal === 'name' && <EditNameModal account={account} onClose={closeModal} onSave={savedAccount} />}
       {modal === 'image' && <UploadImageModal account={account} onClose={closeModal} onSave={savedAccount} />}
-      {modal === 'share' && <ShareableCardModal account={cardAccount} team={myTeam} rankings={rankings} onClose={closeModal} />}
-      {selectedPlayer && <ShareableCardModal account={selectedPlayer} team={teams.find(team => team.id === selectedPlayer.teamId)} rankings={rankings} onClose={() => setSelectedPlayer(null)} />}
+      {data && modal === 'share' && <ShareableCardModal account={cardAccount} team={myTeam} onClose={closeModal} />}
+      {selectedPlayer && <ShareableCardModal account={selectedPlayer} team={teams.find(team => team.id === selectedPlayer.teamId)} onClose={() => setSelectedPlayer(null)} />}
     </div>
   );
 }

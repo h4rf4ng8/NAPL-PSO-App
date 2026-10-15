@@ -1,5 +1,5 @@
 import { CheckCircle, XCircle } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { matches as matchApi } from './api';
 
 import type { Account } from '../accounts/models';

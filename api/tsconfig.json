@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "rootDir": "..",
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "lib": [
+      "ES2023"
+    ]
+  },
+  "include": [
+    "routes",
+    "plugins",
+    "app.ts",
+    "../pkgs/contracts/src",
+    "dev.ts"
+  ],
+  "exclude": [
+    "test"
+  ]
+}

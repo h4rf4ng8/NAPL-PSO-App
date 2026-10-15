@@ -1,0 +1,36 @@
+{
+  "name": "@napl/api",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup:env": "node --import tsx scripts/setup-env.mjs",
+    "predev": "npm run setup:env",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch dev.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test --test-concurrency=1 test/plugins/*.test.ts test/routes/*.test.ts test/integration/*.test.ts",
+    "prisma:generate": "prisma generate",
+    "test:db": "bash test/integration/run.sh --api"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@napl/contracts": "*",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
+    "fastify": "^5.0.0",
+    "fastify-plugin": "5.1.0",
+    "graphql": "16.14.2",
+    "ipaddr.js": "^2.2.0",
+    "jose": "^6.0.0",
+    "pg": "^8.16.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.15.0",
+    "prisma": "7.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}

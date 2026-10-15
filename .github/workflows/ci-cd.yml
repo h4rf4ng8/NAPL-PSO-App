@@ -69,7 +69,6 @@ jobs:
       - name: Prepare protected deployment parameters
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          AUTH_DATABASE_URL: ${{ secrets.AUTH_DATABASE_URL }}
           COOKIE_KEYS: ${{ secrets.COOKIE_KEYS }}
           ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
           DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}

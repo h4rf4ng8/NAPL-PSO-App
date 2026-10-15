@@ -8,11 +8,7 @@ Parameters:
   DatabaseUrl:
     Type: String
     NoEcho: true
-    Description: PostgreSQL application runtime connection URL for API queries.
-  AuthDatabaseUrl:
-    Type: String
-    NoEcho: true
-    Description: PostgreSQL runtime connection URL; inject through a protected deployment channel.
+    Description: PostgreSQL runtime connection URL for application queries and authentication state.
   SupabaseUrl:
     Type: String
     Description: Supabase project URL.
@@ -194,7 +190,6 @@ Resources:
         Variables:
           NODE_ENV: production
           DATABASE_URL: !Ref DatabaseUrl
-          AUTH_DATABASE_URL: !Ref AuthDatabaseUrl
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
           SUPABASE_SECRET_KEY: !If [HasSupabaseSecretKey, !Ref SupabaseSecretKey, !Ref AWS::NoValue]

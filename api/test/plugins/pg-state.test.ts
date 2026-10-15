@@ -4,7 +4,7 @@ import { Prisma, PrismaClient } from '../../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PostgresAuthStore } from '../../plugins/session/pg-store.js';
 
-const runtimeUrl = process.env.AUTH_TEST_DATABASE_URL;
+const runtimeUrl = process.env.API_TEST_DATABASE_URL;
 const adminUrl = process.env.API_TEST_ADMIN_DATABASE_URL;
 const hasDatabase = Boolean(runtimeUrl && adminUrl);
 

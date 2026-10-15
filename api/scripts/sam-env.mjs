@@ -10,7 +10,6 @@ const defaultEnvPath = path.resolve(apiDir, '.env');
 const defaultOutputPath = path.resolve(apiDir, '.env.sam.json');
 const parameterEnv = {
   DatabaseUrl: 'DATABASE_URL',
-  AuthDatabaseUrl: 'AUTH_DATABASE_URL',
   SupabaseUrl: 'SUPABASE_URL',
   SupabasePublishableKey: 'SUPABASE_PUBLISHABLE_KEY',
   SupabaseSecretKey: 'SUPABASE_SECRET_KEY',

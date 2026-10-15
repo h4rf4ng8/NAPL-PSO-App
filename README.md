@@ -237,7 +237,7 @@ Only a verified super administrator can change the administrator list. The API c
 
 Every changed list records who made the change, when the database saved it, and the complete lists before and after the change. The actor comes from the verified session. The assignments and their history are saved together, so a failure to record the history also prevents the assignment change. Concurrent changes either save complete lists with matching history or return a conflict.
 
-Apply the [assignment-history migration](supabase/migrations/202610140001_role_audit.sql) before deploying this API behavior. The application database role can append history but cannot read, edit, delete, or clear it. The authentication database role and browser roles have no access. The migration owner can inspect the records directly. Deleting an account does not erase its history because the records are retained independently of the account.
+Apply the [assignment-history migration](supabase/migrations/202610140001_role_audit.sql) before deploying this API behavior. The API's database login can append history but cannot read, edit, delete, or clear it. Browser roles have no access. The migration owner can inspect the records directly. Deleting an account does not erase its history because the records are retained independently of the account.
 
 The integration tests check permissions, unchanged selections, rollback, concurrent changes, and database access restrictions using disposable PostgreSQL databases. Run them with Node 24 and Docker:
 
@@ -268,7 +268,7 @@ npm run dev
 
 Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` to `LOCAL_API_URL`, then `API_URL`, then `http://127.0.0.1:3000`. Set `ORIGIN_SECRET` in the Vite process or local `web/.env`; never use `VITE_` for secrets. API settings are documented in [api/.env.example](api/.env.example).
 
-`setup:env` creates `api/.env` if needed and generates `COOKIE_KEYS` once, preserving existing keys and other settings. Fill in provider/database values locally. Use separate application and auth database roles. Never commit actual `.env` files or regenerate the cookie key at startup.
+`setup:env` creates `api/.env` if needed and generates `COOKIE_KEYS` once, preserving existing keys and other settings. Fill in provider/database values locally. Set `DATABASE_URL` to a restricted database login with the application and authentication permissions described in [Runtime Settings](#runtime-settings). Never commit actual `.env` files or regenerate the cookie key at startup.
 
 ## Checks
 
@@ -320,7 +320,7 @@ Supply production values through a protected local file or the deployment enviro
 
 | Setting | Purpose |
 | --- | --- |
-| `DATABASE_URL`, `AUTH_DATABASE_URL` | Separate application and authentication database logins, granted `app_runtime` and `gateway_runtime`, respectively. Both production URLs must use `sslmode=verify-full`. |
+| `DATABASE_URL` | One Supabase PostgreSQL connection URL for league data and authentication state. Its restricted runtime login must inherit both `app_runtime` and `gateway_runtime`; use `sslmode=verify-full` in production. |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project HTTPS URL and authentication publishable key. |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_GUILD_ID` | Discord OAuth application credentials and the guild used for membership checks. |
 | `PUBLIC_ORIGIN` | Exact HTTPS address of the public frontend, without a path or trailing slash. Configure allowed sign-in redirects for this frontend origin. |
@@ -337,7 +337,7 @@ The generated AWS trust policy accepts only the named project's production Verce
 
 ### Database Capacity
 
-Each Lambda environment can use one application database connection and one authentication database connection. Ten active environments can therefore use roughly 20 connections. Leave additional room for warm environments, overlapping releases, migrations, and other database users.
+League data and authentication state use the same `DATABASE_URL` and database login. Each Lambda environment still has two database clients, each limited to one connection. Ten active environments can therefore use roughly 20 connections. Leave additional room for warm environments, overlapping releases, migrations, and other database users.
 
 The template omits reserved concurrency by default. New AWS accounts can have a concurrency quota too small to support a reservation. Once the account permits it, set the template's `ReservedConcurrency` parameter to a positive limit that fits the database budget. Its default of `-1` means no reservation; `0` disables invocation. The account's shared quota can change, so it is not a permanent function-specific limit or spending cap.
 
@@ -369,15 +369,14 @@ The following setup is in **GitHub**, under this repository's **Settings → Env
 
 | Environment secret | Where to obtain it |
 | --- | --- |
-| `DATABASE_URL` | Supabase PostgreSQL connection for the application runtime login, with `sslmode=verify-full`. |
-| `AUTH_DATABASE_URL` | Separate Supabase PostgreSQL connection for the authentication runtime login, with `sslmode=verify-full`. |
+| `DATABASE_URL` | Supabase PostgreSQL connection for the shared runtime login, with `sslmode=verify-full`. |
 | `DISCORD_CLIENT_SECRET` | Discord Developer Portal → application → OAuth2 client secret. |
 | `COOKIE_KEYS` | Existing API key ring; preserve it during deployment. For a first installation, generate it once with the setup command and retain it securely. |
 | `ORIGIN_SECRET` | Existing secret shared by Vercel and the API. For a first installation, generate it once and configure the same value in both places. |
 | `SUPABASE_SECRET_KEY` | Optional Supabase server secret key. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional Discord webhook URL for roster notices. |
 
-The database connections require the runtime roles and migrations described in [Runtime Settings](#runtime-settings) and [Rollout and Rollback](#rollout-and-rollback). A dashboard connection string using the database administrator account is not a substitute for those runtime logins.
+The database login requires both runtime role grants and the migrations described in [Runtime Settings](#runtime-settings) and [Rollout and Rollback](#rollout-and-rollback). Use a restricted runtime login rather than the database administrator account. The same login serves league data and authentication state, so it has the combined permissions of both runtime roles.
 
 | Environment variable | Value or source |
 | --- | --- |
@@ -421,7 +420,7 @@ The [parameter generator](api/scripts/sam-env.mjs) validates production settings
 
 A new Lambda version becomes active through the `live` alias. CloudFormation normally rolls back a failed infrastructure update. A failed smoke check after deployment marks the workflow failed but does not undo that release; revert the change on `main` and let the workflow deploy a compatible revision. Preserve the active cookie keys when rolling back.
 
-The smoke check verifies application database access. It does not verify Discord sign-in, authentication database connectivity, or Vercel forwarding. Complete those checks through the website after configuring Vercel. The workflow does not run production migrations or coordinate Vercel's separate deployment process.
+The smoke check verifies access to league data. It does not verify Discord sign-in, access to authentication state, or Vercel forwarding. Complete those checks through the website after configuring Vercel. The workflow does not run production migrations or coordinate Vercel's separate deployment process.
 
 ### Configure Vercel
 

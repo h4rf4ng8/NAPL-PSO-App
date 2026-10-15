@@ -9,7 +9,6 @@ const ring = JSON.stringify({ active: Buffer.alloc(32, 7).toString('base64'), pr
 const env = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full',
-  AUTH_DATABASE_URL: 'postgres://db.example/auth?sslmode=verify-full',
   SUPABASE_URL: 'https://project.supabase.co',
   SUPABASE_PUBLISHABLE_KEY: 'public-key',
   SUPABASE_SECRET_KEY: '',

@@ -12,9 +12,9 @@ import { CookieCrypto } from '../../plugins/session/crypto.js';
 import { sessionSchema } from '../../plugins/session/model.js';
 import { config, keys, session, sessionId, userId } from './fixtures.js';
 
-test('PostgreSQL auth state across independent API instances', { skip: !process.env.AUTH_TEST_DATABASE_URL || !process.env.API_TEST_ADMIN_DATABASE_URL, timeout: 75_000 }, async (context) => {
+test('PostgreSQL auth state across independent API instances', { skip: !process.env.API_TEST_DATABASE_URL || !process.env.API_TEST_ADMIN_DATABASE_URL, timeout: 75_000 }, async (context) => {
   const admin = new pg.Pool({ connectionString: process.env.API_TEST_ADMIN_DATABASE_URL, max: 1 });
-  const clients = [0, 1].map(() => new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.AUTH_TEST_DATABASE_URL, max: 1 }) }));
+  const clients = [0, 1].map(() => new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.API_TEST_DATABASE_URL, max: 1 }) }));
   const stores = clients.map(client => new PostgresAuthStore(client));
   const clearState = () => admin.query('TRUNCATE auth_gateway.auth_login_replays, auth_gateway.auth_refresh_leases, auth_gateway.auth_refresh_results, auth_gateway.auth_rate_events');
   context.after(async () => { await Promise.all([...clients.map(client => client.$disconnect()), admin.end()]); });

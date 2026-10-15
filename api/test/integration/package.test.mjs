@@ -37,11 +37,10 @@ test('SAM template describes the bounded Lambda and IAM-protected Function URL',
   assert.deepEqual(resources.ApiRole.Properties.Policies[0].PolicyDocument.Statement[0].Action, ['logs:CreateLogStream', 'logs:PutLogEvents']);
   assert.equal(resources.ApiRole.Properties.Policies[0].PolicyDocument.Statement[0].Resource, '${ApiLogGroup.Arn}:*');
   assert.ok(Object.values(template.Parameters).some(parameter => parameter.NoEcho && parameter.Description?.toLowerCase().includes('origin secret')));
-  assert.ok(Object.values(template.Parameters).some(parameter => parameter.NoEcho && parameter.Description?.includes('application runtime')));
-  assert.ok(Object.values(template.Parameters).some(parameter => parameter.NoEcho && parameter.Description?.includes('runtime connection URL')));
+  assert.equal(template.Parameters.DatabaseUrl.NoEcho, true);
   assert.equal(fn.Environment.Variables.NODE_ENV, 'production');
   assert.equal(fn.Environment.Variables.DATABASE_URL, 'DatabaseUrl');
-  assert.equal(fn.Environment.Variables.AUTH_DATABASE_URL, 'AuthDatabaseUrl');
+  assert.deepEqual(Object.keys(fn.Environment.Variables).filter(name => name.endsWith('DATABASE_URL')), ['DATABASE_URL']);
   assert.equal(fn.Environment.Variables.SUPABASE_SECRET_KEY[2], 'AWS::NoValue');
   assert.equal(fn.Environment.Variables.DISCORD_TRANSFER_WEBHOOK[2], 'AWS::NoValue');
   assert.ok(Object.values(resources).every(resource => !['AWS::ApiGateway::RestApi', 'AWS::CloudFront::Distribution'].includes(resource.Type)));
@@ -61,7 +60,6 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
     DISCORD_CLIENT_SECRET: `discord-${canary}`,
     DISCORD_GUILD_ID: '987654321',
     DATABASE_URL: `postgresql://unused:${canary}@127.0.0.1:1/test`,
-    AUTH_DATABASE_URL: `postgresql://unused:${canary}@127.0.0.1:1/test`,
     COOKIE_KEYS: JSON.stringify({ test: randomBytes(32).toString('base64') }),
     ORIGIN_SECRET: `origin-${canary}-must-not-be-bundled`,
   };
@@ -86,7 +84,7 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
     const packageJson = JSON.parse(await readFile(path.join(scratch, 'package.json'), 'utf8'));
     assert.deepEqual(packageJson, { type: 'module' });
     const bundle = await readFile(path.join(scratch, 'lambda.js'), 'utf8');
-    for (const secret of [values.SUPABASE_PUBLISHABLE_KEY, values.DISCORD_CLIENT_SECRET, values.DATABASE_URL, values.AUTH_DATABASE_URL, values.ORIGIN_SECRET]) {
+    for (const secret of [values.SUPABASE_PUBLISHABLE_KEY, values.DISCORD_CLIENT_SECRET, values.DATABASE_URL, values.ORIGIN_SECRET]) {
       assert.ok(!bundle.includes(secret), 'runtime configuration must not be bundled into code');
     }
 
@@ -120,13 +118,13 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
       assert.equal(response.headers['retry-after'], '1');
     }
 
-    const integration = ['API_TEST_DATABASE_URL', 'AUTH_TEST_DATABASE_URL'].every(name => process.env[name]);
+    const integration = Boolean(process.env.API_TEST_DATABASE_URL);
     if (integration) {
       const moduleUrl = pathToFileURL(path.join(scratch, 'lambda.js')).href;
       const childScript = `
         import assert from 'node:assert/strict';
         const { handler } = await import(${JSON.stringify(moduleUrl)});
-        const response = await handler({
+        const request = {
           version: '2.0', routeKey: '$default', rawPath: '/api/accounts', rawQueryString: '',
           headers: { 'x-real-ip': '203.0.113.9', 'x-origin-secret': process.env.ORIGIN_SECRET },
           requestContext: {
@@ -135,27 +133,35 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
             requestId: 'package-test', routeKey: '$default', stage: '$default', time: new Date().toUTCString(), timeEpoch: Date.now(),
           },
           isBase64Encoded: false,
-        }, {
+        };
+        const context = {
           callbackWaitsForEmptyEventLoop: false, functionVersion: '$LATEST', functionName: 'napl-package-test',
           memoryLimitInMB: '512', logGroupName: '/aws/lambda/napl-package-test', logStreamName: 'test',
           awsRequestId: 'package-test', invokedFunctionArn: 'arn:aws:lambda:us-east-1:123456789012:function:napl-package-test',
           getRemainingTimeInMillis: () => 10_000,
-        });
+        };
+        const response = await handler(request, context);
         assert.equal(response.statusCode, 200);
         assert.ok(Array.isArray(JSON.parse(response.body)));
+        const auth = await handler({
+          ...request, rawPath: '/auth/csrf',
+          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, path: '/auth/csrf' } },
+        }, context);
+        assert.equal(auth.statusCode, 200);
+        assert.equal(typeof JSON.parse(auth.body).csrfToken, 'string');
+        assert.ok(auth.cookies.some(cookie => cookie.startsWith('napl-csrf=')));
         process.exit(0);
       `;
       const env = {
         ...process.env,
         DATABASE_URL: process.env.API_TEST_DATABASE_URL,
-        AUTH_DATABASE_URL: process.env.AUTH_TEST_DATABASE_URL,
         COOKIE_KEYS: JSON.stringify({ package: randomBytes(32).toString('base64') }),
       };
       let stdout;
       try {
         ({ stdout } = await exec(process.execPath, ['--input-type=module', '-e', childScript], { env, timeout: 15_000 }));
       } catch {
-        assert.fail('Extracted Lambda ZIP could not query the disposable integration database.');
+        assert.fail('Extracted Lambda ZIP could not use application and auth state through one database connection URL.');
       }
       assert.ok(!stdout.includes(values.ORIGIN_SECRET), 'child output must not include secrets');
     }

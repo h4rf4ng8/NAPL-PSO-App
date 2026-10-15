@@ -19,7 +19,6 @@ const origin = 'http://localhost:5173';
 const environment = {
   NODE_ENV: 'test', PUBLIC_ORIGIN: origin,
   DATABASE_URL: 'postgresql://api_test:napl_test_only@db:5432/napl_test',
-  AUTH_DATABASE_URL: 'postgresql://gateway_test:napl_test_only@db:5432/napl_test',
   SUPABASE_URL: 'https://supabase.invalid', SUPABASE_PUBLISHABLE_KEY: 'sam-test-only',
   SUPABASE_SECRET_KEY: '', SUPABASE_JWT_AUDIENCE: 'authenticated',
   DISCORD_CLIENT_ID: '123', DISCORD_CLIENT_SECRET: 'sam-test-only', DISCORD_GUILD_ID: '456',
@@ -114,15 +113,15 @@ try {
   const callback = await invoke('callback query validation clears login cookie', event('/auth/callback?code=not-exchanged&transaction=wrong', { cookies: [login.cookies[0].split(';', 1)[0]] }), 401);
   assert.ok(callback.cookies.some(value => value.startsWith('napl-login=;')));
 
-  const offline = { ...environment, AUTH_DATABASE_URL: 'postgresql://gateway_test:napl_test_only@db:1/napl_test' };
+  const offline = { ...environment, DATABASE_URL: 'postgresql://api_test:napl_test_only@db:1/napl_test' };
   const unavailable = await invoke('auth state failure fails closed', event('/auth/csrf'), 503, offline);
   assert.equal(unavailable.headers['retry-after'], '1');
   assert.equal(JSON.parse(unavailable.body).error.code, 'auth_state_unavailable');
-  const logout = await invoke('logout clears cookies during auth database outage', event('/auth/logout', { method: 'POST', headers: auth, cookies: [cookie, 'napl-access=invalid'], body: {} }), 200, offline);
+  const logout = await invoke('logout clears cookies during database outage', event('/auth/logout', { method: 'POST', headers: auth, cookies: [cookie, 'napl-access=invalid'], body: {} }), 200, offline);
   assert.deepEqual(JSON.parse(logout.body), { ok: true, upstreamRevoked: false });
   assert.equal(logout.cookies.length, 4);
   assert.ok(logout.cookies.every(value => value.includes('Expires=Thu, 01 Jan 1970')));
-  const dbUnavailable = await invoke('database failure returns controlled 503', event('/api/accounts'), 503, { ...environment, DATABASE_URL: 'postgresql://api_test:napl_test_only@db:1/napl_test' });
+  const dbUnavailable = await invoke('database failure returns controlled 503', event('/api/accounts'), 503, offline);
   assert.equal(JSON.parse(dbUnavailable.body).error, 'service_unavailable');
 
   const report = { runtime: 'nodejs24.x', architecture: 'arm64', memoryMiB,

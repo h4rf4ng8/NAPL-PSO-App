@@ -5,7 +5,7 @@ import type { Account } from './models';
 import { EmptyState, RecordBox, ResultBadge, SmallStat } from '../../components/Ui';
 import { C } from '../../theme/theme';
 import { useResource } from '../../hooks/use-resource';
-import { loadAccountMatchPage, loadAccountOpponents } from './history';
+import { loadAccountMatchPage, loadAccountOpponents } from './api';
 
 export const HeadToHead = ({ account }: { account: Account }) => {
   const [opponent, setOpponent] = useState('');

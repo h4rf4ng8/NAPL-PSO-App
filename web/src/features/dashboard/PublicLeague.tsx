@@ -7,7 +7,7 @@ import { StatsView } from '../accounts';
 import { NewsHub, RulesView } from '../content';
 import { ScheduleView, TeamStandings } from '../matches';
 import { PlayerCardModal, TeamRosterFormation, TransfersView } from '../teams';
-import { loadPublicLeague } from './data';
+import { loadPublicLeague } from './api';
 import { useResource } from '../../hooks/use-resource';
 
 export const PublicLeague = ({onLogin}: { onLogin: () => void }) => {

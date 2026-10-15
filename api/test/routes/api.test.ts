@@ -11,7 +11,7 @@ import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { accountMatchPageSchema } from '@napl/contracts/accounts';
 import { inStandings } from '../../../web/src/features/teams/selectors.js';
 import type { Team } from '../../../web/src/features/teams/models.js';
-import { mapAccount } from '../../../web/src/features/accounts/graphql.js';
+import { mapAccount } from '../../../web/src/features/accounts/api.js';
 import type { PublicAccountFieldsFragment } from '../../../web/src/api/generated/graphql.js';
 const apolloCache = new InMemoryCache();
 const PUBLIC_LEAGUE_QUERY = print(apolloCache.transformDocument(PublicLeagueDataDocument));

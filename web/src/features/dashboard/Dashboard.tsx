@@ -11,7 +11,7 @@ import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
 import { ScheduleView, StandingsView } from '../matches';
 import { TeamsView, TransfersView } from '../teams';
 import { VotingTab } from '../voting';
-import { loadMemberLeague } from './data';
+import { loadMemberLeague } from './api';
 import { useResource } from '../../hooks/use-resource';
 import { Header } from './Header';
 import { MatchLog } from './MatchLog';

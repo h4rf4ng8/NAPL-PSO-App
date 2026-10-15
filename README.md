@@ -9,7 +9,7 @@ NAPL is a React/Vite league application backed by an authenticated Fastify API. 
 - `pkgs/contracts/` contains browser-safe schemas shared by the web app and API.
 - `supabase/` contains migration history, the test fixture, and local CLI configuration.
 
-Feature `.graphql` files declare queries and field selections. Feature response helpers validate GraphQL JSON fields and supply UI defaults; dashboard queries compose those selections. Generated typed documents live in `web/src/api/generated/graphql.ts`.
+Feature `.graphql` files declare queries and field selections. Each domain’s `api.ts` owns requests, response validation, and defaults. Dashboard `api.ts` owns the loaders that compose those domain selections. Generated typed documents live in `web/src/api/generated/graphql.ts`.
 
 Both dashboards call their loaders through `useResource`, which suppresses stale results. The imperative Apollo client deduplicates requests; logout cancels outstanding reads and clears session data. Theme state is local React state with persisted light/dark preferences. Administrator assignments load within `AdminsManager` and disable writes when loading fails. Team dialogs resolve the selected ID against refreshed teams, so lineup and membership changes remain visible.
 

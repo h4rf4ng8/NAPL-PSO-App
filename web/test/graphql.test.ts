@@ -4,8 +4,8 @@ import { ApiError, resetCsrf } from '../src/api/http';
 import { graphql } from '../src/api/graphql';
 import { resetClient } from '../src/api/client';
 import { PublicLeagueDataDocument } from '../src/api/generated/graphql';
-import { loadMemberLeague, loadPublicLeague } from '../src/features/dashboard/data';
-import { loadAccountMatchPage, loadAccountOpponents } from '../src/features/accounts/history';
+import { loadMemberLeague, loadPublicLeague } from '../src/features/dashboard/api';
+import { loadAccountMatchPage, loadAccountOpponents } from '../src/features/accounts/api';
 import { matchSchema } from '@napl/contracts/accounts';
 
 const cookie = { value: '' };

@@ -6,14 +6,14 @@ import {
   type PublicLeagueDataQuery,
 } from '../../api/generated/graphql';
 import { isRole, type Weightings } from '../admin/models';
-import { mapAccount } from '../accounts/graphql';
+import { mapAccount } from '../accounts/api';
 import type { Account } from '../accounts/models';
 import { teamRecordsSchema, type TeamRecord } from '@napl/contracts/matches';
-import { mapNews } from '../content/graphql';
+import { mapNews } from '../content/api';
 import type { News } from '../content/models';
-import { mapTeam } from '../teams/graphql';
+import { mapTeam } from '../teams/api';
 import type { Team } from '../teams/models';
-import { mapVotingPeriod } from '../voting/graphql';
+import { mapVotingPeriod } from '../voting/api';
 import type { VotingPeriod } from '../voting/models';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);

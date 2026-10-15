@@ -4,7 +4,7 @@ import type { Account } from '../accounts/models';
 import { EmptyState, ResultBadge } from '../../components/Ui';
 import { C } from '../../theme/theme';
 import { useResource } from '../../hooks/use-resource';
-import { loadAccountMatchPage } from '../accounts/history';
+import { loadAccountMatchPage } from '../accounts/api';
 
 export function MatchLog({ account, season }: { account: Account; season: string }) {
   const filterKey = `${account.id}:${season}`;

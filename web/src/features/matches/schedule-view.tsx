@@ -1,9 +1,8 @@
 import { Calendar, Plus } from 'lucide-react';
 import React, { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
-import { matches as matchApi } from './api';
+import { loadTeamRecords, matches as matchApi } from './api';
 import { useResource } from '../../hooks/use-resource';
-import { loadTeamRecords } from './records';
 
 import type { Account } from '../accounts/models';
 import type { ScheduledMatch } from './models';

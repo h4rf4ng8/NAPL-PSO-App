@@ -171,16 +171,21 @@ test('account decoder rejects empty opaque records for each historical JSON fiel
   }
 });
 
-test('Apollo deduplicates concurrent identical reads but explicit reloads reach the server', async () => {
+test('Apollo deduplicates concurrent reads and reuses complete responses until cache expiry', async context => {
+  context.mock.timers.enable({ apis: ['Date'], now: 100 });
   cookie.value = 'napl-csrf=csrf-value';
   let calls = 0;
   mock.method(globalThis, 'fetch', async () => {
     calls++;
-    return json({ data: { accounts: [{ __typename: 'Account', ...account, username: `version-${calls}` }], teams: [], teamRecords: [] } });
+    return json({ data: { accounts: [{ __typename: 'Account', ...account, seasonStats: null, username: `version-${calls}` }], teams: [], teamRecords: [] } });
   });
   const [first, same] = await Promise.all([loadPublicLeague(), loadPublicLeague()]);
   assert.equal(calls, 1);
   assert.deepEqual(first, same);
+  const cached = await loadPublicLeague();
+  assert.equal(calls, 1);
+  assert.deepEqual(cached, first);
+  context.mock.timers.tick(30_001);
   const refreshed = await loadPublicLeague();
   assert.equal(calls, 2);
   assert.equal(refreshed.players[0]?.username, 'version-2');

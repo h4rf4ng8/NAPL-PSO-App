@@ -98,6 +98,8 @@ A member submits a valid ballot during an open voting period. The API checks the
 
 ### Web Application
 
+See the [web guide](web/README.md) for package internals and development commands.
+
 | Component | What it does |
 | --- | --- |
 | [web/src/features/](web/src/features/) | League screens, admin tools, domain models, commands, and GraphQL selections. |
@@ -106,6 +108,8 @@ A member submits a valid ballot during an open voting period. The API checks the
 | [web/src/hooks/](web/src/hooks/) | Tracks loading, data, and errors while ignoring outdated request results. |
 
 ### Lambda API
+
+See the [API guide](api/README.md) for request handling, data access, and development commands.
 
 | Component | What it does |
 | --- | --- |

@@ -1,0 +1,287 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Deployment bucket and bounded GitHub Actions access for the NAPL API.
+
+Parameters:
+  ApplicationStackName:
+    Type: String
+    Default: napl-api
+    AllowedPattern: '^[a-zA-Z][a-zA-Z0-9-]{0,39}$'
+  EnableGitHubDeployment:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['false', 'true']
+    Description: Enable only after the GitHub Production environment permits deployments from main alone.
+
+Conditions:
+  GitHubDeploymentEnabled: !Equals [!Ref EnableGitHubDeployment, 'true']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+
+  DeploymentBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      OwnershipControls:
+        Rules: [{ObjectOwnership: BucketOwnerEnforced}]
+
+  DeploymentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref DeploymentBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: s3:*
+            Resource:
+              - !GetAtt DeploymentBucket.Arn
+              - !Sub ${DeploymentBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  # CI may update app-role policies, but cannot give those roles broader AWS access.
+  ApplicationRoleBoundary:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Maximum permissions for the NAPL API runtime and Vercel invocation roles.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: [logs:CreateLogStream, logs:PutLogEvents]
+            Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ApplicationStackName}-api:*
+          - Effect: Allow
+            Action: lambda:InvokeFunctionUrl
+            Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api:live
+            Condition:
+              StringEquals:
+                lambda:FunctionUrlAuthType: AWS_IAM
+          - Effect: Allow
+            Action: lambda:InvokeFunction
+            Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api:live
+            Condition:
+              Bool:
+                lambda:InvokedViaFunctionUrl: true
+
+  CloudFormationExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: {Service: cloudformation.amazonaws.com}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: ManageApplicationResources
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: ReadDeploymentArtifacts
+                Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub ${DeploymentBucket.Arn}/*
+              - Sid: ManageApplicationFunction
+                Effect: Allow
+                Action:
+                  - lambda:CreateFunction
+                  - lambda:DeleteFunction
+                  - lambda:GetFunction
+                  - lambda:GetFunctionConfiguration
+                  - lambda:UpdateFunctionCode
+                  - lambda:UpdateFunctionConfiguration
+                  - lambda:PublishVersion
+                  - lambda:ListVersionsByFunction
+                  - lambda:CreateAlias
+                  - lambda:DeleteAlias
+                  - lambda:GetAlias
+                  - lambda:UpdateAlias
+                  - lambda:GetPolicy
+                  - lambda:AddPermission
+                  - lambda:RemovePermission
+                  - lambda:CreateFunctionUrlConfig
+                  - lambda:DeleteFunctionUrlConfig
+                  - lambda:GetFunctionUrlConfig
+                  - lambda:UpdateFunctionUrlConfig
+                  - lambda:GetFunctionConcurrency
+                  - lambda:PutFunctionConcurrency
+                  - lambda:DeleteFunctionConcurrency
+                  - lambda:ListTags
+                  - lambda:TagResource
+                  - lambda:UntagResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api
+                  - !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api:*
+              - Sid: ManageBoundedApplicationRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:PutRolePermissionsBoundary
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-ApiRole-*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-VercelInvokeRole-*
+                Condition:
+                  ArnEquals:
+                    iam:PermissionsBoundary: !Ref ApplicationRoleBoundary
+              - Sid: MaintainApplicationRoles
+                Effect: Allow
+                Action:
+                  - iam:DeleteRole
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:UpdateRole
+                  - iam:UpdateRoleDescription
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:ListRoleTags
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource:
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-ApiRole-*
+                  - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-VercelInvokeRole-*
+              - Sid: PassApplicationRuntimeRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:role/${ApplicationStackName}-ApiRole-*
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: lambda.amazonaws.com
+              # The Vercel team is supplied at application deployment time.
+              - Sid: ManageVercelOidcProviders
+                Effect: Allow
+                Action:
+                  - iam:CreateOpenIDConnectProvider
+                  - iam:DeleteOpenIDConnectProvider
+                  - iam:GetOpenIDConnectProvider
+                  - iam:AddClientIDToOpenIDConnectProvider
+                  - iam:RemoveClientIDFromOpenIDConnectProvider
+                  - iam:UpdateOpenIDConnectProviderThumbprint
+                  - iam:TagOpenIDConnectProvider
+                  - iam:UntagOpenIDConnectProvider
+                  - iam:ListOpenIDConnectProviderTags
+                Resource: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:oidc-provider/oidc.vercel.com/*
+              - Sid: ManageApplicationLogGroup
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:DeleteLogGroup
+                  - logs:PutRetentionPolicy
+                  - logs:DeleteRetentionPolicy
+                  - logs:TagLogGroup
+                  - logs:UntagLogGroup
+                  - logs:ListTagsLogGroup
+                  - logs:TagResource
+                  - logs:UntagResource
+                  - logs:ListTagsForResource
+                Resource:
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ApplicationStackName}-api
+                  - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${ApplicationStackName}-api:*
+              - Sid: FindLogGroup
+                Effect: Allow
+                Action: logs:DescribeLogGroups
+                Resource: '*'
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: !If [GitHubDeploymentEnabled, Allow, Deny]
+            Principal: {Federated: !Ref GitHubOidcProvider}
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: repo:h4rf4ng8/NAPL-PSO-App:environment:Production
+      Policies:
+        - PolicyName: DeployApplicationStack
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: InspectDeploymentBucket
+                Effect: Allow
+                Action: [s3:GetBucketLocation, s3:ListBucket]
+                Resource: !GetAtt DeploymentBucket.Arn
+              - Sid: UploadDeploymentArtifacts
+                Effect: Allow
+                Action: [s3:GetObject, s3:PutObject, s3:AbortMultipartUpload]
+                Resource: !Sub ${DeploymentBucket.Arn}/*
+              - Sid: PrepareApplicationChangeSet
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStackName}/*
+                Condition:
+                  ArnEquals:
+                    cloudformation:RoleArn: !GetAtt CloudFormationExecutionRole.Arn
+              - Sid: UseApplicationTransforms
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/LanguageExtensions
+              - Sid: ApplyAndInspectApplicationChangeSet
+                Effect: Allow
+                Action:
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:ListStackResources
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ListChangeSets
+                  - cloudformation:GetTemplate
+                Resource: !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationStackName}/*
+              - Sid: ValidateApplicationTemplate
+                Effect: Allow
+                Action: [cloudformation:ValidateTemplate, cloudformation:GetTemplateSummary]
+                Resource: '*'
+              - Sid: PassApplicationExecutionRole
+                Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt CloudFormationExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: CheckLiveAlias
+                Effect: Allow
+                Action: [lambda:GetFunctionUrlConfig, lambda:InvokeFunction]
+                Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api:live
+
+Outputs:
+  DeploymentBucket:
+    Description: GitHub Production variable AWS_DEPLOYMENT_BUCKET.
+    Value: !Ref DeploymentBucket
+  GitHubDeployRoleArn:
+    Description: GitHub Production variable AWS_DEPLOY_ROLE_ARN.
+    Value: !GetAtt GitHubDeployRole.Arn
+  CloudFormationExecutionRoleArn:
+    Description: GitHub Production variable AWS_CLOUDFORMATION_ROLE_ARN.
+    Value: !GetAtt CloudFormationExecutionRole.Arn
+  ApplicationRoleBoundaryArn:
+    Description: GitHub Production variable APPLICATION_ROLE_BOUNDARY_ARN.
+    Value: !Ref ApplicationRoleBoundary
+  GitHubDeploymentEnabled:
+    Description: Whether the GitHub role trust is enabled; keep false until Production is restricted to main.
+    Value: !Ref EnableGitHubDeployment

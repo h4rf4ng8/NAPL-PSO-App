@@ -43,6 +43,10 @@ Parameters:
     Default: ''
     AllowedPattern: '^$|^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:oidc-provider/oidc[.]vercel[.]com/[a-z0-9][a-z0-9-]{0,62}$'
     Description: Optional existing team-scoped Vercel OIDC provider ARN for this account.
+  RolePermissionsBoundaryArn:
+    Type: String
+    AllowedPattern: '^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9+=,.@_/-]+$'
+    Description: ApplicationRoleBoundaryArn output from the deployment bootstrap stack.
   CookieKeys:
     Type: String
     NoEcho: true
@@ -68,9 +72,10 @@ Parameters:
     Description: Optional Discord webhook URL.
   ReservedConcurrency:
     Type: Number
-    Default: 20
-    MinValue: 1
+    Default: -1
+    MinValue: -1
     MaxValue: 1000
+    Description: '-1 uses the account concurrency pool; 0 disables invocation; positive values reserve concurrency.'
   FunctionMemorySize:
     Type: Number
     Default: 512
@@ -87,6 +92,7 @@ Conditions:
   HasDiscordTransferWebhook: !Not [!Equals [!Ref DiscordTransferWebhook, '']]
   HasExistingVercelOidcProvider: !Not [!Equals [!Ref ExistingVercelOidcProviderArn, '']]
   CreateVercelOidcProvider: !Equals [!Ref ExistingVercelOidcProviderArn, '']
+  HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, -1]]
 
 Resources:
   ApiLogGroup:
@@ -98,6 +104,7 @@ Resources:
   ApiRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Ref RolePermissionsBoundaryArn
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -124,6 +131,7 @@ Resources:
   VercelInvokeRole:
     Type: AWS::IAM::Role
     Properties:
+      PermissionsBoundary: !Ref RolePermissionsBoundaryArn
       AssumeRolePolicyDocument: !Sub
         - |
           {
@@ -162,6 +170,11 @@ Resources:
 
   ApiFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      cfn-lint:
+        config:
+          # -1 removes the property through HasReservedConcurrency; Lambda never receives it.
+          ignore_checks: [E3034]
     Properties:
       CodeUri: dist/api.zip
       FunctionName: !Sub ${AWS::StackName}-api
@@ -175,7 +188,7 @@ Resources:
         InvokeMode: BUFFERED
       MemorySize: !Ref FunctionMemorySize
       Timeout: !Ref FunctionTimeout
-      ReservedConcurrentExecutions: !Ref ReservedConcurrency
+      ReservedConcurrentExecutions: !If [HasReservedConcurrency, !Ref ReservedConcurrency, !Ref AWS::NoValue]
       Role: !GetAtt ApiRole.Arn
       Environment:
         Variables:

@@ -23,10 +23,11 @@ const parameterEnv = {
   OriginSecret: 'ORIGIN_SECRET',
   DiscordTransferWebhook: 'DISCORD_TRANSFER_WEBHOOK',
 };
-const vercelParameters = {
+const deploymentParameters = {
   VercelTeamSlug: 'VERCEL_TEAM_SLUG',
   VercelProjectName: 'VERCEL_PROJECT_NAME',
   ExistingVercelOidcProviderArn: 'EXISTING_VERCEL_OIDC_PROVIDER_ARN',
+  RolePermissionsBoundaryArn: 'APPLICATION_ROLE_BOUNDARY_ARN',
 };
 
 async function readLocalEnv(envPath) {
@@ -41,10 +42,10 @@ function safeValidationError(error) {
   const names = new Set(Array.isArray(error?.issues)
     ? error.issues.map(issue => issue.path?.[0]).filter(name => typeof name === 'string')
     : []);
-  for (const envName of [...Object.values(parameterEnv), ...Object.values(vercelParameters)]) {
+  for (const envName of [...Object.values(parameterEnv), ...Object.values(deploymentParameters)]) {
     if (error?.message?.includes(envName)) names.add(envName);
   }
-  const parameters = [...names].map(name => [...Object.entries(parameterEnv), ...Object.entries(vercelParameters)].find(([, env]) => env === name)?.[0] ?? name);
+  const parameters = [...names].map(name => [...Object.entries(parameterEnv), ...Object.entries(deploymentParameters)].find(([, env]) => env === name)?.[0] ?? name);
   const message = parameters.length > 0
     ? `Invalid deployment parameter(s): ${parameters.join(', ')}`
     : 'Invalid production deployment configuration; check required parameters and production URLs';
@@ -64,7 +65,7 @@ export async function prepareSamParams({ environment = process.env, envPath = de
   try { new CookieCrypto(config.COOKIE_KEYS); }
   catch { throw new Error('COOKIE_KEYS is invalid'); }
 
-  const deploymentInputs = Object.fromEntries(Object.entries(vercelParameters).map(([parameter, name]) => [parameter, merged[name]?.trim() ?? '']));
+  const deploymentInputs = Object.fromEntries(Object.entries(deploymentParameters).map(([parameter, name]) => [parameter, merged[name]?.trim() ?? '']));
   const missingIdentity = ['VercelTeamSlug', 'VercelProjectName'].filter(name => deploymentInputs[name] === '');
   if (missingIdentity.length > 0) throw new Error(`Invalid deployment parameter(s): ${missingIdentity.join(', ')}`);
   if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(deploymentInputs.VercelTeamSlug) || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(deploymentInputs.VercelProjectName)) {
@@ -76,6 +77,9 @@ export async function prepareSamParams({ environment = process.env, envPath = de
     if (!match || match[2] !== deploymentInputs.VercelTeamSlug) {
       throw new Error('ExistingVercelOidcProviderArn must be an AWS OIDC provider ARN for VercelTeamSlug');
     }
+  }
+  if (!/^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:policy\/[A-Za-z0-9+=,.@_/-]+$/.test(deploymentInputs.RolePermissionsBoundaryArn)) {
+    throw new Error('RolePermissionsBoundaryArn must be the ApplicationRoleBoundaryArn from the bootstrap stack');
   }
 
   const placeholders = Object.values(parameterEnv).filter(name => /REPLACE_|CHANGEME|placeholder/i.test(config[name] ?? ''));

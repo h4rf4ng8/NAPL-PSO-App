@@ -29,6 +29,7 @@ NAPL is a league application built with React and a Fastify API running on AWS L
   - [Runtime Settings](#runtime-settings)
   - [Database Capacity](#database-capacity)
   - [Session Keys](#session-keys)
+  - [GitHub Deployment Setup](#github-deployment-setup)
   - [Deploy the API](#deploy-the-api)
   - [Configure Vercel](#configure-vercel)
   - [Optional Staging Load Check](#optional-staging-load-check)
@@ -287,7 +288,7 @@ The integration runner creates disposable PostgreSQL containers, applies fixture
 
 Vercel serves the frontend and forwards its API requests to Lambda. The forwarding code uses temporary AWS credentials to sign requests, and Lambda checks a shared secret before handling them. User sign-in and permission checks still apply after these infrastructure checks. See the [request forwarding implementation](web/server/proxy.ts).
 
-The [deployment template](api/template.yaml) creates the Lambda function, its live version alias, execution permissions, a CloudWatch log group with 14-day retention, and permission for the production Vercel project to invoke the API. Its defaults are Node 24 on ARM64, 512 MiB of memory, a 60-second timeout, and up to 20 concurrent executions. Supabase and Vercel projects are set up separately. The template does not add a custom network, a separate content-delivery service, or pre-warmed Lambda capacity.
+The [deployment template](api/template.yaml) creates the Lambda function, its live version alias, execution permissions, a CloudWatch log group with 14-day retention, and permission for the production Vercel project to invoke the API. Its defaults are Node 24 on ARM64, 512 MiB of memory, and a 60-second timeout. It uses the account's available concurrency unless a reservation is explicitly configured. Supabase and Vercel projects are set up separately. The template does not add a custom network, a separate content-delivery service, or pre-warmed Lambda capacity.
 
 ### Prepare and Validate
 
@@ -330,12 +331,15 @@ Supply production values through a protected local file or the deployment enviro
 | `SUPABASE_JWT_AUDIENCE` | Optional token audience; defaults to `authenticated`. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional destination for roster notices. |
 | `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional existing AWS identity provider for the Vercel team, reused instead of creating another. |
+| `APPLICATION_ROLE_BOUNDARY_ARN` | Permissions boundary created by the deployment bootstrap, limiting the permissions of application roles. |
 
 The generated AWS trust policy accepts only the named project's production Vercel environment. Preview deployments need their own access; they do not inherit production permission.
 
 ### Database Capacity
 
-Each Lambda environment can use one application database connection and one authentication database connection. At the default concurrency of 20, active environments can therefore use roughly 40 connections. Leave additional room for warm environments, overlapping releases, migrations, and other database users.
+Each Lambda environment can use one application database connection and one authentication database connection. Ten active environments can therefore use roughly 20 connections. Leave additional room for warm environments, overlapping releases, migrations, and other database users.
+
+The template omits reserved concurrency by default. New AWS accounts can have a concurrency quota too small to support a reservation. Once the account permits it, set the template's `ReservedConcurrency` parameter to a positive limit that fits the database budget. Its default of `-1` means no reservation; `0` disables invocation. The account's shared quota can change, so it is not a permanent function-specific limit or spending cap.
 
 Use the database provider's transaction pooler and choose Lambda concurrency to fit the actual connection budget. The defaults are starting settings, not measured capacity guarantees. The [application connection settings](api/plugins/db/client.ts#L23) and [authentication connection settings](api/plugins/runtime.ts#L14) define these limits.
 
@@ -345,28 +349,79 @@ Keep the existing cookie keys when moving sessions to Lambda. All API instances 
 
 When rotating keys, put the new key first and retain the older keys until their sessions expire. Keep those keys available to any version you might roll back to. Generating replacement keys at application startup would make existing sessions unreadable. The [setup script](api/scripts/setup-env.mjs) manages initial key creation separately from startup.
 
-### Deploy the API
+### GitHub Deployment Setup
 
-Build the package and complete the checks before deploying. The following commands generate a private parameter file and deploy the API. Choose the stack name and region for the intended environment:
+An AWS administrator creates the [deployment bootstrap](api/deploy-bootstrap.yaml) once. It creates GitHub federation, a private deployment bucket, a deployment role, and a CloudFormation execution role. A permissions boundary limits the application roles, and GitHub cannot modify the bootstrap through its deployment role. GitHub access starts disabled.
 
 ```sh
-npm run env:sam
-install -m 600 api/.env.sam.json api/.env.sam.yaml
-sam deploy \
-  --template-file api/template.yaml \
-  --stack-name napl-api \
-  --region us-east-1 \
-  --resolve-s3 \
-  --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND \
-  --parameter-overrides file://api/.env.sam.yaml \
-  --confirm-changeset
+aws cloudformation deploy \
+  --profile napl --region us-east-2 \
+  --template-file api/deploy-bootstrap.yaml \
+  --stack-name napl-deployment \
+  --capabilities CAPABILITY_IAM
 ```
 
-The [parameter generator](api/scripts/sam-env.mjs) validates production settings, checks Lambda's 4 KiB environment limit, and writes a private file excluded from Git. It does not deploy anything itself. The copy command retains owner-only file permissions and gives the file a YAML extension for SAM's parameter-file loader. JSON is valid YAML, so its contents do not need conversion.
+The following setup is in **GitHub**, under this repository's **Settings → Environments → Production**. The repository owner must configure this environment:
 
-Keep secret values in these protected files rather than shell arguments. Use the parameter file with the option shown above, not as a SAM configuration file. Avoid debug logging and tracked configuration containing secrets, and remove the generated secret copies after use. The [SAM deployment reference](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-cli-command-reference-sam-deploy.html) explains the command options.
+1. Under **Deployment branches and tags**, select **Selected branches and tags** and allow only the **branch** named `main`. Do not add a tag rule or wildcard.
+2. Add the environment secrets and variables below. Secrets belong in **Environment secrets**, not ordinary variables.
+3. Keep releases automatic; no required reviewer is needed for this workflow.
 
-The template deploys the ZIP created by the build, publishes a new version, and moves the live alias to that version. Rebuild before every deployment and retain the previous source revision and configuration for rollback.
+| Environment secret | Where to obtain it |
+| --- | --- |
+| `DATABASE_URL` | Supabase PostgreSQL connection for the application runtime login, with `sslmode=verify-full`. |
+| `AUTH_DATABASE_URL` | Separate Supabase PostgreSQL connection for the authentication runtime login, with `sslmode=verify-full`. |
+| `DISCORD_CLIENT_SECRET` | Discord Developer Portal → application → OAuth2 client secret. |
+| `COOKIE_KEYS` | Existing API key ring; preserve it during deployment. For a first installation, generate it once with the setup command and retain it securely. |
+| `ORIGIN_SECRET` | Existing secret shared by Vercel and the API. For a first installation, generate it once and configure the same value in both places. |
+| `SUPABASE_SECRET_KEY` | Optional Supabase server secret key. |
+| `DISCORD_TRANSFER_WEBHOOK` | Optional Discord webhook URL for roster notices. |
+
+The database connections require the runtime roles and migrations described in [Runtime Settings](#runtime-settings) and [Rollout and Rollback](#rollout-and-rollback). A dashboard connection string using the database administrator account is not a substitute for those runtime logins.
+
+| Environment variable | Value or source |
+| --- | --- |
+| `AWS_REGION` | `us-east-2` |
+| `AWS_DEPLOY_ROLE_ARN` | Bootstrap stack output `GitHubDeployRoleArn`. |
+| `AWS_CLOUDFORMATION_ROLE_ARN` | Bootstrap stack output `CloudFormationExecutionRoleArn`. |
+| `AWS_DEPLOYMENT_BUCKET` | Bootstrap stack output `DeploymentBucket`. |
+| `APPLICATION_ROLE_BOUNDARY_ARN` | Bootstrap stack output `ApplicationRoleBoundaryArn`. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL and publishable API key. |
+| `PUBLIC_ORIGIN` | Public website's exact HTTPS origin. |
+| `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` | Discord application ID and league server ID. |
+| `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Vercel team's URL slug and project name. |
+| `SUPABASE_JWT_AUDIENCE` | Optional; defaults to `authenticated`. |
+| `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional; use only when the Vercel team's AWS provider already exists. |
+
+After verifying that GitHub's environment allows only the `main` branch, the AWS administrator enables the deployment role:
+
+```sh
+aws cloudformation deploy \
+  --profile napl --region us-east-2 \
+  --template-file api/deploy-bootstrap.yaml \
+  --stack-name napl-deployment \
+  --capabilities CAPABILITY_IAM \
+  --parameter-overrides EnableGitHubDeployment=true
+```
+
+The role accepts only this repository's `Production` environment identity. GitHub exchanges that identity for temporary AWS credentials on each deployment. Keep the branch restriction in place: an environment identity does not itself identify the branch. No permanent AWS access key belongs in GitHub.
+
+### Deploy the API
+
+The [Validate and Deploy Lambda workflow](.github/workflows/ci-cd.yml) validates pushes and pull requests. Only a successful push to `main` can deploy to AWS. Prepare the production configuration before merging the deployment changes into `main`.
+
+| Stage | What happens |
+| --- | --- |
+| Validate application | Check generated code, types, lint, builds, both deployment templates, and the integration suite against disposable PostgreSQL. |
+| Preserve the tested package | Upload the API ZIP and template after the integration suite has finished. Deployment downloads that exact artifact without rebuilding it. |
+| Deploy Lambda | Confirm that the commit is still current on `main`, validate production configuration, obtain temporary credentials, and update the `napl-api` stack in Ohio. Deployments run one at a time. |
+| Verify deployment | Confirm that anonymous Function URL access is rejected, then invoke the live alias to read the current season from the application database. |
+
+The [parameter generator](api/scripts/sam-env.mjs) validates production settings, checks Lambda's 4 KiB environment limit, and writes a protected parameter file. The workflow removes its secret files after each run; they are never deployment artifacts. Avoid SAM debug logging because it can reveal parameters.
+
+A new Lambda version becomes active through the `live` alias. CloudFormation normally rolls back a failed infrastructure update. A failed smoke check after deployment marks the workflow failed but does not undo that release; revert the change on `main` and let the workflow deploy a compatible revision. Preserve the active cookie keys when rolling back.
+
+The smoke check verifies application database access. It does not verify Discord sign-in, authentication database connectivity, or Vercel forwarding. Complete those checks through the website after configuring Vercel. The workflow does not run production migrations or coordinate Vercel's separate deployment process.
 
 ### Configure Vercel
 

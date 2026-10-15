@@ -25,7 +25,10 @@ test('SAM template describes the bounded Lambda and IAM-protected Function URL',
   assert.deepEqual(fn.Architectures, ['arm64']);
   assert.equal(fn.MemorySize, 'FunctionMemorySize');
   assert.equal(fn.Timeout, 'FunctionTimeout');
-  assert.equal(fn.ReservedConcurrentExecutions, 'ReservedConcurrency');
+  assert.deepEqual(fn.ReservedConcurrentExecutions, ['HasReservedConcurrency', 'ReservedConcurrency', 'AWS::NoValue']);
+  assert.equal(template.Parameters.ReservedConcurrency.Default, -1);
+  assert.equal(resources.ApiRole.Properties.PermissionsBoundary, 'RolePermissionsBoundaryArn');
+  assert.equal(resources.VercelInvokeRole.Properties.PermissionsBoundary, 'RolePermissionsBoundaryArn');
   assert.equal(fn.AutoPublishAlias, 'live');
   assert.equal(fn.AutoPublishAliasAllProperties, true);
   assert.equal(fn.FunctionUrlConfig.AuthType, 'AWS_IAM');

@@ -17,6 +17,7 @@
     "routes",
     "plugins",
     "app.ts",
+    "lambda.ts",
     "../pkgs/contracts/src",
     "dev.ts"
   ],

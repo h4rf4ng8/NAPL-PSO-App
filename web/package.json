@@ -5,17 +5,22 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "typecheck": "tsc --noEmit",
+    "build": "vite build && npm run build:proxy",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "gql:generate": "node --import tsx scripts/codegen.ts",
     "gql:check": "node --import tsx scripts/codegen.ts --check",
     "pregql:generate": "npm run build -w @napl/contracts",
-    "pregql:check": "npm run build -w @napl/contracts"
+    "pregql:check": "npm run build -w @napl/contracts",
+    "build:proxy": "node scripts/build-proxy.mjs"
   },
   "dependencies": {
     "@apollo/client": "4.3.3",
+    "@aws-crypto/sha256-js": "5.2.0",
     "@napl/contracts": "*",
+    "@smithy/protocol-http": "5.6.2",
+    "@smithy/signature-v4": "5.7.4",
+    "@vercel/oidc-aws-credentials-provider": "3.3.13",
     "graphql": "16.14.2",
     "lucide-react": "0.383.0",
     "react": "18.3.1",

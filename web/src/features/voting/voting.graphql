@@ -1,0 +1,11 @@
+fragment VotingPeriodFields on VotingPeriod {
+  id
+  opensAt
+  closesAt
+  status
+  eligiblePlayers
+  winners
+  createdBy
+  createdAt
+  resolvedAt
+}

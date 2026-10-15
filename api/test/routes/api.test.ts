@@ -4,7 +4,18 @@ import { createApp } from '../helper.js';
 import { type Database, type Row, Prisma, connectDatabase } from '../../plugins/db/client.js';
 import { accountDto } from '../../routes/accounts/dto.js';
 import { aggregate } from '../../routes/matches/index.js';
+import { InMemoryCache } from '@apollo/client';
+import { print } from 'graphql';
+import { MemberLeagueDataDocument, PublicLeagueDataDocument } from '../../../web/src/api/generated/graphql.ts';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
+import { accountMatchPageSchema } from '@napl/contracts/accounts';
+import { inStandings } from '../../../web/src/features/teams/selectors.js';
+import type { Team } from '../../../web/src/features/teams/models.js';
+import { mapAccount } from '../../../web/src/features/accounts/graphql.js';
+import type { PublicAccountFieldsFragment } from '../../../web/src/api/generated/graphql.js';
+const apolloCache = new InMemoryCache();
+const PUBLIC_LEAGUE_QUERY = print(apolloCache.transformDocument(PublicLeagueDataDocument));
+const MEMBER_LEAGUE_QUERY = print(apolloCache.transformDocument(MemberLeagueDataDocument));
 const alice = '11111111-1111-4111-8111-111111111111', bob = '22222222-2222-4222-8222-222222222222', admin = '33333333-3333-4333-8333-333333333333', newUser = '44444444-4444-4444-8444-444444444444';
 const verify = async (token: string) => {
     if (![alice, bob, admin, newUser].includes(token))
@@ -133,6 +144,67 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         assert.equal((await call('PUT', '/api/roles', alice, {
             userIds: [alice]
         })).statusCode, 403);
+        await t.test('account writes reject malformed records and decode with shared browser schemas', async () => {
+            for (const field of ['matches', 'championships']) {
+                assert.equal((await call('PATCH', `/api/accounts/${bob}`, admin, { [field]: [{}] })).statusCode, 400);
+            }
+            const match = { id: 'legacy_match', date: 1, season: 'S0', opponent: 'Legacy', result: 'W', goals: 1, assists: 0,
+                passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheet: false, motm: 1, strikersMatchId: 123, historicalField: 'kept' };
+            const secondMatch = { ...match, id: 'legacy_match_second', date: 2, strikersMatchId: 124 };
+            const otherSeasonMatch = { ...match, id: 'legacy_match_other_season', season: 'S1', date: 3, strikersMatchId: 125 };
+            const championship = { season: 'S0', placement: '1st', teamId: 'legacy_team', awardedAt: 1, historicalField: 'kept' };
+            await ok('PATCH', `/api/accounts/${bob}`, admin, { matches: [match, secondMatch, otherSeasonMatch], championships: [championship] });
+            const response = await call('POST', '/api/graphql', undefined, { query: PUBLIC_LEAGUE_QUERY });
+            const result = response.json<{ errors?: unknown; data: { accounts: PublicAccountFieldsFragment[] } }>();
+            assert.equal(result.errors, undefined);
+            const decoded = mapAccount(result.data.accounts.find(account => account.id === bob)!);
+            assert.deepEqual(decoded.matches, []);
+            assert.equal(decoded.seasonStats?.S0?.games, 2);
+            assert.equal(decoded.seasonStats?.S1?.games, 1);
+            assert.deepEqual(decoded.championships, [championship]);
+            const firstResponse = await call('POST', '/api/graphql', undefined, { query: `{
+              accountMatches(id: "${bob}", first: 1, season: "S0") { nodes pageInfo { endCursor hasNextPage } }
+            }` });
+            assert.equal(firstResponse.statusCode, 200, firstResponse.body);
+            const firstPage = accountMatchPageSchema.parse(firstResponse.json<{ data: { accountMatches: unknown } }>().data.accountMatches);
+            assert.equal(firstPage.nodes[0]?.strikersMatchId, '123');
+            assert.equal(firstPage.nodes[0]?.historicalField, 'kept');
+            assert.equal(firstPage.pageInfo.hasNextPage, true);
+            assert.ok(firstPage.pageInfo.endCursor);
+            const secondResponse = await call('POST', '/api/graphql', undefined, {
+                query: 'query($after:String){ accountMatches(id:"' + bob + '",first:1,season:"S0",after:$after){nodes pageInfo {endCursor hasNextPage}} }',
+                variables: { after: firstPage.pageInfo.endCursor },
+            });
+            const secondPage = accountMatchPageSchema.parse(secondResponse.json<{ data: { accountMatches: unknown } }>().data.accountMatches);
+            assert.equal(secondPage.nodes[0]?.id, 'legacy_match_second');
+            assert.equal(secondPage.pageInfo.hasNextPage, false);
+            await ok('PATCH', `/api/accounts/${bob}`, admin, { country: 'US' });
+            const stale = await call('POST', '/api/graphql', undefined, {
+                query: 'query($after:String){ accountMatches(id:"' + bob + '",first:1,season:"S0",after:$after){nodes pageInfo {endCursor hasNextPage}} }',
+                variables: { after: firstPage.pageInfo.endCursor },
+            });
+            assert.equal(stale.statusCode, 409, stale.body);
+            assert.equal(stale.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'stale_cursor');
+            await ok('PATCH', `/api/accounts/${bob}`, admin, { matches: [], championships: [] });
+        });
+        await t.test('nullable and empty news survives REST and the combined dashboard query', async () => {
+            for (const title of [null, '']) {
+                const saved = await ok('POST', '/api/news', admin, { id: 'nullable_news', type: 'announcement', title, body: title });
+                assert.equal(saved.title, '');
+                assert.equal(saved.body, '');
+                await database.execute(Prisma.sql `UPDATE public.news SET author=NULL, notes=NULL WHERE id='nullable_news'`);
+                const news = (await call('GET', '/api/news')).json<Row[]>().find(row => row.id === 'nullable_news');
+                assert.equal(news?.author, '');
+                const response = await call('POST', '/api/graphql', alice, { query: MEMBER_LEAGUE_QUERY });
+                const result = response.json<{ errors?: unknown; data: { news: Row[]; me: Row } }>();
+                assert.equal(result.errors, undefined, response.body);
+                assert.equal(result.data.me.id, alice);
+                const projected = result.data.news.find(row => row.id === 'nullable_news');
+                assert.equal(projected?.title, '');
+                assert.equal(projected?.body, '');
+                assert.equal(projected?.author, '');
+            }
+        });
         await ok('PATCH', `/api/accounts/${alice}`, alice, {
             country: 'US'
         });
@@ -149,6 +221,20 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         assert.deepEqual((await ok('GET','/api/teams/home',alice)).seasons,[]);
         await ok('POST', '/api/teams/home/review', admin, {
             status: 'approved'
+        });
+        await t.test('new teams participate in current-season standings and admin exclusions persist', async () => {
+            const readTeam = async () => (await call('GET', '/api/teams/home', alice)).json<Team>();
+            assert.equal(inStandings(await readTeam(), 'S1'), true);
+            assert.equal((await call('PATCH', '/api/teams/home', alice, { seasons: ['S1'] })).statusCode, 403);
+            await ok('PATCH', '/api/teams/home', admin, { seasons: ['S1'] });
+            await ok('PATCH', '/api/teams/home', alice, { description: 'Updated profile' });
+            assert.deepEqual((await readTeam()).seasons, ['S1']);
+            assert.equal(inStandings(await readTeam(), 'S1'), false);
+            assert.equal(inStandings(await readTeam(), 'S2'), true);
+            assert.equal(inStandings(await readTeam(), 'all'), true);
+            await ok('PATCH', '/api/teams/home', admin, { seasons: [] });
+            const excluded = await ok('POST', '/api/teams', admin, { id: 'admin_excluded', name: 'Excluded Team', tag: 'EXC', seasons: ['S1'] });
+            assert.deepEqual(excluded.seasons, ['S1']);
         });
         await ok('POST', '/api/teams', bob, {
             id: 'away', name: 'Away Team', tag: 'AWAY'
@@ -246,6 +332,20 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal(saved.length, 20);
             assert.ok(versions.some((matches, index) => responses[index]?.statusCode === 200 && JSON.stringify(matches.map(match => match.id).toSorted((a, b) => a.localeCompare(b))) === JSON.stringify(savedIds)), JSON.stringify(savedIds));
         });
+        const publicLeague = await call('POST', '/api/graphql', undefined, { query: PUBLIC_LEAGUE_QUERY });
+        assert.equal(publicLeague.statusCode, 200, publicLeague.body);
+        const publicData = publicLeague.json<{ data: { accounts: Array<Record<string, unknown>>; teams: Array<Record<string, unknown>> } }>().data;
+        assert.ok(publicData.accounts.some(account => account.username === 'Alice'));
+        assert.equal(publicData.accounts.find(account => account.username === 'Alice')?.email, undefined);
+        assert.deepEqual(publicData.teams.map(team => String(team.name)).toSorted((a, b) => a.localeCompare(b)), ['Away Team', 'Home Team']);
+        const memberLeague = await call('POST', '/api/graphql', alice, {
+            query: MEMBER_LEAGUE_QUERY,
+        });
+        assert.equal(memberLeague.statusCode, 200, memberLeague.body);
+        const memberData = memberLeague.json<{ data: { me: { email: string }; weightings: unknown; admins?: unknown } }>().data;
+        assert.equal(memberData.me.email, 'alice@private.test');
+        assert.equal(memberData.weightings, null);
+        assert.equal(memberData.admins, undefined);
         assert.equal((await call('PATCH', '/api/teams/home', bob, {
             name: 'Taken over'
         })).statusCode, 403);

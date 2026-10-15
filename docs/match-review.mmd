@@ -1,0 +1,10 @@
+sequenceDiagram
+    participant User as User (web app)
+    participant API as Lambda API
+    participant DB as Supabase (PostgreSQL)
+    User->>API: POST /api/submissions/:id/approve<br/>Final match details, player stats and edits
+    API->>DB: Read pending submission, teams and player accounts
+    DB-->>API: Submission and current team/player data
+    API->>DB: Save match stats, result news and approval atomically
+    DB-->>API: Approval committed
+    API-->>User: Approved submission

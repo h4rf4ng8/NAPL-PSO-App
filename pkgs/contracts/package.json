@@ -1,0 +1,34 @@
+{
+  "name": "@napl/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    },
+    "./league": {
+      "types": "./src/league/index.ts",
+      "default": "./dist/league/index.js"
+    },
+    "./accounts": {
+      "types": "./src/accounts/index.ts",
+      "default": "./dist/accounts/index.js"
+    },
+    "./matches": {
+      "types": "./src/matches/index.ts",
+      "default": "./dist/matches/index.js"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc --noEmit false --outDir dist --declaration"
+  },
+  "dependencies": {
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}

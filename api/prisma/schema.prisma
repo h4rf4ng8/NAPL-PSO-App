@@ -1,0 +1,19 @@
+// SQL migrations in supabase own the database schema. Prisma models only
+// describe tables used by typed client methods; raw SQL needs no model.
+generator client {
+  provider = "prisma-client"
+  output = "../generated/prisma"
+}
+datasource db {
+  provider = "postgresql"
+  schemas = ["public", "auth_gateway"]
+}
+model Membership {
+  user_id String @id @db.Uuid
+  discord_user_id String
+  eligible Boolean
+  valid_until DateTime @db.Timestamptz
+  checked_at DateTime @default(now()) @db.Timestamptz
+  @@map("memberships")
+  @@schema("auth_gateway")
+}

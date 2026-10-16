@@ -2,8 +2,10 @@
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$repo"
-npm run build -w @napl/contracts
-npm run build -w @napl/api
+if [[ "${1:-}" != "--tests" && "${1:-}" != "--package" ]]; then
+  npm run build -w @napl/contracts
+  npm run build -w @napl/api
+fi
 db_container="napl-api-check-$$"
 test_network="napl-check-$$"
 trap 'docker rm -f "$db_container" >/dev/null 2>&1 || true; docker network rm "$test_network" >/dev/null 2>&1 || true' EXIT
@@ -27,9 +29,13 @@ export API_TEST_DATABASE_URL="$api_test_db"
 export API_TEST_ADMIN_DATABASE_URL="postgresql://postgres:napl_test_only@127.0.0.1:${db_port}/napl_test"
 if [[ "${1:-}" == "--api" ]]; then
   npm test -w @napl/api
+elif [[ "${1:-}" == "--package" ]]; then
+  npm run test:package -w @napl/api
 else
   npm test
-  npm run test:package -w @napl/api
+  if [[ "${1:-}" != "--tests" ]]; then
+    npm run test:package -w @napl/api
+  fi
 fi
 
 if [[ "${NAPL_SAM_TEST:-0}" == "1" ]]; then

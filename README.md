@@ -407,14 +407,14 @@ The role accepts only this repository's `Production` environment identity. GitHu
 
 ### Deploy the API
 
-The [Validate and Deploy Lambda workflow](.github/workflows/ci-cd.yml) runs once per push, with generation checks, types, lint, builds, template validation, and integration tests in order. Pushes to `main` continue to AWS deployment after validation succeeds. Prepare the production configuration before merging the deployment changes into `main`.
+The [CI/CD workflow](.github/workflows/ci-cd.yml) runs once per push and reports one **CI** check. Its steps and summary follow **Lint → Test → Build → Deploy**, with each operation named separately. Deployment steps run only on `main`, using the `Production` environment; other branches use `CI` without creating deployment records. Prepare the production configuration before merging the deployment changes into `main`.
 
-| Stage | What happens |
+| Section | What happens |
 | --- | --- |
-| Validate application | Check generated code, types, lint, builds, both deployment templates, and the integration suite against disposable PostgreSQL. |
-| Preserve the tested package | Upload the API ZIP and template after the integration suite has finished. Deployment downloads that exact artifact without rebuilding it. |
-| Deploy Lambda | Confirm that the commit is still current on `main`, validate production configuration, obtain temporary credentials, and update the `napl-api` stack in Ohio. Deployments run one at a time. |
-| Verify deployment | Confirm that anonymous Function URL access is rejected, then invoke the live alias to read the current season from the application database. |
+| Lint | Run ESLint with zero warnings allowed. Then generate the Prisma client, check GraphQL freshness, type-check every workspace, and validate both SAM templates. Each operation has its own named step and log entry. |
+| Test | Run API and web tests against disposable PostgreSQL. The test command prepares the shared contracts it needs. |
+| Build | Build shared contracts, bundle Lambda, and build the frontend and proxy in separate ordered steps. Verify the finished Lambda ZIP outside the repository against disposable PostgreSQL. On `main`, upload that exact tested ZIP and template for deployment. |
+| Deploy | Use the verified package from the preceding Build steps, validate production configuration, confirm that the commit is still current on `main`, obtain temporary credentials, and update the `napl-api` stack in Ohio. Confirm that anonymous Function URL access is rejected and invoke the live alias to read the current season. Clean up deployment parameter files even on failure. Deployments run one at a time. |
 
 The [parameter generator](api/scripts/sam-env.mjs) validates production settings, checks Lambda's 4 KiB environment limit, and writes a protected parameter file. The workflow removes its secret files after each run; they are never deployment artifacts. Avoid SAM debug logging because it can reveal parameters.
 

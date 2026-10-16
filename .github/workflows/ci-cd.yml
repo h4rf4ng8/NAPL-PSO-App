@@ -1,30 +1,64 @@
-name: Validate and Deploy Lambda
+name: CI/CD
 on: push
 permissions: {contents: read}
 jobs:
-  check:
-    name: Validate application
+  ci:
+    name: CI
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    outputs:
-      artifact-id: ${{ steps.bundle.outputs.artifact-id }}
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      id-token: write
+    environment:
+      name: ${{ github.ref == 'refs/heads/main' && 'Production' || 'CI' }}
+      deployment: ${{ github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: ci-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
+      AWS_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
+      AWS_DEPLOYMENT_BUCKET: ${{ vars.AWS_DEPLOYMENT_BUCKET }}
+      SAM_CLI_TELEMETRY: '0'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js and dependency cache
+        uses: actions/setup-node@v4
         with: {node-version: 24, cache: npm}
-      - run: npm ci
-      - run: npm run prisma:generate
-      - run: npm run gql:check
-      - run: npm run typecheck
-      - run: npm run lint
-      - run: npm run build
-      - uses: aws-actions/setup-sam@v2
+      - name: Install locked workspace dependencies
+        run: npm ci
+      # Lint and static checks
+      - name: Lint workspaces
+        run: npm run lint
+      - name: Generate Prisma client
+        run: npm run prisma:generate
+      - name: Check GraphQL freshness
+        run: npm run gql:check
+      - name: Type-check workspaces
+        run: npm run typecheck
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
         with: {version: '1.165.0', use-installer: true}
-      - run: sam validate --lint --template-file api/template.yaml
-      - run: sam validate --lint --template-file api/deploy-bootstrap.yaml
-      - run: npm run test:integration
-      - name: Upload tested Lambda package
-        id: bundle
+      - name: Validate Lambda SAM template
+        run: sam validate --lint --template-file api/template.yaml
+      - name: Validate deployment bootstrap SAM template
+        run: sam validate --lint --template-file api/deploy-bootstrap.yaml
+
+      # Test
+      - name: Run API and web integration tests
+        run: bash api/test/integration/run.sh --tests
+
+      # Build
+      - name: Build shared contracts
+        run: npm run build -w @napl/contracts
+      - name: Build Lambda package
+        run: npm run build -w @napl/api
+      - name: Build frontend and proxy
+        run: npm run build -w @napl/web
+      - name: Verify built Lambda package against disposable PostgreSQL
+        run: bash api/test/integration/run.sh --package
+      - name: Archive verified Lambda package
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v7
         with:
@@ -35,38 +69,9 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  deploy:
-    name: Deploy Lambda
-    needs: check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: Production
-    permissions:
-      contents: read
-      id-token: write
-    concurrency:
-      group: lambda-production-napl-api
-      cancel-in-progress: false
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-2' }}
-      AWS_CLOUDFORMATION_ROLE_ARN: ${{ vars.AWS_CLOUDFORMATION_ROLE_ARN }}
-      AWS_DEPLOYMENT_BUCKET: ${{ vars.AWS_DEPLOYMENT_BUCKET }}
-      SAM_CLI_TELEMETRY: '0'
-    steps:
-      - uses: actions/checkout@v4
-        with: {ref: '${{ github.sha }}'}
-      - uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
-      - run: npm ci
-      - uses: aws-actions/setup-sam@v2
-        with: {version: '1.165.0', use-installer: true}
-      - name: Download tested Lambda package
-        uses: actions/download-artifact@v8
-        with:
-          artifact-ids: ${{ needs.check.outputs.artifact-id }}
-          path: api
+      # Deploy (main only)
       - name: Prepare protected deployment parameters
+        if: github.ref == 'refs/heads/main'
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           COOKIE_KEYS: ${{ secrets.COOKIE_KEYS }}
@@ -89,6 +94,7 @@ jobs:
           install -m 600 api/.env.sam.json api/.env.sam.yaml
       - name: Skip commits superseded on main
         id: release
+        if: github.ref == 'refs/heads/main'
         run: |
           main_sha=$(git ls-remote origin refs/heads/main | cut -f1)
           if [ -z "$main_sha" ]; then
@@ -138,5 +144,21 @@ jobs:
             --region "$AWS_REGION" \
             --url "$FUNCTION_URL"
       - name: Remove deployment parameters
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         run: rm -f api/.env.sam.json api/.env.sam.yaml
+
+      - name: Write pipeline summary
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ## Lint → Test → Build → Deploy
+
+          One CI check, with each operation shown as a separate step.
+
+          | Section | Steps |
+          | --- | --- |
+          | Lint | ESLint, Prisma generation, GraphQL freshness, type-checking, and both SAM templates. |
+          | Test | API and web integration tests against disposable PostgreSQL. |
+          | Build | Shared contracts, Lambda package, frontend/proxy, and verification of the finished Lambda ZIP. |
+          | Deploy | On main only: deployment parameters, temporary AWS credentials, deployment, smoke test, and cleanup. |
+          SUMMARY

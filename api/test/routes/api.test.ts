@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../helper.js';
 import { type Database, type Row, Prisma, connectDatabase } from '../../plugins/db/client.js';
 import { accountDto } from '../../routes/accounts/dto.js';
-import { aggregate } from '../../routes/matches/index.js';
+import { aggregate } from '../../routes/matches/routes.js';
 import { InMemoryCache } from '@apollo/client';
 import { print } from 'graphql';
 import { MemberLeagueDataDocument, PublicLeagueDataDocument } from '../../../web/src/api/generated/graphql.ts';

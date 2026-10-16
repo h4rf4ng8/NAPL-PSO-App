@@ -62,14 +62,18 @@ Successful league changes clear cached reads and cancel older queries. The affec
 
 ## Running Locally
 
-Complete the repository's [local setup](../README.md#local-development) first, using Node 24 and pnpm 10.15.1. Run these commands from the repository root in separate terminals:
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the Lambda API, PostgreSQL, and Supabase Auth. Open `http://localhost:5173`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
+
+Rebuild the web image with `./scripts/dev.sh -d web` after changing configuration or dependencies outside `web/src`.
+
+For the **native pnpm alternative**, complete the [native setup](../README.md#native-pnpm-alternative) using Node 24 and pnpm 10.15.1. Run these commands from the repository root in separate terminals:
 
 ```sh
 pnpm run dev:api
 pnpm run dev
 ```
 
-Open `http://localhost:5173`. Vite reads `web/.env`; `pnpm run setup:env` initializes its proxy target and the same `ORIGIN_SECRET` as the API. The [environment example](.env.example) documents these server-only settings; never prefix secrets with `VITE_`.
+Open `http://localhost:5173`. Vite reads `web/.env`, documented in the [web environment example](.env.example). Set `ORIGIN_SECRET` to match `api/.env` and use `LOCAL_API_URL` for the local API target. These settings are server-only; never prefix secrets with `VITE_`.
 
 ## Checks
 

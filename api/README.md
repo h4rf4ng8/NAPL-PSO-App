@@ -71,15 +71,21 @@ Session renewal coordinates through PostgreSQL so API instances can share refres
 
 ## Running Locally
 
-Use Node 24 and pnpm 10.15.1. Complete the root [local development setup](../README.md#local-development) first, including generated code and the provider/database values described in the [environment example](.env.example).
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [API Dockerfile](Dockerfile) runs the packaged API inside AWS's Node 24 Lambda container, alongside local PostgreSQL, Supabase Auth, and the web app. Open `http://localhost:5173`; the web proxy sends requests through the [local Lambda adapter](scripts/lambda-url.mjs). Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
 
-Run from the repository root:
+After API changes, rebuild the Lambda container from the repository root:
+
+```sh
+./scripts/dev.sh -d lambda
+```
+
+For the **native pnpm alternative**, complete the [native setup](../README.md#native-pnpm-alternative), including generated code and the settings in the [API environment example](.env.example). Then run:
 
 ```sh
 pnpm run dev:api
 ```
 
-Run `pnpm run setup:env` explicitly before the first start. The development command reads `api/.env` and watches the API source without rewriting configuration. The default listener is `http://127.0.0.1:3000`; `HOST` and `PORT` can override it. Run the web app in another terminal so its development proxy supplies the API's origin secret and client address.
+The development command reads `api/.env` and watches the API source; it does not generate or change keys. The default listener is `http://127.0.0.1:3000`; `HOST` and `PORT` can override it. Run the web app in another terminal so its development proxy supplies the API's origin secret and client address.
 
 ## Checks
 

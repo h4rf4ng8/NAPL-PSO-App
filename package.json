@@ -3,39 +3,31 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "packageManager": "pnpm@10.15.1",
   "engines": {
     "node": ">=24 <25",
-    "npm": ">=11"
+    "pnpm": "10.15.1"
   },
-  "workspaces": [
-    "web",
-    "api",
-    "pkgs/*"
-  ],
   "scripts": {
-    "setup:env": "npm run setup:env -w @napl/api",
-    "predev": "npm run build -w @napl/contracts",
-    "dev": "npm run dev -w @napl/web",
-    "generate": "npm run prisma:generate && npm run gql:generate",
-    "build": "npm run build -w @napl/contracts && npm run build -w @napl/api && npm run build -w @napl/web",
-    "typecheck": "npm run typecheck --workspaces --if-present",
-    "pretest": "npm run build -w @napl/contracts",
-    "test": "npm run test --workspaces --if-present",
+    "setup:env": "pnpm --filter @napl/api run setup:env",
+    "predev": "pnpm --filter @napl/contracts run build",
+    "dev": "pnpm --filter @napl/web run dev",
+    "generate": "pnpm run prisma:generate && pnpm run gql:generate",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "pretest": "pnpm --filter @napl/contracts run build",
+    "test": "pnpm -r run test",
     "test:integration": "bash api/test/integration/run.sh",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
-    "check": "npm run prisma:generate && npm run gql:check && npm run typecheck && npm run lint && npm test && npm run build",
-    "gql:generate": "npm run gql:generate -w @napl/web",
-    "gql:check": "npm run gql:check -w @napl/web",
-    "prisma:generate": "npm run prisma:generate -w @napl/api",
-    "dev:api": "npm run dev -w @napl/api",
-    "env:sam": "npm run env:sam -w @napl/api",
+    "check": "pnpm run prisma:generate && pnpm run gql:check && pnpm run typecheck && pnpm run lint && pnpm test && pnpm run build",
+    "gql:generate": "pnpm --filter @napl/web run gql:generate",
+    "gql:check": "pnpm --filter @napl/web run gql:check",
+    "prisma:generate": "pnpm --filter @napl/api run prisma:generate",
+    "dev:api": "pnpm --filter @napl/api run dev",
+    "env:sam": "pnpm --filter @napl/api run env:sam",
     "test:sam": "NAPL_SAM_TEST=1 bash api/test/integration/run.sh",
     "test:load": "node --import tsx api/test/load/run-staging.mjs"
-  },
-  "overrides": {
-    "deepmerge-ts": "8.0.2",
-    "mysql2": "3.24.6"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

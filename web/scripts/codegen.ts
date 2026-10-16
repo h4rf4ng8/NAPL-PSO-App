@@ -46,7 +46,7 @@ if (check) {
   let current;
   try { current = await readFile(outputPath, 'utf8'); } catch { current = undefined; }
   if (current !== output) {
-    console.error('Generated GraphQL types are stale. Run npm run gql:generate.');
+    console.error('Generated GraphQL types are stale. Run pnpm run gql:generate.');
     process.exitCode = 1;
   }
 } else {

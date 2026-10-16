@@ -3,8 +3,8 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$repo"
 if [[ "${1:-}" != "--tests" && "${1:-}" != "--package" ]]; then
-  npm run build -w @napl/contracts
-  npm run build -w @napl/api
+  pnpm --filter @napl/contracts run build
+  pnpm --filter @napl/api run build
 fi
 db_container="napl-api-check-$$"
 test_network="napl-check-$$"
@@ -28,13 +28,13 @@ api_test_db="postgresql://api_test:napl_test_only@127.0.0.1:${db_port}/napl_test
 export API_TEST_DATABASE_URL="$api_test_db"
 export API_TEST_ADMIN_DATABASE_URL="postgresql://postgres:napl_test_only@127.0.0.1:${db_port}/napl_test"
 if [[ "${1:-}" == "--api" ]]; then
-  npm test -w @napl/api
+  pnpm --filter @napl/api test
 elif [[ "${1:-}" == "--package" ]]; then
-  npm run test:package -w @napl/api
+  pnpm --filter @napl/api run test:package
 else
-  npm test
+  pnpm test
   if [[ "${1:-}" != "--tests" ]]; then
-    npm run test:package -w @napl/api
+    pnpm --filter @napl/api run test:package
   fi
 fi
 

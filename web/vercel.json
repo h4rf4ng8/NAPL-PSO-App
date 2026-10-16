@@ -17,6 +17,6 @@
       "dest": "/index.html"
     }
   ],
-  "buildCommand": "npm run build -w @napl/contracts && npm run build -w @napl/web",
+  "buildCommand": "pnpm --filter @napl/contracts run build && pnpm --filter @napl/web run build",
   "outputDirectory": "dist"
 }

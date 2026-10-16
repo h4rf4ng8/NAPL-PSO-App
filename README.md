@@ -228,7 +228,7 @@ The API's reuse of data within a single request ends with that request. It is se
 Run the browser tests to check expiration, forced reads, successful and failed changes, cancellation, concurrent query limits, and session isolation:
 
 ```sh
-npm test -w @napl/web
+pnpm --filter @napl/web test
 ```
 
 The relevant checks are in the [cache tests](web/test/cache.test.ts), [client reset tests](web/test/client.test.ts), and [GraphQL tests](web/test/graphql.test.ts).
@@ -244,7 +244,7 @@ Apply the [assignment-history migration](supabase/migrations/202610140001_role_a
 The integration tests check permissions, unchanged selections, rollback, concurrent changes, and database access restrictions using disposable PostgreSQL databases. Run them with Node 24 and Docker:
 
 ```sh
-npm run test:integration
+pnpm run test:integration
 ```
 
 See the [assignment tests](api/test/routes/admin-audit.test.ts) and [database permission tests](api/test/integration/role_audit.sql).
@@ -257,15 +257,16 @@ See the [assignment tests](api/test/routes/admin-audit.test.ts) and [database pe
 
 ## Local development
 
-Use Node 24 and npm 11.
+Use Node 24 and pnpm 10.15.1.
 
 ```sh
 nvm use
-npm ci
-npm run setup:env
-npm run generate
-npm run dev:api # separate terminal
-npm run dev
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run setup:env
+pnpm run generate
+pnpm run dev:api # separate terminal
+pnpm run dev
 ```
 
 Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` to `LOCAL_API_URL`, then `API_URL`, then `http://127.0.0.1:3000`. Set `ORIGIN_SECRET` in the Vite process or local `web/.env`; never use `VITE_` for secrets. API settings are documented in [api/.env.example](api/.env.example).
@@ -275,16 +276,16 @@ Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` to `LOCAL
 ## Checks
 
 ```sh
-npm run generate
-npm run gql:check
-npm run typecheck
-npm run lint
-npm run build
-npm run test:integration
+pnpm run generate
+pnpm run gql:check
+pnpm run typecheck
+pnpm run lint
+pnpm run build
+pnpm run test:integration
 sam validate --lint --template-file api/template.yaml
 ```
 
-The integration runner creates disposable PostgreSQL containers, applies fixtures and migrations, and runs the workspace tests, including authorization, schedule rollback/concurrency, server commands, GraphQL validation, session isolation, and theme behavior. It also checks the bundled Lambda package outside the repository. It does not modify live data. `npm run test:sam` additionally invokes the package through SAM's local container.
+The integration runner creates disposable PostgreSQL containers, applies fixtures and migrations, and runs the workspace tests, including authorization, schedule rollback/concurrency, server commands, GraphQL validation, session isolation, and theme behavior. It also checks the bundled Lambda package outside the repository. It does not modify live data. `pnpm run test:sam` additionally invokes the package through SAM's local container.
 
 ## Production deployment
 
@@ -294,12 +295,12 @@ The [deployment template](api/template.yaml) creates the Lambda function, its li
 
 ### Prepare and Validate
 
-Use Node 24, npm 11, AWS credentials for the intended account, and SAM CLI 1.165.0 or later. Docker is required for the database integration tests and optional local Lambda invocation. Run commands from the repository root.
+Use Node 24, pnpm 10.15.1, AWS credentials for the intended account, and SAM CLI 1.165.0 or later. Docker is required for the database integration tests and optional local Lambda invocation. Run commands from the repository root.
 
 Install dependencies, then run the full set of [checks](#checks):
 
 ```sh
-npm ci
+pnpm install --frozen-lockfile
 ```
 
 The build produces the web assets and the Lambda package at `api/dist/api.zip`. The [packaging script](api/scripts/build.mjs) includes only the bundled handler and its package metadata in that ZIP. The build also checks the Vercel forwarding bundle, while integration tests exercise the Lambda package outside the repository against disposable PostgreSQL data. These steps do not deploy cloud resources.
@@ -307,7 +308,7 @@ The build produces the web assets and the Lambda package at `api/dist/api.zip`. 
 To additionally invoke the packaged API in a local Lambda container, run:
 
 ```sh
-npm run test:sam
+pnpm run test:sam
 ```
 
 ### Runtime Settings
@@ -315,7 +316,7 @@ npm run test:sam
 Start with the [environment example](api/.env.example). The setup command creates the local file if needed and generates cookie keys only when none have been configured. It preserves a valid existing key ring and rejects malformed keys instead of replacing them.
 
 ```sh
-npm run setup:env
+pnpm run setup:env
 ```
 
 Supply production values through a protected local file or the deployment environment. Environment values take precedence over the local file when generating deployment parameters.
@@ -444,7 +445,7 @@ Keep these values out of browser-exposed settings; the `VITE_` prefix would publ
 The [load runner](api/test/load/run-staging.mjs) measures public league reads against an explicitly selected staging environment. Use an isolated staging project and database with their own invocation permissions. A Vercel preview hostname alone does not establish that an environment is isolated from production.
 
 ```sh
-npm run test:load -- --help
+pnpm run test:load --help
 ```
 
 | Setting | Requirement or purpose |

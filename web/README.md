@@ -62,11 +62,11 @@ Successful league changes clear cached reads and cancel older queries. The affec
 
 ## Running Locally
 
-Complete the repository's [local setup](../README.md#local-development) first, using Node 24 and npm 11. Run these commands from the repository root in separate terminals:
+Complete the repository's [local setup](../README.md#local-development) first, using Node 24 and pnpm 10.15.1. Run these commands from the repository root in separate terminals:
 
 ```sh
-npm run dev:api
-npm run dev
+pnpm run dev:api
+pnpm run dev
 ```
 
 Open `http://localhost:5173`. Set the same `ORIGIN_SECRET` as the API in the Vite environment or `web/.env`. The [environment example](.env.example) also documents the local API target. These settings are server-only; never prefix secrets with `VITE_`.
@@ -77,11 +77,11 @@ Run from the repository root after setup:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run gql:generate` | Regenerate GraphQL documents and response types. |
-| `npm run gql:check` | Check that generated GraphQL files match the current queries and schema. |
-| `npm run typecheck -w @napl/web` | Check browser and server TypeScript. |
-| `npm test -w @napl/web` | Run the [web tests](test/), including requests, caching, UI logic, and forwarding. |
-| `npm run build -w @napl/web` | Build browser assets and check the server forwarding bundle. |
+| `pnpm run gql:generate` | Regenerate GraphQL documents and response types. |
+| `pnpm run gql:check` | Check that generated GraphQL files match the current queries and schema. |
+| `pnpm --filter @napl/web run typecheck` | Check browser and server TypeScript. |
+| `pnpm --filter @napl/web test` | Run the [web tests](test/), including requests, caching, UI logic, and forwarding. |
+| `pnpm --filter @napl/web run build` | Build browser assets and check the server forwarding bundle. |
 
 ## Related Documentation
 

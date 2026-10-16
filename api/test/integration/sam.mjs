@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const network = process.env.SAM_TEST_NETWORK;
-assert.match(network ?? '', /^napl-check-\d+$/, 'Run through npm run test:sam to create disposable services');
+assert.match(network ?? '', /^napl-check-\d+$/, 'Run through pnpm run test:sam to create disposable services');
 const memoryMiB = 128;
 const scratch = await mkdtemp(path.join(tmpdir(), 'napl-sam-'));
 const envFile = path.join(scratch, 'env.json');

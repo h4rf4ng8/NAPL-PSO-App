@@ -1,4 +1,4 @@
-import type { Account,Rankings,Team } from '../api/models';
+import type { Account,Team } from '../api/models';
 import { getFormation, POS, POSITIONS } from '@napl/contracts/league';
 export { ALL_POSITIONS, DEFAULT_FORMATION, FORMATIONS, FORMATION_IDS, getFormation, POS, POS_LABELS, POSITIONS, SLOT, VOTE_FIELDS, VOTE_POSITIONS } from '@napl/contracts/league';
 export type { Formation, FormationId, FormationSlot, Position, SlotId, VoteKey, VotePosition } from '@napl/contracts/league';
@@ -115,7 +115,7 @@ export const generateRoundRobinSchedule = (teamIds: string[], roundsCount: numbe
 // resolve each slot to a player (or null if unfilled). If no saved lineup
 // exists for the current formation, auto-assigns by matching player positions
 // to the slot's primary position, strongest OVR first.
-export const resolveLineup = (team: Pick<Team, 'formation' | 'lineup'>, members: Account[], rankings: Rankings | null) => {
+export const resolveLineup = (team: Pick<Team, 'formation' | 'lineup'>, members: Account[]) => {
   const formation = getFormation(team.formation);
   const slotIds = formation.slots.map(s => s.id);
   const byUsername = (username: string | undefined) => {
@@ -136,10 +136,7 @@ export const resolveLineup = (team: Pick<Team, 'formation' | 'lineup'>, members:
     const bucket = buckets[pos] ?? buckets[POS.CM]!;
     bucket.push(p);
   }
-  const ovrOf = (p: Account) => {
-    const e = rankings?.get ? rankings.get(p.username.toLowerCase()) : null;
-    return e?.score || 0;
-  };
+  const ovrOf = (p: Account) => p.ranking?.score || 0;
   // Local buckets are mutated intentionally; toSorted requires a newer browser baseline.
    
   for (const bucket of Object.values(buckets)) bucket.sort((a, b) => ovrOf(b) - ovrOf(a));

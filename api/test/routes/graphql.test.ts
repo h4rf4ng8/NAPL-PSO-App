@@ -180,9 +180,11 @@ test('combined accounts and me reads calculate the league once and constrain the
     });
     assert.equal(response.statusCode, 200, response.body);
     const summaries = [...seen].filter(([sql]) => sql.includes('AS season_stats'));
-    assert.equal(summaries.length, 2);
+    assert.equal(summaries.length, 1);
     assert.equal(summaries.find(([sql]) => sql.includes('FROM public.accounts a ORDER BY'))?.[1], 1);
-    assert.equal(summaries.find(([sql]) => sql.includes('FROM public.accounts a WHERE a.id=?::uuid'))?.[1], 1);
+    const privateFields = [...seen].filter(([sql]) => sql.includes('SELECT email, pending_image_url') && sql.includes('FROM public.accounts WHERE id=') );
+    assert.equal(privateFields.length, 1);
+    assert.equal(privateFields[0]?.[1], 1);
     assert.equal(response.json().data.me.id, alice);
     assert.equal(response.json().data.accounts[0].email, undefined);
   } finally { await app.close(); }

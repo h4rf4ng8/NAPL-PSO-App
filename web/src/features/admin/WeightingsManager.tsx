@@ -4,7 +4,8 @@ import { settings as adminApi } from './api';
 import type { Weightings } from './models';
 import { C } from '../../theme/theme';
 
-import { DEFAULT_POSITION_WEIGHTS, STAT_KEY_LABELS } from '../../utils/rankings';
+import { STAT_KEY_LABELS } from '../../utils/rankings';
+import { loadDefaultPositionWeights } from '../accounts/api';
 import { POS, POS_LABELS } from '@napl/contracts/league';
 
 
@@ -12,16 +13,6 @@ import { POS, POS_LABELS } from '@napl/contracts/league';
 
 // Weightings Manager
 export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
-  // Which stats apply to which position (must match DEFAULT_POSITION_WEIGHTS keys)
-  // Strikers-Club stat set only — no shot%, interceptions, or pass accuracy.
-  const POSITION_STATS: Record<string,string[]> = {
-    [POS.ST]:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
-    [POS.WG]:   ['assistsPerGame', 'goalsPerGame', 'passesPerGame', 'tacklesPerGame'],
-    [POS.CM]:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
-    [POS.DEF]:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
-    [POS.GK]:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
-    [POS.FLEX]: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
-  };
   const POSITION_NAMES: Record<string,string> = {
     [POS.ST]: POS_LABELS[POS.ST].toUpperCase(), [POS.WG]: POS_LABELS[POS.WG].toUpperCase(),
     [POS.CM]: POS_LABELS[POS.CM].toUpperCase(), [POS.DEF]: POS_LABELS[POS.DEF].toUpperCase(),
@@ -39,12 +30,12 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
     (async () => {
       const saved = await adminApi.getWeightings();
       // Convert from 0-1 decimals to 0-100 percentages for editing
-      const source = saved || DEFAULT_POSITION_WEIGHTS;
+      const source = saved || await loadDefaultPositionWeights();
       const asPct:Weightings = {};
-      for (const [pos, positionStats] of Object.entries(POSITION_STATS)) {
+      for (const [pos, positionStats] of Object.entries(source)) {
         asPct[pos] = {};
-        for (const stat of positionStats) {
-          asPct[pos][stat] = Math.round((source[pos]?.[stat] || 0) * 100);
+        for (const [stat, value] of Object.entries(positionStats)) {
+          asPct[pos][stat] = Math.round(value * 100);
         }
       }
       setWeights(asPct);
@@ -58,8 +49,8 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
     setInfo(''); setError('');
   };
 
-  const posTotal = (pos: string) => Object.values(weights[pos]).reduce((a, b) => a + b, 0);
-  const allValid = () => Object.keys(POSITION_STATS).every(pos => posTotal(pos) === 100);
+  const posTotal = (pos: string) => Object.values(weights[pos] || {}).reduce((a, b) => a + b, 0);
+  const allValid = () => Object.keys(weights).length > 0 && Object.keys(weights).every(pos => posTotal(pos) === 100);
 
   const save = async () => {
     setError(''); setInfo('');
@@ -71,10 +62,10 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
     try {
       // Convert back from 0-100 percentages to 0-1 decimals for storage
       const asDecimal:Weightings = {};
-      for (const [pos, positionStats] of Object.entries(POSITION_STATS)) {
+      for (const [pos, positionStats] of Object.entries(weights)) {
         asDecimal[pos] = {};
-        for (const stat of positionStats) {
-          asDecimal[pos][stat] = weights[pos][stat] / 100;
+        for (const [stat, value] of Object.entries(positionStats)) {
+          asDecimal[pos][stat] = value / 100;
         }
       }
       await adminApi.setWeightings(asDecimal);
@@ -86,13 +77,14 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
     setSaving(false);
   };
 
-  const resetToDefault = () => {
+  const resetToDefault = async () => {
     if (!confirm('Reset all weightings back to the original defaults?')) return;
+    const defaults = await loadDefaultPositionWeights();
     const asPct:Weightings = {};
-    for (const [pos, positionStats] of Object.entries(POSITION_STATS)) {
+    for (const [pos, positionStats] of Object.entries(defaults)) {
       asPct[pos] = {};
-      for (const stat of positionStats) {
-        asPct[pos][stat] = Math.round((DEFAULT_POSITION_WEIGHTS[pos]?.[stat] || 0) * 100);
+      for (const [stat, value] of Object.entries(positionStats)) {
+        asPct[pos][stat] = Math.round(value * 100);
       }
     }
     setWeights(asPct);
@@ -120,7 +112,7 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
       </div>
 
       {/* One card per position */}
-      {Object.entries(POSITION_STATS).map(([pos, positionStats]) => {
+      {Object.entries(weights).map(([pos, positionStats]) => {
         const total = posTotal(pos);
         const valid = total === 100;
         return (
@@ -133,7 +125,7 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
               }}>{total}% {valid ? '✓' : (total > 100 ? '— too high' : '— too low')}</span>
             </div>
             <div className="space-y-2">
-              {positionStats.map(stat => (
+              {Object.keys(positionStats).map(stat => (
                 <div key={stat} className="flex items-center gap-3">
                   <span className="font-body text-sm flex-1" style={{ color: C.brandNavy }}>
                     {STAT_KEY_LABELS[stat] || stat}

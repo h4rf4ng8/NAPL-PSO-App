@@ -23,7 +23,7 @@ const verify = async (token: string) => {
     return {
         id: token, sessionId: token, claims: {
             sub: token, email: 'new@example.test', user_metadata: {
-                username: 'Admin'
+                username: token === newUser ? 'sh1t' : 'Admin'
             }
         }
     };
@@ -211,8 +211,15 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         assert.equal((await ok('GET', '/api/users/me', alice)).email, 'alice@private.test');
         const provision = await ok('POST', '/api/users/me', newUser, {});
         assert.equal(provision.id, newUser);
+        assert.equal(provision.username, 'Player');
         assert.deepEqual(provision.roles, []);
         assert.equal((await ok('POST', '/api/users/me', newUser, {})).id, newUser);
+        assert.equal((await call('POST', `/api/accounts/${newUser}/rename`, newUser, { username: 'Sh1t' })).statusCode, 400);
+        assert.equal((await call('POST', `/api/accounts/${alice}/rename`, bob, { username: 'Alicia' })).statusCode, 403);
+        await ok('POST', `/api/accounts/${newUser}/rename`, admin, { username: 'Cunt' });
+        await ok('POST', `/api/accounts/${newUser}/rename`, admin, { username: 'Player' });
+        assert.equal((await call('POST','/api/teams',alice,{id:'blocked_name',name:'F_u_c_k FC',tag:'FUK'})).statusCode,400);
+        assert.equal((await call('POST','/api/teams',alice,{id:'blocked_tag',name:'Fine Team',tag:'SH1T'})).statusCode,400);
         assert.equal((await call('POST','/api/teams',alice,{id:'bad_lineup',name:'Invalid Team',tag:'BAD',lineup:{gk:'Bob'}})).statusCode,400);
         await ok('POST', '/api/teams', alice, {
             id: 'home', name: 'Home Team', tag: 'HOME', pendingMembers: ['Bob']
@@ -222,6 +229,10 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         await ok('POST', '/api/teams/home/review', admin, {
             status: 'approved'
         });
+        const blockedTeamUpdate = await call('PATCH', '/api/teams/home', admin, { name: 'Scunthorpe United', tag: 'FUCK' });
+        assert.equal(blockedTeamUpdate.statusCode, 400);
+        assert.match(blockedTeamUpdate.json<{ message: string }>().message, /team name or tag/i);
+        assert.equal((await ok('GET', '/api/teams/home')).name, 'Home Team');
         await t.test('new teams participate in current-season standings and admin exclusions persist', async () => {
             const readTeam = async () => (await call('GET', '/api/teams/home', alice)).json<Team>();
             assert.equal(inStandings(await readTeam(), 'S1'), true);
@@ -342,9 +353,9 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             query: MEMBER_LEAGUE_QUERY,
         });
         assert.equal(memberLeague.statusCode, 200, memberLeague.body);
-        const memberData = memberLeague.json<{ data: { me: { email: string }; weightings: unknown; admins?: unknown } }>().data;
+        const memberData = memberLeague.json<{ data: { me: { email: string }; admins?: unknown } }>().data;
         assert.equal(memberData.me.email, 'alice@private.test');
-        assert.equal(memberData.weightings, null);
+        assert.equal('weightings' in memberData, false);
         assert.equal(memberData.admins, undefined);
         assert.equal((await call('PATCH', '/api/teams/home', bob, {
             name: 'Taken over'

@@ -6,7 +6,7 @@ import type { Team } from './models';
 
 import { Dialog, ModalShell } from '../../components/Ui';
 import { C } from '../../theme/theme';
-import { checkUsernameProfanity, compressImage } from '../../utils/input';
+import { compressImage } from '../../utils/input';
 
 // ============ SUBMIT TEAM MODAL ============
 // ============ EDIT TEAM MODAL (admin) ============
@@ -270,10 +270,6 @@ export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClo
     if (!name.trim() || name.length < 3) { setError('Team name must be 3+ characters'); return; }
     if (!tag.trim() || tag.length < 2 || tag.length > 5) { setError('Tag must be 2-5 characters'); return; }
     if (!logoUrl) { setError('Please upload a team logo'); return; }
-    if (checkUsernameProfanity(name) || checkUsernameProfanity(tag)) {
-      setError('That team name or tag isn\'t allowed. Please choose something else.');
-      return;
-    }
     setLoading(true);
     const id = `t_${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
     const team = {

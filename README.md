@@ -187,6 +187,8 @@ The Lambda API checks that each GraphQL request contains one valid query within 
 - [Team reads](api/routes/teams/queries.ts#L11) return the teams the caller is allowed to see.
 - [Team records](api/routes/matches/records.ts#L5) are calculated from imported player match histories. Records for the same team and imported match are counted once, even when several players have that match in their history.
 
+Account reads also include the API-computed player ranking and card-stat season rows. Rankings use stored account statistics and configured position weights; card rows use season aggregates from stored match history. The browser renders those results. Name and team-tag rules are enforced by API writes, so existing stored names are not rewritten when the rules change.
+
 Within one request, the API [reuses data it has already loaded](api/routes/graphql/context.ts#L13). The browser also keeps recently loaded data for repeat visits, as described in [Browser Cache](#browser-cache).
 
 ### Updating League Data

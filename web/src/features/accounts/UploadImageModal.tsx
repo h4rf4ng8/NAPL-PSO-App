@@ -1,5 +1,5 @@
 import { Clock, Plus, User } from 'lucide-react';
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account } from './models';
 import { ModalShell } from '../../components/Ui';

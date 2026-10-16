@@ -5,17 +5,28 @@ import { graphql } from '../src/api/graphql';
 import { resetClient } from '../src/api/client';
 import { PublicLeagueDataDocument } from '../src/api/generated/graphql';
 import { loadMemberLeague, loadPublicLeague } from '../src/features/dashboard/api';
-import { loadAccountMatchPage, loadAccountOpponents } from '../src/features/accounts/api';
+import { loadAccountCardPreviews, loadAccountMatchPage, loadAccountOpponents, mapAccount } from '../src/features/accounts/api';
+import { mapTeam } from '../src/features/teams/api';
+import { mapVotingPeriod } from '../src/features/voting/api';
 import { matchSchema } from '@napl/contracts/accounts';
 
 const cookie = { value: '' };
 Object.defineProperty(globalThis, 'document', { configurable: true, value: { get cookie() { return cookie.value; } } });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+const invalidHistoryResponse = (field: string) => async () => json({ data: {
+  accounts: [{ __typename: 'Account', ...account, [field]: [{}] }], teams: [], teamRecords: [],
+} });
 afterEach(() => { resetClient(); mock.restoreAll(); cookie.value = ''; resetCsrf(); });
 
 const account = {
   id: 'p1', username: 'Alice', position: 'ST', teamId: null, imageUrl: null, country: null,
   stats: { games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 },
+  ranking: { score: 0, percentile: 0, ranked: false, gamesPlayed: 0, tier: 'BRONZE' },
+  cardStats: [{ season: 'all', cells: [
+    { label: 'GOALS', value: '0' }, { label: 'TKL', value: '0.0' },
+    { label: 'ASSIST', value: '0' }, { label: 'W-L', value: '0-0' },
+    { label: 'PASS', value: '0.0' }, { label: 'GP', value: '0' },
+  ] }],
   matches: [], awards: [], championships: [], totwUntil: null, cheater: false, strikersId: null,
   steamUrl: null, createdAt: 1,
 };
@@ -60,6 +71,32 @@ test('account history loaders request one bounded filtered page and validate sum
   assert.equal(page.nodes[0]?.id, 'm1');
   assert.deepEqual(page.pageInfo, { endCursor: 'next', hasNextPage: true });
   assert.deepEqual(requests[0]?.variables, { id: 'p1', first: 25, after: 'previous', season: 'S2', opponent: 'Blue' });
+});
+
+test('tier previews load all server computed cards in one GraphQL request', async () => {
+  cookie.value = 'napl-csrf=csrf-value';
+  const calls: unknown[] = [];
+  mock.method(globalThis, 'fetch', async (_url, init) => {
+    calls.push(init);
+    return json({ data: { accountCardPreviews: [{
+      label: 'BRONZE', description: 'server preview', account: { __typename: 'Account', ...account },
+    }] } });
+  });
+  const previews = await loadAccountCardPreviews();
+  assert.equal(calls.length, 1);
+  assert.equal(previews[0]?.account.ranking.ranked, false);
+  assert.equal(previews[0]?.account.cardStats[0]?.cells[0]?.value, '0');
+});
+
+test('tier preview GraphQL failures surface without retrying or per card requests', async () => {
+  cookie.value = 'napl-csrf=csrf-value';
+  let calls = 0;
+  mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    return json({ data: null, errors: [{ message: 'preview unavailable' }] });
+  });
+  await assert.rejects(loadAccountCardPreviews(), /preview unavailable/);
+  assert.equal(calls, 1);
 });
 
 test('history loader errors are surfaced for retry UI', async () => {
@@ -163,12 +200,30 @@ test('account decoder preserves historical account fields and accepts legacy awa
 test('account decoder rejects empty opaque records for each historical JSON field', async () => {
   cookie.value = 'napl-csrf=csrf-value';
   for (const field of ['matches', 'awards', 'championships'] as const) {
-    mock.method(globalThis, 'fetch', async () => json({ data: {
-      accounts: [{ __typename: 'Account', ...account, [field]: [{}] }], teams: [], teamRecords: [],
-    } }));
+    mock.method(globalThis, 'fetch', invalidHistoryResponse(field));
     await assert.rejects(loadPublicLeague(), /Invalid GraphQL account JSON/);
     mock.restoreAll();
   }
+});
+
+test('account stats keep arbitrary finite keys while record mappers reject native objects', () => {
+  const decoded = mapAccount({ ...account, stats: { extraMetric: 4 } } as never);
+  assert.equal(decoded.stats.extraMetric, 4);
+  assert.equal(decoded.stats.games, 0);
+  assert.throws(() => mapAccount({ ...account, stats: { extraMetric: null } } as never), /Invalid GraphQL account stats/);
+  assert.throws(() => mapTeam({ lineup: new Date() } as never), /Invalid GraphQL team lineup/);
+  assert.throws(() => mapTeam({ lineup: new Error('not a JSON record') } as never), /Invalid GraphQL team lineup/);
+  assert.throws(() => mapVotingPeriod({ winners: new Error('not a JSON record') } as never), /Invalid GraphQL voting winners/);
+});
+
+test('team and voting records validate boundaries while preserving arbitrary keys and nulls', () => {
+  assert.deepEqual(mapTeam({ lineup: { 'custom-slot': 'Alice' } } as never).lineup, { 'custom-slot': 'Alice' });
+  assert.throws(() => mapTeam({ lineup: [] } as never), /Invalid GraphQL team lineup/);
+  assert.throws(() => mapTeam({ lineup: null } as never), /Invalid GraphQL team lineup/);
+  assert.deepEqual(mapVotingPeriod({ winners: { customPosition: 'Alice' } } as never).winners, { customPosition: 'Alice' });
+  assert.equal(mapVotingPeriod({ winners: null } as never).winners, null);
+  assert.throws(() => mapVotingPeriod({ winners: { customPosition: 1 } } as never), /Invalid GraphQL voting winners/);
+
 });
 
 test('Apollo deduplicates concurrent reads and reuses complete responses until cache expiry', async context => {

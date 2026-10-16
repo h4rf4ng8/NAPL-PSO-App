@@ -1,5 +1,5 @@
 import { Swords } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { Account } from './models';
 import { EmptyState, RecordBox, ResultBadge, SmallStat } from '../../components/Ui';

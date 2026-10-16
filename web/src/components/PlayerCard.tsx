@@ -7,56 +7,36 @@ Sparkles
 } from 'lucide-react';
 import React,{ useEffect,useRef,useState } from 'react';
 import { settings as adminApi } from '../features/admin/api';
-import type { Account,PlayerAward,Rankings,Team,Weightings } from '../api/models';
+import type { Account,Team } from '../api/models';
+import type { Weightings } from '../features/admin/models';
 import { C } from '../theme/theme';
 import { flagUrl } from '../utils/league';
-import { cardTier,DEFAULT_POSITION_WEIGHTS,getPlayerAwards,getPlayerRanking,tierForAccount } from '../utils/rankings';
+import { cardTier,getCardStatsForSeason,getPlayerAwards } from '../utils/rankings';
+import { loadAccountCardPreviews, loadDefaultPositionWeights } from '../features/accounts/api';
+import { useResource } from '../hooks/use-resource';
 import { ASL_LOGO_DIAMOND } from './Icons';
 import { useDialog } from './Ui';
 import { POS, POS_LABELS } from '@napl/contracts/league';
 
-export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size?:string;team?:Team|null;hideTeam?:boolean;forceOverall?:number|null;forceTier?:string|null;rankings?:Rankings|null}>(({ account, size = 'md', team = null, hideTeam = false, forceOverall = null, forceTier = null, rankings = null }, ref) => {
-  // New ranking-based system: look up the player's position-relative score.
-  // If rankings unavailable or forced values passed, fall back gracefully.
-  const ranking = getPlayerRanking(account, rankings);
-  let overall, tierName;
-  if (forceTier) {
-    tierName = forceTier;
-    overall = forceOverall ?? ranking.score;
-  } else if (forceOverall == null) {
-    overall = ranking.score;
-    tierName = tierForAccount(account, ranking);
-  } else {
-    overall = forceOverall;
-    if (overall >= 85) tierName = 'DIAMOND';
-    else if (overall >= 75) tierName = 'GOLD';
-    else if (overall >= 65) tierName = 'SILVER';
-    else tierName = 'BRONZE';
-  }
+export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size?:string;team?:Team|null;hideTeam?:boolean}>(({ account, size = 'md', team = null, hideTeam = false }, ref) => {
+  const ranking = account.ranking;
+  const overall = ranking.score;
+  const tierName = ranking.tier;
   const tier = cardTier(tierName);
-  const isUnranked = !ranking.ranked && !forceTier && forceOverall == null;
+  const isUnranked = !ranking.ranked;
   const dims = size === 'lg'
     ? { w: 320, h: 510, fontScale: 1 }
     : (size === 'sm'
     ? { w: 175, h: 280, fontScale: 0.55 }
     : { w: 240, h: 384, fontScale: 0.75 });
 
-  const games = account.stats?.games || 0;
   const awards = getPlayerAwards(account);
   const hasAwards = awards.length > 0;
   const canFlip = size === 'lg'; // only the large card flips
   const [flipped, setFlipped] = useState(false);
+  const uid = React.useId().replaceAll(':', '');
 
-  // Stats shown on the card are ALWAYS the player's real numbers — if they
-  // scored a goal, we show that goal, no matter how few games they've played.
-  // Only the OVR is withheld until MIN_GAMES_FOR_RANKING: showing a position-
-  // relative overall before someone has a meaningful sample would be noise.
-  // forceOverall/forceTier (Tier Preview, etc.) bypass the "NR" guard.
-  const emptyDisplayStats = {
-    goals: 0, assists: 0, passes: 0, tackles: 0,
-    deflects: 0, catches: 0, cleanSheets: 0, games,
-  };
-  const displayStats = account.stats || emptyDisplayStats;
+  const displayCells = getCardStatsForSeason(account, account._cardSeason || 'all');
   const displayOverall = isUnranked ? 'NR' : overall;
 
   // v33 palette — metallic body with light/mid/dark/shadow stops for the
@@ -111,7 +91,47 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
   const posY = isTotw ? 160 : 146;
 
   // A unique id suffix so multiple cards on the same page get unique <defs>
-  const uid = `${overall}-${tier.name}-${account.username || 'p'}`;
+  const metallicDefs = (back = false) => {
+    const id = (name: string) => `${back ? 'b-' : ''}${name}-${uid}`;
+    return <>
+      <linearGradient id={id('base')} x1="0" y1="0" x2="0.5" y2="1">
+        <stop offset="0%" stopColor={palette.lightest} />
+        <stop offset="25%" stopColor={palette.light} />
+        <stop offset="55%" stopColor={palette.mid} />
+        <stop offset="85%" stopColor={palette.dark} />
+        <stop offset="100%" stopColor={palette.shadow} />
+      </linearGradient>
+      <linearGradient id={id('sheen')} x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stopColor={palette.shadow} stopOpacity="0.25" />
+        <stop offset="20%" stopColor={palette.lightest} stopOpacity="0.35" />
+        <stop offset="50%" stopColor={palette.mid} stopOpacity="0" />
+        <stop offset="80%" stopColor={palette.light} stopOpacity="0.18" />
+        <stop offset="100%" stopColor={palette.shadow} stopOpacity="0.3" />
+      </linearGradient>
+      {!back && <linearGradient id={id('panel')} x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor={palette.panelLight} />
+        <stop offset="50%" stopColor={palette.panelMid} />
+        <stop offset="100%" stopColor={palette.panelDark} />
+      </linearGradient>}
+      <pattern id={id('brush')} x="0" y="0" width="3" height="80" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
+        <line x1="0" y1="0" x2="0" y2="80" stroke={palette.shadow} strokeWidth="0.18" opacity="0.18" />
+      </pattern>
+      <pattern id={id('dots')} x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
+        <circle cx="2.5" cy="2.5" r="0.7" fill={palette.shadow} opacity="0.35" />
+      </pattern>
+    </>;
+  };
+  const metallicSurface = (back = false) => {
+    const prefix = back ? 'b-' : '';
+    return <>
+      <path d={cardPath} fill={`url(#${prefix}base-${uid})`} />
+      <g clipPath={`url(#${prefix}cc-${uid})`}>
+        <rect width="320" height="510" fill={`url(#${prefix}sheen-${uid})`} />
+        <rect width="320" height="510" fill={`url(#${prefix}brush-${uid})`} />
+        {back && <rect width="320" height="510" fill={`url(#${prefix}dots-${uid})`} opacity="0.4" />}
+      </g>
+    </>;
+  };
 
   const cardFrontSvg = (
     <svg
@@ -121,36 +141,7 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
       style={{ display: 'block' }}
     >
       <defs>
-        {/* v33: brushed metallic body — light/mid/dark/shadow gradient. */}
-        <linearGradient id={`base-${uid}`} x1="0" y1="0" x2="0.5" y2="1">
-          <stop offset="0%" stopColor={palette.lightest} />
-          <stop offset="25%" stopColor={palette.light} />
-          <stop offset="55%" stopColor={palette.mid} />
-          <stop offset="85%" stopColor={palette.dark} />
-          <stop offset="100%" stopColor={palette.shadow} />
-        </linearGradient>
-        {/* Vertical sheen overlay for uneven metal-surface lighting */}
-        <linearGradient id={`sheen-${uid}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={palette.shadow} stopOpacity="0.25" />
-          <stop offset="20%" stopColor={palette.lightest} stopOpacity="0.35" />
-          <stop offset="50%" stopColor={palette.mid} stopOpacity="0" />
-          <stop offset="80%" stopColor={palette.light} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={palette.shadow} stopOpacity="0.3" />
-        </linearGradient>
-        {/* Bottom stats panel: distinct lighter surface */}
-        <linearGradient id={`panel-${uid}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={palette.panelLight} />
-          <stop offset="50%" stopColor={palette.panelMid} />
-          <stop offset="100%" stopColor={palette.panelDark} />
-        </linearGradient>
-        {/* Brushed-metal hairlines pattern */}
-        <pattern id={`brush-${uid}`} x="0" y="0" width="3" height="80" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
-          <line x1="0" y1="0" x2="0" y2="80" stroke={palette.shadow} strokeWidth="0.18" opacity="0.18" />
-        </pattern>
-        {/* Halftone dots covering the top half */}
-        <pattern id={`dots-${uid}`} x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
-          <circle cx="2.5" cy="2.5" r="0.7" fill={palette.shadow} opacity="0.35" />
-        </pattern>
+        {metallicDefs()}
         {/* Player photo soft feather: photo blends into the gold body */}
         <radialGradient id={`ph-fade-${uid}`} cx="0.5" cy="0.45" r="0.55">
           <stop offset="0%" stopColor="#fff" stopOpacity="1" />
@@ -167,11 +158,7 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
       </defs>
 
       {/* 1. METALLIC CARD BASE + sheen + brushed hairlines */}
-      <path d={cardPath} fill={`url(#base-${uid})`} />
-      <g clipPath={`url(#cc-${uid})`}>
-        <rect width="320" height="510" fill={`url(#sheen-${uid})`} />
-        <rect width="320" height="510" fill={`url(#brush-${uid})`} />
-      </g>
+      {metallicSurface()}
 
       {/* 2. TOP HALF: halftone dots + player photo */}
       <g clipPath={`url(#top-clip-${uid})`}>
@@ -262,41 +249,17 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
           Volume stats (passes, tackles, deflects, catches) show as PER-GAME
           averages — that's what the OVR actually ranks on and it's more
           meaningful (e.g. "2.5 passes/game" tells you more than "10 total"). */}
-      {(() => {
-        const gp = Math.max(displayStats.games || 0, 1);
-        const perGame = (n: number = 0) => (n / gp).toFixed(1);
-        const posSuffix = (displayStats.games || 0) > 0 ? '/g' : '';
-        return (
-          <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
-            <text x="62" y="364" fontSize="20" textAnchor="middle">{displayStats.goals || 0}</text>
-            <text x="100" y="364" fontSize="11" letterSpacing="1.5">GOALS</text>
-            <text x="62" y="390" fontSize="20" textAnchor="middle">{displayStats.assists || 0}</text>
-            <text x="100" y="390" fontSize="11" letterSpacing="1.5">ASSIST</text>
-            <text x="62" y="416" fontSize="20" textAnchor="middle">{perGame(displayStats.passes)}</text>
-            <text x="100" y="416" fontSize="11" letterSpacing="1.5">PASS{posSuffix.toUpperCase()}</text>
-
-            {account.position === POS.GK ? (
-              <>
-                <text x="220" y="364" fontSize="20" textAnchor="middle">{perGame(displayStats.deflects)}</text>
-                <text x="256" y="364" fontSize="11" letterSpacing="1.5">DFL{posSuffix.toUpperCase()}</text>
-                <text x="220" y="390" fontSize="20" textAnchor="middle">{perGame(displayStats.catches)}</text>
-                <text x="256" y="390" fontSize="11" letterSpacing="1.5">CAT{posSuffix.toUpperCase()}</text>
-                <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.cleanSheets || 0}</text>
-                <text x="256" y="416" fontSize="11" letterSpacing="1.5">CS</text>
-              </>
-            ) : (
-              <>
-                <text x="220" y="364" fontSize="20" textAnchor="middle">{perGame(displayStats.tackles)}</text>
-                <text x="256" y="364" fontSize="11" letterSpacing="1.5">TKL{posSuffix.toUpperCase()}</text>
-                <text x="220" y="390" fontSize="20" textAnchor="middle">{(displayStats.wins || 0)}-{(displayStats.losses || 0)}</text>
-                <text x="256" y="390" fontSize="11" letterSpacing="1.5">W-L</text>
-                <text x="220" y="416" fontSize="20" textAnchor="middle">{displayStats.games || 0}</text>
-                <text x="256" y="416" fontSize="11" letterSpacing="1.5">GP</text>
-              </>
-            )}
-          </g>
-        );
-      })()}
+      <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
+        {displayCells.map((cell, i) => {
+          const row = Math.floor(i / 2);
+          const right = i % 2 === 1;
+          const y = 364 + row * 26;
+          return <g key={`${cell.label}-${i}`}>
+            <text x={right ? 220 : 62} y={y} fontSize="20" textAnchor="middle">{cell.value}</text>
+            <text x={right ? 256 : 100} y={y} fontSize="11" letterSpacing="1.5">{cell.label}</text>
+          </g>;
+        })}
+      </g>
       <line x1="160" y1="348" x2="160" y2="422" stroke={palette.shadow} strokeWidth="0.7" strokeOpacity="0.55" />
 
       {/* 8. ASL logo at bottom center */}
@@ -390,38 +353,12 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
       style={{ display: 'block' }}
     >
       <defs>
-        {/* Same metallic body as the front, so the back feels like the same object */}
-        <linearGradient id={`b-base-${uid}`} x1="0" y1="0" x2="0.5" y2="1">
-          <stop offset="0%" stopColor={palette.lightest} />
-          <stop offset="25%" stopColor={palette.light} />
-          <stop offset="55%" stopColor={palette.mid} />
-          <stop offset="85%" stopColor={palette.dark} />
-          <stop offset="100%" stopColor={palette.shadow} />
-        </linearGradient>
-        <linearGradient id={`b-sheen-${uid}`} x1="0" y1="0" x2="1" y2="0">
-          <stop offset="0%" stopColor={palette.shadow} stopOpacity="0.25" />
-          <stop offset="20%" stopColor={palette.lightest} stopOpacity="0.35" />
-          <stop offset="50%" stopColor={palette.mid} stopOpacity="0" />
-          <stop offset="80%" stopColor={palette.light} stopOpacity="0.18" />
-          <stop offset="100%" stopColor={palette.shadow} stopOpacity="0.3" />
-        </linearGradient>
-        <pattern id={`b-brush-${uid}`} x="0" y="0" width="3" height="80" patternUnits="userSpaceOnUse" patternTransform="rotate(-12)">
-          <line x1="0" y1="0" x2="0" y2="80" stroke={palette.shadow} strokeWidth="0.18" opacity="0.18" />
-        </pattern>
-        <pattern id={`b-dots-${uid}`} x="0" y="0" width="5" height="5" patternUnits="userSpaceOnUse">
-          <circle cx="2.5" cy="2.5" r="0.7" fill={palette.shadow} opacity="0.35" />
-        </pattern>
+        {metallicDefs(true)}
         <clipPath id={`b-cc-${uid}`}><path d={cardPath} /></clipPath>
       </defs>
 
       {/* Metallic body (same as front, no photo) */}
-      <path d={cardPath} fill={`url(#b-base-${uid})`} />
-      <g clipPath={`url(#b-cc-${uid})`}>
-        <rect width="320" height="510" fill={`url(#b-sheen-${uid})`} />
-        <rect width="320" height="510" fill={`url(#b-brush-${uid})`} />
-        {/* Halftone dots over the whole card (no photo to compete with) */}
-        <rect width="320" height="510" fill={`url(#b-dots-${uid})`} opacity="0.4" />
-      </g>
+      {metallicSurface(true)}
 
       {/* Header band at top — black bar with player name + position + OVR */}
       <g clipPath={`url(#b-cc-${uid})`}>
@@ -526,42 +463,10 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
 
 PlayerCard.displayName = 'PlayerCard';
 
-export const CardStat = ({ label, value, valueSize, labelSize }: { label: string; value: number; valueSize?: number; labelSize?: number }) => (
-  <div className="flex items-baseline gap-1.5 font-heading">
-    <span style={{ fontSize: valueSize, fontWeight: 700 }}>{value}</span>
-    <span className="opacity-70 tracking-widest" style={{ fontSize: labelSize }}>{label}</span>
-  </div>
-);
-
-export const CardStatBar = ({ label, value, valueSize, labelSize, accent, maxValue = 99, suffix = '' }: { label: string; value: number; valueSize?: number; labelSize?: number; accent?: string; maxValue?: number; suffix?: string }) => {
-  const pct = maxValue > 0 ? Math.min(100, Math.max(0, (value / maxValue) * 100)) : 0;
-  return (
-    <div className="font-heading">
-      <div className="flex justify-between items-baseline">
-        <span className="opacity-70 tracking-widest" style={{ fontSize: labelSize }}>{label}</span>
-        <span style={{ fontSize: valueSize, fontWeight: 700 }}>{value}{suffix}</span>
-      </div>
-      <div style={{
-        height: 3,
-        background: `${accent}22`,
-        borderRadius: 2,
-        marginTop: 2,
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          width: `${pct}%`,
-          height: '100%',
-          background: `linear-gradient(to right, ${accent}aa, ${accent})`,
-        }} />
-      </div>
-    </div>
-  );
-};
-
 // ============ SHAREABLE CARD MODAL ============
 // Renders the player card (an SVG) to a PNG entirely in-browser, with no
 // external libraries: serialize the SVG, draw it onto a <canvas>, export.
-export const ShareableCardModal = ({ account, team, onClose, rankings = null }: { account: Account; team?: Team | null | undefined; onClose: () => void; rankings?: Rankings | null }) => {
+export const ShareableCardModal = ({ account, team, onClose }: { account: Account; team?: Team | null | undefined; onClose: () => void }) => {
   const dialogRef = useDialog(onClose);
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
@@ -707,7 +612,7 @@ export const ShareableCardModal = ({ account, team, onClose, rankings = null }: 
       background: `${C.black}dd`, backdropFilter: 'blur(8px)',
     }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-center gap-4 fade-in">
-        <PlayerCard ref={cardRef} account={account} size="lg" team={team} rankings={rankings} />
+        <PlayerCard ref={cardRef} account={account} size="lg" team={team} />
 
         <div className="flex flex-wrap gap-2 justify-center">
           <button
@@ -765,38 +670,7 @@ export const ShareableCardModal = ({ account, team, onClose, rankings = null }: 
 
 // ============ TIER PREVIEW (debug/showcase) ============
 export const TierPreview = () => {
-  // Build one fake account per tier with stats tuned to land in that overall range
-  const mkAccount = (username: string, position: string, targetOverall: number, awards: PlayerAward[] = []) => {
-    // Backsolve simple stats that produce roughly the right OVR
-    const isGK = position === POS.GK;
-    const games = 15;
-    let stats;
-    if (targetOverall >= 87) {
-      stats = isGK
-        ? { games, wins: 13, draws: 2, losses: 0, goals: 0, assists: 0, passes: 16, tackles: 0, deflects: 95, cleanSheets: 13, catches: 30, motm: 0 }
-        : { games, wins: 12, draws: 2, losses: 1, goals: 38, assists: 22, passes: 36, tackles: 22, deflects: 0, cleanSheets: 0, catches: 0, motm: 0 };
-    } else if (targetOverall >= 78) {
-      stats = { games, wins: 9, draws: 3, losses: 3, goals: 18, assists: 11, passes: 32, tackles: 38, deflects: 0, cleanSheets: 4, catches: 0, motm: 0 };
-    } else if (targetOverall >= 68) {
-      stats = { games, wins: 7, draws: 3, losses: 5, goals: 8, assists: 6, passes: 24, tackles: 22, deflects: 0, cleanSheets: 2, catches: 0, motm: 0 };
-    } else {
-      stats = { games, wins: 4, draws: 3, losses: 8, goals: 3, assists: 2, passes: 18, tackles: 12, deflects: 0, cleanSheets: 1, catches: 0, motm: 0 };
-    }
-    return {id:username,username,position,stats,awards,matches:[],imageUrl:null,country:null,teamId:null,championships:[],totwUntil:null,cheater:false,strikersId:null,steamUrl:null,createdAt:0};
-  };
-
-  const samples = [
-    { account: mkAccount('Rookie',     POS.ST,  60), label: 'BRONZE',  desc: 'Bottom 40% of position', forceTier: 'BRONZE' },
-    { account: mkAccount('Solid',      POS.CM,  72), label: 'SILVER',  desc: 'Next 30% (40th–70th %ile)', forceTier: 'SILVER' },
-    { account: { ...mkAccount('Vet',   POS.DEF, 80), country: 'Canada' }, label: 'GOLD', desc: 'Country flag shows on the card', forceTier: 'GOLD' },
-    { account: mkAccount('Champion',   POS.ST,  90, [
-      { awardId: 'striker', season: 'S1', assignedBy: 'admin', assignedAt: Date.now() },
-    ]), label: 'DIAMOND + AWARD', desc: 'Award winners get a black name bar', forceTier: 'DIAMOND' },
-    { account: mkAccount('Decorated',  POS.CM,  72, [
-      { awardId: 'playmaker', season: 'S1', assignedBy: 'admin', assignedAt: Date.now() },
-    ]), label: 'SILVER + AWARD', desc: 'Black name bar shows on any tier', forceTier: 'SILVER' },
-  ];
-
+  const { data: previews = [], loading, error } = useResource(loadAccountCardPreviews, []);
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -804,15 +678,17 @@ export const TierPreview = () => {
         <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>TIER PREVIEW</h3>
       </div>
       <p className="font-body text-sm mb-6" style={{ color: `${C.cream}aa` }}>
-        Each tier rendered with its material treatment. Award winners get a black bar behind their name in the tier's accent color. The Gold card shows how a player's country flag appears below the team logo.
+        Each tier rendered with its material treatment. Award winners get a black name bar; the Gold card shows a country flag.
       </p>
+      {loading && <p role="status">Loading card previews…</p>}
+      {error && <p role="alert">{error}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center">
-        {samples.map((s, i) => (
-          <div key={i} className="flex flex-col items-center gap-3">
-            <PlayerCard account={s.account} size="md" hideTeam forceTier={s.forceTier} />
+        {previews.map(({ account, label, description }) => (
+          <div key={label} className="flex flex-col items-center gap-3">
+            <PlayerCard account={account} size="md" hideTeam />
             <div className="text-center">
-              <div className="font-display text-xl tracking-wider" style={{ color: C.cream }}>{s.label}</div>
-              <div className="font-mono text-[10px] tracking-wider mt-0.5" style={{ color: `${C.cream}66` }}>{s.desc}</div>
+              <div className="font-display text-xl tracking-wider" style={{ color: C.cream }}>{label}</div>
+              <div className="font-mono text-[10px] tracking-wider mt-0.5" style={{ color: `${C.cream}66` }}>{description}</div>
             </div>
           </div>
         ))}
@@ -826,14 +702,6 @@ export const TierPreview = () => {
 // current DB values (so admin changes show up here immediately for everyone).
 // Admins still edit via ADMIN → WEIGHTINGS; this is the players' view.
 export const WeightingsPublicView = () => {
-  const POSITION_STATS: Record<string,string[]> = {
-    [POS.ST]:   ['goalsPerGame', 'assistsPerGame', 'passesPerGame', 'tacklesPerGame'],
-    [POS.WG]:   ['assistsPerGame', 'goalsPerGame', 'passesPerGame', 'tacklesPerGame'],
-    [POS.CM]:   ['assistsPerGame', 'passesPerGame', 'goalsPerGame', 'tacklesPerGame'],
-    [POS.DEF]:  ['tacklesPerGame', 'cleanSheetPct', 'passesPerGame', 'assistsPerGame', 'goalsPerGame'],
-    [POS.GK]:   ['deflectsPerGame', 'cleanSheetPct', 'catchesPerGame'],
-    [POS.FLEX]: ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame'],
-  };
   const POSITION_NAMES: Record<string,string> = {
     [POS.ST]: POS_LABELS[POS.ST].toUpperCase(), [POS.WG]: POS_LABELS[POS.WG].toUpperCase(),
     [POS.CM]: POS_LABELS[POS.CM].toUpperCase(), [POS.DEF]: POS_LABELS[POS.DEF].toUpperCase(),
@@ -858,7 +726,7 @@ export const WeightingsPublicView = () => {
     (async () => {
       try {
         const saved = await adminApi.getWeightings();
-        setWeights(saved || DEFAULT_POSITION_WEIGHTS);
+        setWeights(saved || await loadDefaultPositionWeights());
       } catch (error) { console.error(error); }
     })();
   }, []);
@@ -882,7 +750,7 @@ export const WeightingsPublicView = () => {
       </div>
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {Object.entries(POSITION_STATS).map(([pos, value]) => {
+        {Object.entries(weights).map(([pos, value]) => {
           const posColor = POS_COLOR[pos];
           return (
             <div key={pos} className="rounded-lg p-4" style={{
@@ -899,7 +767,7 @@ export const WeightingsPublicView = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                {value.map(stat => {
+                {Object.keys(value).map(stat => {
                   const w = weights?.[pos]?.[stat];
                   const pct = w === undefined || w === null ? null : Math.round(w * 100);
                   return (

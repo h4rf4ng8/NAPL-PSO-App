@@ -2,6 +2,7 @@ import { POS } from '@napl/contracts';
 import { Prisma, type Database } from '../../plugins/db/client.js';
 import { get, insert, object, string } from '../../plugins/db/records.js';
 import type { Identity } from '../../plugins/auth/identity.js';
+import { checkBlockedName } from '../name-validation.js';
 
 export async function provisionAccount(database: Database, identity: Identity) {
     return database.transaction(async (tx) => {
@@ -11,7 +12,7 @@ export async function provisionAccount(database: Database, identity: Identity) {
         const metadata = object(identity.claims.user_metadata);
         const candidate = string(metadata.preferred_username || metadata.user_name || metadata.name || metadata.username)
             .replaceAll(/[^\p{L}\p{N}_. -]/gu, '').trim().slice(0, 20);
-        const base = candidate.length >= 2 ? candidate : 'Player';
+        const base = candidate.length >= 2 && !checkBlockedName(candidate) ? candidate : 'Player';
         await tx.execute(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${'username:' + base.toLowerCase()},0))`);
         let name = base;
         if (await get(tx, 'accounts', 'username_lower', name.toLowerCase()))

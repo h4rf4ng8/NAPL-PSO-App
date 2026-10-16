@@ -2,8 +2,31 @@ import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLInt, GraphQLNonNull, Gr
 import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
 import { read, type GraphQLContext } from '../graphql/context.js';
-import { getCurrentAccount, listAccounts } from './queries.js';
+import { getCurrentAccount, listAccounts, loadRankedAccounts } from './queries.js';
 import { accountIdSchema, accountMatches, accountOpponents } from './history.js';
+import { POS } from '@napl/contracts/league';
+import { calculateCardStats } from './ranking.js';
+import { getSetting } from '../settings/queries.js';
+
+const accountPopulation = (context: GraphQLContext) => read(context, 'account-population', async () =>
+  loadRankedAccounts(context.db, await read(context, 'weightings', () => getSetting(context.db, 'position_weights'))));
+
+const Ranking = new GraphQLObjectType({
+  name: 'AccountRanking',
+  fields: {
+    score: { type: nonNull(GraphQLFloat) }, percentile: { type: nonNull(GraphQLFloat) },
+    ranked: { type: nonNull(GraphQLBoolean) }, gamesPlayed: { type: nonNull(GraphQLInt) },
+    tier: { type: nonNull(GraphQLString) },
+  },
+});
+const CardStatCell = new GraphQLObjectType({
+  name: 'AccountCardStatCell', fields: { label: { type: nonNull(GraphQLString) }, value: { type: nonNull(GraphQLString) } },
+});
+const CardStatSeason = new GraphQLObjectType({
+  name: 'AccountCardStatSeason', fields: {
+    season: { type: GraphQLString }, cells: { type: nonNullList(CardStatCell) },
+  },
+});
 
 const publicAccountFields = {
   id: { type: nonNull(GraphQLID), description: 'Stable account identifier.' },
@@ -14,6 +37,8 @@ const publicAccountFields = {
   country: { type: GraphQLString, description: 'Country code, if provided.' },
   stats: { type: nonNull(JSONScalar), description: 'Aggregate league statistics.' },
   seasonStats: { type: nonNull(JSONScalar), description: 'Statistics grouped by season, including all-time totals.' },
+  ranking: { type: nonNull(Ranking), description: 'Server-calculated position-relative player rating.' },
+  cardStats: { type: nonNullList(CardStatSeason), description: 'Formatted player card statistics by season.' },
   awards: { type: nonNull(JSONScalar), description: 'Player awards.' },
   championships: { type: nonNull(JSONScalar), description: 'Team championship placements.' },
   totwUntil: { type: GraphQLFloat, description: 'Epoch milliseconds when the current selection expires.' },
@@ -27,6 +52,28 @@ const Account = new GraphQLObjectType({
   name: 'Account',
   description: 'Public account profile and league statistics.',
   fields: publicAccountFields,
+});
+
+const previews = [
+  { username: 'Rookie', position: POS.ST, score: 66, percentile: 0.43333333333333335, tier: 'BRONZE', description: 'Bottom 40% of position', stats: { games: 15, wins: 4, draws: 3, losses: 8, goals: 3, assists: 2, passes: 18, tackles: 12, deflects: 0, cleanSheets: 1, catches: 0, motm: 0 }, awards: [] },
+  { username: 'Solid', position: POS.CM, score: 66, percentile: 0.43333333333333335, tier: 'SILVER', description: 'Next 30% (40th–70th %ile)', stats: { games: 15, wins: 7, draws: 3, losses: 5, goals: 8, assists: 6, passes: 24, tackles: 22, deflects: 0, cleanSheets: 2, catches: 0, motm: 0 }, awards: [] },
+  { username: 'Vet', position: POS.DEF, score: 79, percentile: 0.65, tier: 'GOLD', description: 'Country flag shows on the card', stats: { games: 15, wins: 9, draws: 3, losses: 3, goals: 18, assists: 11, passes: 32, tackles: 38, deflects: 0, cleanSheets: 4, catches: 0, motm: 0 }, awards: [], country: 'Canada' },
+  { username: 'Champion', position: POS.ST, score: 88, percentile: 0.8, tier: 'DIAMOND', description: 'Award winners get a black name bar', stats: { games: 15, wins: 12, draws: 2, losses: 1, goals: 38, assists: 22, passes: 36, tackles: 22, deflects: 0, cleanSheets: 0, catches: 0, motm: 0 }, awards: [{ awardId: 'striker', season: 'S1', assignedBy: 'admin', assignedAt: 0 }] },
+  { username: 'Decorated', position: POS.CM, score: 66, percentile: 0.43333333333333335, tier: 'SILVER', description: 'Black name bar shows on any tier', stats: { games: 15, wins: 7, draws: 3, losses: 5, goals: 8, assists: 6, passes: 24, tackles: 22, deflects: 0, cleanSheets: 2, catches: 0, motm: 0 }, awards: [{ awardId: 'playmaker', season: 'S1', assignedBy: 'admin', assignedAt: 0 }] },
+].map((sample, index) => {
+  const account = {
+    id: `preview-${index}`, username: sample.username, position: sample.position, teamId: null, imageUrl: null,
+    country: 'country' in sample ? sample.country : null, stats: sample.stats, seasonStats: { all: sample.stats },
+    awards: sample.awards, championships: [], totwUntil: null, cheater: false, strikersId: null, steamUrl: null, createdAt: 0,
+    ranking: { score: sample.score, percentile: sample.percentile, ranked: true, gamesPlayed: 15, tier: sample.tier },
+    cardStats: [],
+  };
+  return { label: sample.tier + (sample.awards.length > 0 ? ' + AWARD' : ''), description: sample.description, account: { ...account, cardStats: calculateCardStats(account) } };
+});
+const AccountCardPreview = new GraphQLObjectType({
+  name: 'AccountCardPreview', fields: {
+    label: { type: nonNull(GraphQLString) }, description: { type: nonNull(GraphQLString) }, account: { type: nonNull(Account) },
+  },
 });
 
 const CurrentAccount = new GraphQLObjectType({
@@ -61,13 +108,20 @@ export const queryFields = {
     type: nonNullList(Account),
     description: 'Public account profiles.',
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
-      read(context, 'accounts', () => listAccounts(context.db, context.request)),
+      read(context, 'accounts', async () => listAccounts(context.db, context.request, await accountPopulation(context))),
   },
   me: {
     type: CurrentAccount,
     description: 'The current authenticated account, if provisioned.',
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
-      read(context, 'current-account', () => getCurrentAccount(context.db, context.request)),
+      read(context, 'current-account', async () => {
+        const accounts = context.request.identity ? await accountPopulation(context) : undefined;
+        return getCurrentAccount(context.db, context.request, accounts);
+      }),
+  },
+  accountCardPreviews: {
+    type: nonNullList(AccountCardPreview), description: 'Sample player cards with server-computed rating and statistics.',
+    resolve: () => previews,
   },
   accountMatches: {
     type: nonNull(AccountMatchPage),

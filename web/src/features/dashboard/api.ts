@@ -5,7 +5,7 @@ import {
   type MemberLeagueDataQuery,
   type PublicLeagueDataQuery,
 } from '../../api/generated/graphql';
-import { isRole, type Weightings } from '../admin/models';
+import { isRole } from '../admin/models';
 import { mapAccount } from '../accounts/api';
 import type { Account } from '../accounts/models';
 import { teamRecordsSchema, type TeamRecord } from '@napl/contracts/matches';
@@ -15,19 +15,6 @@ import { mapTeam } from '../teams/api';
 import type { Team } from '../teams/models';
 import { mapVotingPeriod } from '../voting/api';
 import type { VotingPeriod } from '../voting/models';
-
-const isRecord = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
-const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-
-function mapWeightings(value: unknown): Weightings | null {
-  if (value === null) return null;
-  if (!isRecord(value)) throw new Error('Invalid GraphQL weightings data.');
-  const positions = Object.entries(value).map(([position, weights]) => {
-    if (!isRecord(weights) || Object.values(weights).some(weight => !isNumber(weight))) throw new Error('Invalid GraphQL weightings data.');
-    return [position, weights];
-  });
-  return Object.fromEntries(positions) as Weightings;
-}
 
 export function mapPublicLeague(data: PublicLeagueDataQuery): { players: Account[]; teams: Team[]; teamRecords: TeamRecord[] } {
   const records = teamRecordsSchema.safeParse(data.teamRecords);
@@ -39,7 +26,6 @@ export function mapMemberLeague(data: MemberLeagueDataQuery): {
   players: Account[];
   teams: Team[];
   currentSeason: string;
-  weightings: Weightings | null;
   news: News[];
   tickerNews: News[];
   periods: VotingPeriod[];
@@ -53,7 +39,7 @@ export function mapMemberLeague(data: MemberLeagueDataQuery): {
   };
   return {
     players: data.accounts.map(mapAccount), teams: data.teams.map(mapTeam), currentSeason: data.season,
-    weightings: mapWeightings(data.weightings), news, tickerNews: news.slice(0, 8),
+    news, tickerNews: news.slice(0, 8),
     periods: data.votingPeriods.map(mapVotingPeriod), me,
   };
 }

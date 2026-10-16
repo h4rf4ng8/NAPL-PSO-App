@@ -1,16 +1,15 @@
 import { Flag, User } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
-import type { Account, Rankings } from '../accounts/models';
+import type { Account } from '../accounts/models';
 import type { News } from './models';
 import type { Team } from '../teams/models';
 import { ArticleCard, QuickStat, ResultRow, Section } from '../../components/Ui';
 import { C } from '../../theme/theme';
 import { COUNTRIES, flagUrl } from '../../utils/league';
-import { getPlayerRanking, tierFromPercentile } from '../../utils/rankings';
 
 // ============ HOME (LANDING PAGE) ============
-export const HomeView = ({ account, allPlayers, allTeams, news, rankings, currentSeason, onJump, onUpdate }: { account: Account; allPlayers: Account[]; allTeams: Team[]; news: News[]; rankings?: Rankings | null; currentSeason: string; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
+export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, onJump, onUpdate }: { account: Account; allPlayers: Account[]; allTeams: Team[]; news: News[]; currentSeason: string; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
   const [editingCountry, setEditingCountry] = useState(false);
   const [countryInput, setCountryInput] = useState('');
   const [countryBusy, setCountryBusy] = useState(false);
@@ -70,7 +69,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, rankings, curren
   };
 
   
-  const myRanking = getPlayerRanking(account, rankings);
+  const myRanking = account.ranking;
 
   const announcements = news.filter(n => n.type === 'announcement').sort((a, b) => {
     return a.pinned === b.pinned ? b.createdAt - a.createdAt : Number(b.pinned) - Number(a.pinned);
@@ -84,7 +83,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, rankings, curren
 
   // Top 3 players this season per leaderboard score
   const topPlayers = [...allPlayers]
-    .map(p => ({ player: p, score: getPlayerRanking(p, rankings).score, ranked: getPlayerRanking(p, rankings).ranked }))
+    .map(p => ({ player: p, score: p.ranking.score, ranked: p.ranking.ranked }))
     .filter(x => x.ranked)
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
@@ -142,7 +141,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, rankings, curren
 
       {/* QUICK STATS STRIP */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <QuickStat label="YOUR TIER" value={myRanking.ranked ? tierFromPercentile(myRanking.percentile) : '—'} accent={C.goldLight} />
+        <QuickStat label="YOUR TIER" value={myRanking.ranked ? myRanking.tier : '—'} accent={C.goldLight} />
         <QuickStat label="GAMES PLAYED" value={account.stats?.games || 0} accent={C.green} />
         <QuickStat label="LEAGUE PLAYERS" value={allPlayers.length} accent={C.brandNavy} />
         <QuickStat label="ACTIVE TEAMS" value={allTeams.filter(t => t.status === 'approved').length} accent={C.red} />

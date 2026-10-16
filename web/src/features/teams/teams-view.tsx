@@ -1,8 +1,8 @@
 import { Clock, Crown, Plus, Users, X, XCircle } from 'lucide-react';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { teams as teamApi } from './api';
 import { accounts as accountApi } from '../accounts/api';
-import type { Account, Rankings } from '../accounts/models';
+import type { Account } from '../accounts/models';
 import type { Team } from './models';
 import { auth } from '../../auth/session';
 import { useResource } from '../../hooks/use-resource';
@@ -19,7 +19,7 @@ import { TeamRosterFormation } from './roster';
 // ============ PLAYER CARD MODAL ============
 // Opens a full-size player card on top of the page with front/back both visible.
 // Click either card face to flip that face inline, or the X to close.
-export const PlayerCardModal = ({ player, team, rankings, onClose }: { player: Account; team?: Team | null | undefined; rankings?: Rankings | null; onClose: () => void }) => {
+export const PlayerCardModal = ({ player, team, onClose }: { player: Account; team?: Team | null | undefined; onClose: () => void }) => {
   const dialogRef = useDialog(onClose);
 
   return (
@@ -44,7 +44,7 @@ export const PlayerCardModal = ({ player, team, rankings, onClose }: { player: A
         <div className="flex flex-col sm:flex-row justify-center items-center gap-6 sm:gap-10">
           <div className="text-center">
             <div className="font-mono text-[10px] tracking-[0.3em] mb-2" style={{ color: `${C.white}88` }}>FRONT · TAP TO FLIP</div>
-            <PlayerCard account={player} size="lg" team={team} rankings={rankings} />
+            <PlayerCard account={player} size="lg" team={team} />
           </div>
         </div>
         <div className="text-center mt-4 font-mono text-[10px] tracking-widest" style={{ color: `${C.white}66` }}>
@@ -56,7 +56,7 @@ export const PlayerCardModal = ({ player, team, rankings, onClose }: { player: A
 };
 
 // ============ TEAMS VIEW ============
-export const TeamsView = ({ account, onUpdate, rankings, currentSeason: _currentSeason = 'S1' }: { account: Account; onUpdate: (account:Account) => void; rankings?: Rankings | null; currentSeason?: string }) => {
+export const TeamsView = ({ account, onUpdate, currentSeason: _currentSeason = 'S1' }: { account: Account; onUpdate: (account:Account) => void; currentSeason?: string }) => {
   const { data, error: loadError, reload } = useResource(async () => {
     const [teams, allPlayers] = await Promise.all([teamApi.listTeams(), accountApi.listAccounts()]);
     return { teams, allPlayers };
@@ -293,7 +293,6 @@ export const TeamsView = ({ account, onUpdate, rankings, currentSeason: _current
             <TeamRosterFormation
               team={selected}
               allPlayers={allPlayers}
-              rankings={rankings}
               onCardClick={(player) => setViewingPlayerCard(player)}
               isCaptain={isTeamCaptain(account, selected)}
               onLineupSaved={() => { void reload(); }}
@@ -306,7 +305,6 @@ export const TeamsView = ({ account, onUpdate, rankings, currentSeason: _current
         <PlayerCardModal
           player={viewingPlayerCard}
           team={selected}
-          rankings={rankings}
           onClose={() => setViewingPlayerCard(null)}
         />
       )}

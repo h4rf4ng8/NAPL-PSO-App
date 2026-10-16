@@ -1,0 +1,14 @@
+.git
+.aws
+.agents
+.codex
+**/node_modules
+**/dist
+**/.build
+**/.vercel
+api/generated
+**/.env*
+**/secrets
+**/coverage
+*.log
+.DS_Store

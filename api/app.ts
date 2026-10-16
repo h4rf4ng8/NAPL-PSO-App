@@ -5,7 +5,7 @@ import { object, string } from './plugins/db/records.js';
 import { HttpError, type Identity, actor, isAdmin, requireMember, requireActiveSession, roles } from './plugins/auth/identity.js';
 import { registerAccounts } from './routes/accounts/index.js';
 import { registerTeams } from './routes/teams/index.js';
-import { registerContent } from './routes/content/index.js';
+import { registerContent } from './routes/content/routes.js';
 import { registerMatches } from './routes/matches/index.js';
 import { registerVoting } from './routes/voting/index.js';
 import { registerAdmin } from './routes/admin/index.js';

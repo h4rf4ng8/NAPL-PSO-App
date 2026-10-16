@@ -2,6 +2,7 @@ import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLObjectType, GraphQLStri
 import { nonNull, nonNullList } from '../graphql/types.js';
 import { read, type GraphQLContext } from '../graphql/context.js';
 import { listNews } from './queries.js';
+import { newsDto } from './dto.js';
 
 const News = new GraphQLObjectType({
   name: 'News',
@@ -29,6 +30,9 @@ export const queryFields = {
     type: nonNullList(News),
     description: 'Public news items in storage order.',
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
-      read(context, 'news', () => listNews(context.db)),
+      read(context, 'news', async () => {
+        const rows = await listNews(context.db);
+        return rows.map(row => newsDto(row));
+      }),
   },
 };

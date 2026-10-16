@@ -1,5 +1,7 @@
 import { Prisma, type Database, type Row } from './client.js';
 import { HttpError } from '../auth/identity.js';
+// Match the old id::text comparisons, including noncanonical UUIDs being absent.
+export const isCanonicalUuid = (value: string): boolean => /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/.test(value);
 // Identifiers are exclusively constants from route registration, never request input.
 const identifier = (s: string) => {
     if (!/^[a-z_][a-z0-9_]*$/.test(s))

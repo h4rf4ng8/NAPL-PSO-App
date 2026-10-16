@@ -34,6 +34,7 @@
     "@graphql-codegen/typed-document-node": "7.2.0",
     "@graphql-codegen/typescript-operations": "6.1.10",
     "@graphql-typed-document-node/core": "3.2.0",
+    "@types/node": "^24.19.2",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "@vitejs/plugin-react": "4.7.0",

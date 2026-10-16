@@ -407,14 +407,14 @@ The role accepts only this repository's `Production` environment identity. GitHu
 
 ### Deploy the API
 
-The [CI/CD workflow](.github/workflows/ci-cd.yml) runs once per push and reports one **CI** check. Its steps and summary follow **Lint → Test → Build → Deploy**, with each operation named separately. Deployment steps run only on `main`, using the `Production` environment; other branches use `CI` without creating deployment records. Prepare the production configuration before merging the deployment changes into `main`.
+The [CI/CD workflow](.github/workflows/ci-cd.yml) runs once per push. Its summary shows four sequential jobs: **Lint → Test → Build → Deploy**. Each job starts only after the preceding job succeeds, and Deploy runs only for pushes to `main`. Prepare the production configuration before merging the deployment changes into `main`.
 
-| Section | What happens |
+| Stage | What happens |
 | --- | --- |
 | Lint | Run ESLint with zero warnings allowed. Then generate the Prisma client, check GraphQL freshness, type-check every workspace, and validate both SAM templates. Each operation has its own named step and log entry. |
-| Test | Run API and web tests against disposable PostgreSQL. The test command prepares the shared contracts it needs. |
-| Build | Build shared contracts, bundle Lambda, and build the frontend and proxy in separate ordered steps. Verify the finished Lambda ZIP outside the repository against disposable PostgreSQL. On `main`, upload that exact tested ZIP and template for deployment. |
-| Deploy | Use the verified package from the preceding Build steps, validate production configuration, confirm that the commit is still current on `main`, obtain temporary credentials, and update the `napl-api` stack in Ohio. Confirm that anonymous Function URL access is rejected and invoke the live alias to read the current season. Clean up deployment parameter files even on failure. Deployments run one at a time. |
+| Test | Generate the test runner's Prisma client, then run API and web tests against disposable PostgreSQL. The test command prepares the shared contracts it needs. |
+| Build | Generate the build's Prisma client, build shared contracts, bundle Lambda, and build the frontend and proxy in separate ordered steps. Verify the finished Lambda ZIP outside the repository against disposable PostgreSQL. On `main`, upload that exact tested ZIP and template for deployment. |
+| Deploy | Download the tested artifact without rebuilding it, validate production configuration, confirm that the commit is still current on `main`, obtain temporary credentials, and update the `napl-api` stack in Ohio. Confirm that anonymous Function URL access is rejected and invoke the live alias to read the current season. Clean up deployment parameter files even on failure. Deployments run one at a time. |
 
 The [parameter generator](api/scripts/sam-env.mjs) validates production settings, checks Lambda's 4 KiB environment limit, and writes a protected parameter file. The workflow removes its secret files after each run; they are never deployment artifacts. Avoid SAM debug logging because it can reveal parameters.
 

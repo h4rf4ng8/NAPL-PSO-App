@@ -1,0 +1,13 @@
+packages:
+  - web
+  - api
+  - pkgs/*
+
+overrides:
+  deepmerge-ts: 8.0.2
+  mysql2: 3.24.6
+
+onlyBuiltDependencies:
+  - '@prisma/engines'
+  - esbuild
+  - prisma

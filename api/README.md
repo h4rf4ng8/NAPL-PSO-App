@@ -71,12 +71,12 @@ Session renewal coordinates through PostgreSQL so API instances can share refres
 
 ## Running Locally
 
-Use Node 24 and npm 11. Complete the root [local development setup](../README.md#local-development) first, including generated code and the provider/database values described in the [environment example](.env.example).
+Use Node 24 and pnpm 10.15.1. Complete the root [local development setup](../README.md#local-development) first, including generated code and the provider/database values described in the [environment example](.env.example).
 
 Run from the repository root:
 
 ```sh
-npm run dev:api
+pnpm run dev:api
 ```
 
 The development command runs environment setup first, preserves configured cookie keys, reads the local environment file, and watches the API source for changes. The default listener is `http://127.0.0.1:3000`; `HOST` and `PORT` can override it. Run the web app in another terminal so its development proxy supplies the API's origin secret and client address.
@@ -87,9 +87,9 @@ After initial setup, run these commands from the repository root:
 
 | Command | Purpose |
 | --- | --- |
-| `npm run typecheck -w @napl/api` | Check API TypeScript. |
-| `npm run test:db -w @napl/api` | Run API tests against a disposable PostgreSQL database. |
-| `npm run build -w @napl/api` | Build the Lambda package. |
+| `pnpm --filter @napl/api run typecheck` | Check API TypeScript. |
+| `pnpm --filter @napl/api run test:db` | Run API tests against a disposable PostgreSQL database. |
+| `pnpm --filter @napl/api run build` | Build the Lambda package. |
 
 The database test command requires Docker. It builds the contracts and API, creates a disposable PostgreSQL database, applies fixtures and migrations, and runs the API tests. The build produces `api/dist/api.zip` for Lambda. The root [checks](../README.md#checks) also cover frontend integration, GraphQL generation, and the packaged handler outside the repository.
 

@@ -13,7 +13,6 @@ const schema = z.object({
   DISCORD_CLIENT_SECRET: z.string().min(1),
   DISCORD_GUILD_ID: z.string().regex(/^\d+$/),
   DATABASE_URL: z.string().min(1),
-  AUTH_DATABASE_URL: z.string().min(1),
   COOKIE_KEYS: z.string().min(1),
   DISCORD_TRANSFER_WEBHOOK: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
   ORIGIN_SECRET: z.string().min(32),
@@ -32,11 +31,9 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
     throw new Error('DISCORD_TRANSFER_WEBHOOK must use HTTPS in production');
   }
   if (config.NODE_ENV === 'production') {
-    for (const name of ['DATABASE_URL', 'AUTH_DATABASE_URL'] as const) {
-      const url = new URL(config[name]);
-      if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.get('sslmode') !== 'verify-full') {
-        throw new Error(`${name} must use PostgreSQL with sslmode=verify-full in production`);
-      }
+    const url = new URL(config.DATABASE_URL);
+    if (!['postgres:', 'postgresql:'].includes(url.protocol) || url.searchParams.get('sslmode') !== 'verify-full') {
+      throw new Error('DATABASE_URL must use PostgreSQL with sslmode=verify-full in production');
     }
   }
   return config;

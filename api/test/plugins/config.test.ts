@@ -11,7 +11,6 @@ const environment = {
   DISCORD_CLIENT_SECRET: 'secret',
   DISCORD_GUILD_ID: '456',
   DATABASE_URL: 'postgres://localhost/test',
-  AUTH_DATABASE_URL: 'postgres://localhost/auth-test',
   COOKIE_KEYS: JSON.stringify({ key: Buffer.alloc(32).toString('base64') }),
 };
 
@@ -22,7 +21,7 @@ test('origin secret has the same minimum length in test and production', () => {
 });
 
 test('production browser origin requires HTTPS', () => {
-  const production = { ...environment, NODE_ENV: 'production', DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full', AUTH_DATABASE_URL: 'postgres://db.example/auth?sslmode=verify-full', ORIGIN_SECRET: 'x'.repeat(32) };
+  const production = { ...environment, NODE_ENV: 'production', DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full', ORIGIN_SECRET: 'x'.repeat(32) };
   assert.throws(() => readConfig({ ...production, PUBLIC_ORIGIN: 'http://league.example' }), /HTTPS/);
   assert.equal(readConfig({ ...production, PUBLIC_ORIGIN: 'https://league.example' }).PUBLIC_ORIGIN, 'https://league.example');
 });
@@ -34,8 +33,10 @@ test('blank optional SAM values are treated as absent', () => {
 });
 
 
-test('production database connections require verified TLS for both roles', () => {
+test('production uses one database URL and requires PostgreSQL with verified TLS', () => {
   const production = { ...environment, NODE_ENV: 'production', PUBLIC_ORIGIN: 'https://league.example', ORIGIN_SECRET: 'x'.repeat(32) };
   assert.throws(() => readConfig(production), /DATABASE_URL.*verify-full/);
-  assert.throws(() => readConfig({ ...production, DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full' }), /AUTH_DATABASE_URL.*verify-full/);
+  assert.throws(() => readConfig({ ...production, DATABASE_URL: 'https://db.example/app?sslmode=verify-full' }), /DATABASE_URL.*PostgreSQL/);
+  const url = 'postgres://db.example/app?sslmode=verify-full';
+  assert.equal(readConfig({ ...production, DATABASE_URL: url }).DATABASE_URL, url);
 });

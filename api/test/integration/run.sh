@@ -2,8 +2,10 @@
 set -euo pipefail
 repo="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$repo"
-npm run build -w @napl/contracts
-npm run build -w @napl/api
+if [[ "${1:-}" != "--tests" && "${1:-}" != "--package" ]]; then
+  npm run build -w @napl/contracts
+  npm run build -w @napl/api
+fi
 db_container="napl-api-check-$$"
 test_network="napl-check-$$"
 trap 'docker rm -f "$db_container" >/dev/null 2>&1 || true; docker network rm "$test_network" >/dev/null 2>&1 || true' EXIT
@@ -19,21 +21,21 @@ done
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/rbac.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/role_audit.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test >/dev/null <<'SQL'
-CREATE ROLE gateway_test LOGIN PASSWORD 'napl_test_only' NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS INHERIT;
-GRANT gateway_runtime TO gateway_test;
 INSERT INTO auth.users(id) VALUES ('fef79a51-49a9-45c9-a2a5-99d7b601e497');
 SQL
 db_port="$(docker port "$db_container" 5432/tcp | sed 's/.*://')"
 api_test_db="postgresql://api_test:napl_test_only@127.0.0.1:${db_port}/napl_test"
-auth_test_db="postgresql://gateway_test:napl_test_only@127.0.0.1:${db_port}/napl_test"
 export API_TEST_DATABASE_URL="$api_test_db"
-export AUTH_TEST_DATABASE_URL="$auth_test_db"
 export API_TEST_ADMIN_DATABASE_URL="postgresql://postgres:napl_test_only@127.0.0.1:${db_port}/napl_test"
 if [[ "${1:-}" == "--api" ]]; then
   npm test -w @napl/api
+elif [[ "${1:-}" == "--package" ]]; then
+  npm run test:package -w @napl/api
 else
   npm test
-  npm run test:package -w @napl/api
+  if [[ "${1:-}" != "--tests" ]]; then
+    npm run test:package -w @napl/api
+  fi
 fi
 
 if [[ "${NAPL_SAM_TEST:-0}" == "1" ]]; then

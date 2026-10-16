@@ -407,7 +407,7 @@ The role accepts only this repository's `Production` environment identity. GitHu
 
 ### Deploy the API
 
-The [Validate and Deploy Lambda workflow](.github/workflows/ci-cd.yml) validates pushes and pull requests. Only a successful push to `main` can deploy to AWS. Prepare the production configuration before merging the deployment changes into `main`.
+The [Validate and Deploy Lambda workflow](.github/workflows/ci-cd.yml) runs once per push, with generation checks, types, lint, builds, template validation, and integration tests in order. Pushes to `main` continue to AWS deployment after validation succeeds. Prepare the production configuration before merging the deployment changes into `main`.
 
 | Stage | What happens |
 | --- | --- |

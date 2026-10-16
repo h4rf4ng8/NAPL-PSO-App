@@ -5,7 +5,7 @@ import { HttpError } from '../../plugins/auth/identity.js';
 export type AdminDto = { userId: string; username: string | null; role: string };
 
 export async function listAdmins(database: Database): Promise<AdminDto[]> {
-  // Keep the join until these scalar Prisma models need relation fields elsewhere.
+  // Project the cross-schema join directly without loading unused account fields.
   return database.query<AdminDto>(Prisma.sql `SELECT r.user_id::text AS "userId",a.username,r.role FROM auth_gateway.user_roles r JOIN public.accounts a ON a.id=r.user_id ORDER BY a.username`);
 }
 

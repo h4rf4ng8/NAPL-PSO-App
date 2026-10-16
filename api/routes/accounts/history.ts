@@ -33,6 +33,7 @@ export async function accountMatches(database: Database, args: {
   const after = afterValue === null ? null : decodeCursor(afterValue);
   if (after && (after.id !== id || after.season !== season || after.opponent !== opponent)) throw new HttpError(400, 'cursor_filter_mismatch');
 
+  // JSON ordinality and xmin bind each page to the same stored history snapshot.
   const rows = await database.query<Row>(Prisma.sql`WITH target AS (
     SELECT id::text AS id, xmin::text AS version, matches FROM public.accounts WHERE id=${id}::uuid
   ), page AS (
@@ -65,6 +66,7 @@ export async function accountMatches(database: Database, args: {
 
 export async function accountOpponents(database: Database, idValue: string): Promise<AccountOpponent[]> {
   const id = accountIdSchema.parse(idValue);
+  // Aggregate historical JSON in PostgreSQL without returning the full match history.
   const rows = await database.query<Row>(Prisma.sql`SELECT
     COALESCE(NULLIF(m.value->>'opponent',''),'Unknown') AS opponent, count(*)::int AS games,
     count(*) FILTER (WHERE m.value->>'result'='W')::int AS w,

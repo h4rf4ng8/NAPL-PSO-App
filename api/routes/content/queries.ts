@@ -24,7 +24,7 @@ export function listNews(db: Database) {
 }
 
 export async function upsertNews(db: Database, input: NewsInput, author: string) {
-  // Prisma upsert does not lock the existing row before deciding whether to insert.
+  // Preserve the original pre-update row lock inside the route transaction.
   const existing = await db.query<{ id: string }>(Prisma.sql`SELECT id FROM public.news WHERE id=${input.id} FOR UPDATE`);
   const data = { ...newsData(input), author };
   return existing.length > 0

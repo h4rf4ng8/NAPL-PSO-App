@@ -24,8 +24,8 @@ See the root README for the [system architecture](../README.md#system-architectu
 | [createApp()](app.ts) | Registers routes and applies request, session, permission, and error handling. |
 | [createRuntime()](plugins/runtime.ts) | Connects the application to PostgreSQL, Supabase Auth, and Discord, then supplies those dependencies to the app. |
 | [GraphQL routes](routes/graphql/) | Validate and execute read queries. The schema combines fields defined by each league area. |
-| [League routes](routes/) | Handle accounts, teams, matches, content, voting, settings, and administrator actions. |
-| [Database and connectDatabase()](plugins/db/client.ts) | Provide parameterized SQL access and transactions through Prisma. [Record helpers](plugins/db/records.ts) load and save rows and prepare responses. |
+| [League routes](routes/) | Keep request validation, authorization, and HTTP handling in each feature’s `routes.ts`, database operations in `queries.ts`, and response mapping in `dto.ts`. |
+| [Database and connectDatabase()](plugins/db/client.ts) | Expose typed Prisma models, parameterized SQL, and Serializable transactions. [Record utilities](plugins/db/records.ts) normalize historical JSON and dates and preserve UUID text matching. |
 | [createSession()](plugins/auth/session.ts) and [SessionRefresher](plugins/session/refresh.ts) | Handle sign-in, session renewal, sign-out, and checks on API requests. |
 | [SupabaseClient](plugins/supabase/client.ts) and [DiscordClient](plugins/discord/client.ts) | Exchange and verify credentials, renew provider sessions, and check Discord identity and guild membership. |
 | [PostgresAuthStore](plugins/session/pg-store.ts) and [PostgresMembershipStore](plugins/membership/store.ts) | Persist login replay protection, request quotas, refresh coordination, and membership eligibility. |

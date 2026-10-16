@@ -48,6 +48,7 @@ test('match aggregates recompute each result and numeric stat', () => {
 });
 test('unlisted routes and mutations require identity by default', async () => {
     const database: Database = {
+        client: { setting: { findUnique: async () => null } } as unknown as Prisma.TransactionClient,
         query: async <T extends Row>() => [] as T[], execute: async () => 0, transaction: async (work) => work(database), close: async () => {}
     };
     const app = createApp({

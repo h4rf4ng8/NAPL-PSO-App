@@ -8,7 +8,7 @@ import { DiscordClient } from './discord/client.js';
 import { connectDatabase } from './db/client.js';
 import { PostgresAuthStore } from './session/pg-store.js';
 import { PostgresMembershipStore } from './membership/store.js';
-import { provisionAccount } from '../routes/accounts/provision.js';
+import { provisionAccount } from '../routes/accounts/queries.js';
 import { SupabaseClient } from './supabase/client.js';
 
 export function createRuntime(config: Config): Dependencies {

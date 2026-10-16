@@ -6,7 +6,6 @@
   "scripts": {
     "setup:env": "node --import tsx scripts/setup-env.mjs",
     "env:sam": "node --import tsx scripts/sam-env.mjs",
-    "predev": "pnpm run setup:env",
     "dev": "node --env-file-if-exists=.env --import tsx --watch dev.ts",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",

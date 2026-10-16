@@ -1,104 +1,146 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
+import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { parseEnv } from 'node:util';
 import { setupEnv } from '../../scripts/setup-env.mjs';
+import { CookieCrypto } from '../../plugins/session/crypto.js';
 
 async function fixture(t: { after(fn: () => Promise<void>): void }) {
-  const dir = await mkdtemp(path.join(tmpdir(), 'napl-env-'));
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const envPath = path.join(dir, '.env');
-  const examplePath = path.join(dir, '.env.example');
-  return { envPath, examplePath };
+  const root = await mkdtemp(path.join(tmpdir(), 'napl-env-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'api'));
+  await mkdir(path.join(root, 'web'));
+  const api = path.join(root, 'api/.env');
+  const web = path.join(root, 'web/.env');
+  await copyFile(new URL('../../.env.example', import.meta.url), `${api}.example`);
+  await copyFile(new URL('../../../web/.env.example', import.meta.url), `${web}.example`);
+  return { root, api, web };
 }
 
-test('creates a private env file and generates a valid cookie key once', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  await writeFile(examplePath, 'OTHER=value\nCOOKIE_KEYS=REPLACE_WITH_A_JSON_KEY_RING\n');
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Generated COOKIE_KEYS');
-  const contents = await readFile(envPath, 'utf8');
-  const keyRing = JSON.parse(contents.split('COOKIE_KEYS=', 2)[1].trim().slice(1, -1));
-  assert.equal(Buffer.from(keyRing.v1, 'base64').length, 32);
-  assert.match(contents, /^OTHER=value\n/);
-  assert.equal((await stat(envPath)).mode & 0o777, 0o600);
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Existing COOKIE_KEYS preserved');
-  assert.equal(await readFile(envPath, 'utf8'), contents);
+test('sets up private app env files once and gives web only its origin secret', async t => {
+  const { root, api, web } = await fixture(t);
+  await setupEnv(root);
+  const apiText = await readFile(api, 'utf8');
+  const webText = await readFile(web, 'utf8');
+  const values = parseEnv(apiText);
+  const webValues = parseEnv(webText);
+  assert.doesNotThrow(() => new CookieCrypto(values.COOKIE_KEYS));
+  assert.match(values.ORIGIN_SECRET, /^[\da-f]{64}$/);
+  assert.match(values.GOTRUE_JWT_SECRET, /^[\da-f]{64}$/);
+  assert.notEqual(values.ORIGIN_SECRET, values.GOTRUE_JWT_SECRET);
+  const [jwk] = JSON.parse(values.GOTRUE_JWT_KEYS);
+  assert.equal(jwk.alg, 'ES256');
+  const key = createPrivateKey({ key: jwk, format: 'jwk' });
+  const message = Buffer.from('local auth');
+  assert.ok(verify('sha256', message, createPublicKey(key), sign('sha256', message, key)));
+  assert.deepEqual(webValues, { LOCAL_API_URL: 'http://127.0.0.1:3000', ORIGIN_SECRET: values.ORIGIN_SECRET });
+  assert.equal((await stat(api)).mode & 0o777, 0o600);
+  assert.equal((await stat(web)).mode & 0o777, 0o600);
+  await setupEnv(root);
+  assert.equal(await readFile(api, 'utf8'), apiText);
+  assert.equal(await readFile(web, 'utf8'), webText);
 });
 
-test('preserves existing real keys and all other env text byte-for-byte', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  const original = `# retained\r\nCOOKIE_KEYS='${JSON.stringify({ keep: Buffer.alloc(32, 7).toString('base64') })}'\r\nVALUE=untouched\r\n`;
-  await writeFile(envPath, original);
-  await writeFile(examplePath, 'unused');
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Existing COOKIE_KEYS preserved');
-  assert.equal(await readFile(envPath, 'utf8'), original);
+test('preserves existing keys, exported assignments, comments, and line endings', async t => {
+  const { root, api, web } = await fixture(t);
+  await setupEnv(root);
+  const originalApi = `# retained\r\n${(await readFile(api, 'utf8')).replace(/^COOKIE_KEYS=/m, 'export COOKIE_KEYS=').replaceAll('\n', '\r\n')}OTHER=untouched\r\n`;
+  const originalWeb = (await readFile(web, 'utf8')).replace(/ORIGIN_SECRET=(.*)/, 'export ORIGIN_SECRET=$1 # retained');
+  await writeFile(api, originalApi);
+  await writeFile(web, originalWeb);
+  await setupEnv(root);
+  assert.equal(await readFile(api, 'utf8'), originalApi);
+  assert.equal(await readFile(web, 'utf8'), originalWeb);
 });
 
-test('fails on malformed existing cookie keys without replacing or printing them', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  const secretish = 'COOKIE_KEYS={not-json-secret}\n';
-  await writeFile(envPath, secretish);
-  await writeFile(examplePath, 'COOKIE_KEYS=REPLACE_WITH_A_JSON_KEY_RING\n');
-  await assert.rejects(setupEnv(envPath, examplePath, {}), error => {
-    assert.match(error.message, /COOKIE_KEYS/);
-    assert.doesNotMatch(error.message, /not-json-secret/);
-    return true;
-  });
-  assert.equal(await readFile(envPath, 'utf8'), secretish);
+test('concurrent setup calls preserve the same keys and leave matching origins', async t => {
+  const { root, api, web } = await fixture(t);
+  await Promise.all([setupEnv(root), setupEnv(root)]);
+  const first = await readFile(api, 'utf8');
+  assert.equal(parseEnv(first).ORIGIN_SECRET, parseEnv(await readFile(web, 'utf8')).ORIGIN_SECRET);
+  await setupEnv(root);
+  assert.equal(await readFile(api, 'utf8'), first);
 });
 
-test('concurrent setup calls keep the same generated key', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  await writeFile(examplePath, 'COOKIE_KEYS=REPLACE_WITH_A_JSON_KEY_RING\n');
-  const results = await Promise.all([setupEnv(envPath, examplePath, {}), setupEnv(envPath, examplePath, {})]);
-  assert.equal(results.includes('Existing COOKIE_KEYS preserved'), true);
-  assert.equal(results.includes('Generated COOKIE_KEYS'), true);
-  const contents = await readFile(envPath, 'utf8');
-  const ring = JSON.parse(contents.match(/COOKIE_KEYS='(.*)'/)?.[1] ?? '{}');
-  assert.equal(Buffer.from(ring.v1, 'base64').length, 32);
+test('rejects malformed keys before changing either env file without exposing values', async t => {
+  for (const [name, value] of [
+    ['COOKIE_KEYS', '{not-json-secret}'],
+    ['COOKIE_KEYS', JSON.stringify({ key: `${Buffer.alloc(32).toString('base64')}!` })],
+    ['ORIGIN_SECRET', 'short-secret'],
+    ['GOTRUE_JWT_SECRET', 'short-secret'],
+    ['GOTRUE_JWT_KEYS', '{not-jwk-secret}'],
+    ['GOTRUE_JWT_KEYS', '[]'],
+  ]) {
+    const { root, api, web } = await fixture(t);
+    const apiText = `${name}='${value}'\n`;
+    const webText = '# unchanged\nORIGIN_SECRET=\n';
+    await writeFile(api, apiText);
+    await writeFile(web, webText);
+    await assert.rejects(setupEnv(root), error => {
+      assert.match(error.message, new RegExp(name));
+      assert.ok(!error.message.includes(value));
+      return true;
+    });
+    assert.equal(await readFile(api, 'utf8'), apiText);
+    assert.equal(await readFile(web, 'utf8'), webText);
+  }
 });
 
-test('appends a key when the copied example has no COOKIE_KEYS entry', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  await writeFile(examplePath, 'EXISTING=value\n');
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Generated COOKIE_KEYS');
-  const contents = await readFile(envPath, 'utf8');
-  assert.match(contents, /^EXISTING=value\nCOOKIE_KEYS='/);
+test('rejects duplicate assignments and conflicting origins before creating or modifying files', async t => {
+  const { root, api, web } = await fixture(t);
+  const duplicate = 'COOKIE_KEYS=\nexport COOKIE_KEYS=\n';
+  await writeFile(api, duplicate);
+  await assert.rejects(setupEnv(root), /Multiple COOKIE_KEYS/);
+  assert.equal(await readFile(api, 'utf8'), duplicate);
+  await assert.rejects(readFile(web), { code: 'ENOENT' });
+
+  const apiText = `ORIGIN_SECRET='${'a'.repeat(32)}'\n`;
+  const webText = `ORIGIN_SECRET='${'b'.repeat(32)}'\n`;
+  await writeFile(api, apiText);
+  await writeFile(web, webText);
+  await assert.rejects(setupEnv(root), /ORIGIN_SECRET differs/);
+  assert.equal(await readFile(api, 'utf8'), apiText);
+  assert.equal(await readFile(web, 'utf8'), webText);
 });
 
-test('fills a blank entry and validates Node-style exported, quoted and commented values', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  const valid = JSON.stringify({ old: Buffer.alloc(32, 4).toString('base64') });
-  await writeFile(envPath, `COOKIE_KEYS= # blank\n`);
-  await writeFile(examplePath, 'unused');
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Generated COOKIE_KEYS');
-
-  await writeFile(envPath, `export COOKIE_KEYS='${valid}' # active\n`);
-  const original = await readFile(envPath, 'utf8');
-  assert.equal(await setupEnv(envPath, examplePath, {}), 'Existing COOKIE_KEYS preserved');
-  assert.equal(await readFile(envPath, 'utf8'), original);
+test('rejects Auth keys that cannot issue ES256 tokens before modifying either file', async t => {
+  const { root, api, web } = await fixture(t);
+  await setupEnv(root);
+  const apiText = await readFile(api, 'utf8');
+  const webText = await readFile(web, 'utf8');
+  const [key] = JSON.parse(parseEnv(apiText).GOTRUE_JWT_KEYS);
+  for (const override of [{ d: undefined }, { alg: 'HS256' }, { key_ops: ['verify'] }, { key_ops: 'sign' }]) {
+    const invalid = apiText.replace(/^GOTRUE_JWT_KEYS=.*$/m, () => `GOTRUE_JWT_KEYS='${JSON.stringify([{ ...key, ...override }])}'`);
+    await writeFile(api, invalid);
+    await assert.rejects(setupEnv(root), /GOTRUE_JWT_KEYS is invalid/);
+    assert.equal(await readFile(api, 'utf8'), invalid);
+    assert.equal(await readFile(web, 'utf8'), webText);
+  }
 });
 
-test('rejects duplicate assignments and non-canonical base64 without changing secrets', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  await writeFile(examplePath, 'unused');
-  const secret = JSON.stringify({ k: `${Buffer.alloc(32).toString('base64')}!` });
-  const original = `COOKIE_KEYS='${secret}'\n`;
-  await writeFile(envPath, original);
-  await assert.rejects(setupEnv(envPath, examplePath, {}), /COOKIE_KEYS/);
-  assert.equal(await readFile(envPath, 'utf8'), original);
-  await writeFile(envPath, `${original}export COOKIE_KEYS=${secret}\n`);
-  await assert.rejects(setupEnv(envPath, examplePath, {}), /Multiple COOKIE_KEYS/);
+test('fills absent and placeholder keys while preserving an existing web origin', async t => {
+  const { root, api, web } = await fixture(t);
+  const origin = 'existing-local-origin-'.repeat(3);
+  await writeFile(api, 'COOKIE_KEYS=REPLACE_WITH_A_JSON_KEY_RING\nOTHER=untouched\n');
+  await writeFile(web, `ORIGIN_SECRET='${origin}'\n`);
+  await setupEnv(root);
+  const values = parseEnv(await readFile(api, 'utf8'));
+  assert.equal(values.ORIGIN_SECRET, origin);
+  assert.equal(values.OTHER, 'untouched');
+  assert.doesNotThrow(() => new CookieCrypto(values.COOKIE_KEYS));
+  assert.equal(await readFile(web, 'utf8'), `ORIGIN_SECRET='${origin}'\n`);
 });
 
-test('valid injected COOKIE_KEYS takes precedence without writing its value locally', async t => {
-  const { envPath, examplePath } = await fixture(t);
-  const injected = JSON.stringify({ deploy: Buffer.alloc(32, 9).toString('base64') });
-  await writeFile(examplePath, 'COOKIE_KEYS=REPLACE_WITH_A_JSON_KEY_RING\n');
-  assert.equal(await setupEnv(envPath, examplePath, { COOKIE_KEYS: injected }), 'Using injected COOKIE_KEYS');
-  assert.doesNotMatch(await readFile(envPath, 'utf8'), /deploy/);
-  await assert.rejects(setupEnv(envPath, examplePath, { COOKIE_KEYS: 'bad-injected-value' }), /COOKIE_KEYS/);
-  await assert.rejects(setupEnv(envPath, examplePath, { COOKIE_KEYS: '' }), /COOKIE_KEYS/);
-  await assert.rejects(setupEnv(envPath, examplePath, { COOKIE_KEYS: 'REPLACE_WITH_A_JSON_KEY_RING' }), /COOKIE_KEYS/);
+test('rejects API or Auth keys in web env before writing either file', async t => {
+  for (const name of ['COOKIE_KEYS', 'GOTRUE_JWT_KEYS', 'GOTRUE_JWT_SECRET', 'DISCORD_CLIENT_SECRET']) {
+    const { root, api, web } = await fixture(t);
+    const original = `${name}=not-for-web\n`;
+    await writeFile(web, original);
+    await assert.rejects(setupEnv(root), /secrets belong in api\/\.env/);
+    assert.equal(await readFile(web, 'utf8'), original);
+    await assert.rejects(readFile(api), { code: 'ENOENT' });
+  }
 });

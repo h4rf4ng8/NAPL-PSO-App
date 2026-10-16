@@ -5,7 +5,7 @@ import { readConfig } from '../../plugins/cfg.js';
 const environment = {
   NODE_ENV: 'test',
   PUBLIC_ORIGIN: 'http://localhost:5173',
-  SUPABASE_URL: 'https://project.supabase.co',
+  SUPABASE_AUTH_URL: 'https://project.supabase.co/auth/v1',
   SUPABASE_PUBLISHABLE_KEY: 'public',
   DISCORD_CLIENT_ID: '123',
   DISCORD_CLIENT_SECRET: 'secret',
@@ -27,9 +27,20 @@ test('production browser origin requires HTTPS', () => {
 });
 
 test('blank optional SAM values are treated as absent', () => {
-  const config = readConfig({ ...environment, SUPABASE_SECRET_KEY: '', DISCORD_TRANSFER_WEBHOOK: '', ORIGIN_SECRET: 'x'.repeat(32) });
+  const config = readConfig({ ...environment, SUPABASE_SECRET_KEY: '', SUPABASE_AUTH_INTERNAL_URL: '', DISCORD_TRANSFER_WEBHOOK: '', ORIGIN_SECRET: 'x'.repeat(32) });
   assert.equal(config.SUPABASE_SECRET_KEY, undefined);
+  assert.equal(config.SUPABASE_AUTH_INTERNAL_URL, undefined);
   assert.equal(config.DISCORD_TRANSFER_WEBHOOK, undefined);
+});
+
+test('Auth URLs permit local HTTP and require HTTPS in production', () => {
+  const local = { ...environment, ORIGIN_SECRET: 'x'.repeat(32), SUPABASE_AUTH_INTERNAL_URL: 'http://auth:9999' };
+  assert.equal(readConfig(local).SUPABASE_AUTH_INTERNAL_URL, 'http://auth:9999');
+  assert.equal(readConfig({ ...local, SUPABASE_AUTH_URL: 'http://localhost:54321' }).SUPABASE_AUTH_URL, 'http://localhost:54321');
+  const production = { ...local, NODE_ENV: 'production', PUBLIC_ORIGIN: 'https://league.example', DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full' };
+  assert.throws(() => readConfig(production), /SUPABASE_AUTH_INTERNAL_URL.*HTTPS/);
+  assert.equal(readConfig({ ...production, SUPABASE_AUTH_INTERNAL_URL: 'https://auth.internal' }).SUPABASE_AUTH_INTERNAL_URL, 'https://auth.internal');
+  assert.throws(() => readConfig({ ...production, SUPABASE_AUTH_INTERNAL_URL: '', SUPABASE_AUTH_URL: 'http://localhost:54321' }), /SUPABASE_AUTH_URL.*HTTPS/);
 });
 
 

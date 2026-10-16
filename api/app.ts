@@ -7,7 +7,7 @@ import { registerAccounts } from './routes/accounts/routes.js';
 import { registerTeams } from './routes/teams/routes.js';
 import { registerContent } from './routes/content/routes.js';
 import { registerMatches } from './routes/matches/routes.js';
-import { registerVoting } from './routes/voting/index.js';
+import { registerVoting } from './routes/voting/routes.js';
 import { registerAdmin } from './routes/admin/index.js';
 import { registerSettings } from './routes/settings/index.js';
 import { registerGraphQL } from './routes/graphql/index.js';

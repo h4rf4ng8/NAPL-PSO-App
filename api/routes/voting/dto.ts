@@ -1,8 +1,16 @@
-import type { Row } from '../../plugins/db/client.js';
-import { dto } from '../../plugins/db/records.js';
+import type { TotwVotingPeriod, TotwVote } from '../../generated/prisma/client.js';
 
-export function periodDto(row: Row): Row {
-  const fields = ['id', 'opens_at', 'closes_at', 'status', 'eligible_players', 'winners', 'created_by', 'created_at', 'resolved_at'];
-  const result = dto(Object.fromEntries(fields.map(key => [key, row[key]])));
-  return result;
+export function periodDto(row: TotwVotingPeriod) {
+  return {
+    id: row.id, opensAt: row.opens_at?.getTime() ?? null, closesAt: row.closes_at?.getTime() ?? null,
+    status: row.status, eligiblePlayers: row.eligible_players, winners: row.winners,
+    createdBy: row.created_by, createdAt: row.created_at?.getTime() ?? null, resolvedAt: row.resolved_at?.getTime() ?? null,
+  };
+}
+
+export function voteDto(row: TotwVote) {
+  return {
+    id: row.id, periodId: row.period_id, voterUsername: row.voter_username,
+    position: row.position, votedForUsername: row.voted_for_username, votedAt: row.voted_at?.getTime() ?? null,
+  };
 }

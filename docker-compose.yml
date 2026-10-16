@@ -1,0 +1,124 @@
+name: napl-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: napl_local
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: local_admin_only
+    ports:
+      - "127.0.0.1:54322:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./supabase/local-bootstrap.sql:/docker-entrypoint-initdb.d/00-auth.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d napl_local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  auth:
+    image: supabase/gotrue:v2.196.0
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      GOTRUE_EXTERNAL_DISCORD_ENABLED: ${DISCORD_ENABLED:-false}
+      GOTRUE_EXTERNAL_DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-0}
+      GOTRUE_EXTERNAL_DISCORD_SECRET: ${DISCORD_CLIENT_SECRET:-local-not-configured}
+      GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:?Run pnpm run setup:env first}
+      GOTRUE_JWT_KEYS: ${GOTRUE_JWT_KEYS:?Run pnpm run setup:env first}
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: http://localhost:54321
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:local_auth_only@db:5432/napl_local
+      GOTRUE_SITE_URL: http://localhost:5173
+      GOTRUE_URI_ALLOW_LIST: http://localhost:5173/auth/callback**
+      GOTRUE_JWT_ISSUER: http://localhost:54321
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_EXP: 600
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "false"
+      GOTRUE_EXTERNAL_DISCORD_REDIRECT_URI: http://localhost:54321/callback
+      GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: "true"
+      GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: pg-functions://postgres/auth_gateway/custom_access_token_hook
+    ports:
+      - "127.0.0.1:54321:9999"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9999/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  db-init:
+    image: postgres:16-alpine
+    depends_on:
+      auth: {condition: service_healthy}
+    working_dir: /workspace
+    environment:
+      PGHOST: db
+      PGDATABASE: napl_local
+      PGUSER: postgres
+      PGPASSWORD: local_admin_only
+    volumes:
+      - ./supabase:/workspace/supabase:ro
+      - ./scripts/setup-db.sh:/workspace/scripts/setup-db.sh:ro
+    entrypoint: ["/bin/sh", "/workspace/scripts/setup-db.sh"]
+
+  lambda:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      target: lambda
+    depends_on:
+      db-init: {condition: service_completed_successfully}
+      auth: {condition: service_healthy}
+    environment:
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-0}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-local-not-configured}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-0}
+      COOKIE_KEYS: ${COOKIE_KEYS:?Run pnpm run setup:env first}
+      ORIGIN_SECRET: ${ORIGIN_SECRET:?Run pnpm run setup:env first}
+      NODE_ENV: development
+      PUBLIC_ORIGIN: http://localhost:5173
+      DATABASE_URL: postgres://napl_local:napl_local_only@db:5432/napl_local
+      SUPABASE_AUTH_URL: http://localhost:54321
+      SUPABASE_AUTH_INTERNAL_URL: http://auth:9999
+      SUPABASE_PUBLISHABLE_KEY: local-development
+      SUPABASE_JWT_AUDIENCE: authenticated
+      AWS_EC2_METADATA_DISABLED: "true"
+    ports:
+      - "127.0.0.1:9000:8080"
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+      target: adapter
+    depends_on:
+      lambda: {condition: service_started}
+    environment:
+      LAMBDA_ENDPOINT: http://lambda:8080/2015-03-31/functions/function/invocations
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    depends_on:
+      api: {condition: service_healthy}
+    env_file: ./web/.env
+    environment:
+      LOCAL_API_URL: http://api:3000
+    ports:
+      - "127.0.0.1:5173:5173"
+    volumes:
+      - ./web/src:/app/web/src:ro
+
+volumes:
+  postgres-data:

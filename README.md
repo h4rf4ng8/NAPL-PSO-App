@@ -257,23 +257,82 @@ See the [assignment tests](api/test/routes/admin-audit.test.ts) and [database pe
 
 ## Local development
 
-Use Node 24 and pnpm 10.15.1.
+### Docker Compose
+
+Use Docker, Node 24, and pnpm 10.15.1. Run from the repository root:
 
 ```sh
-nvm use
-corepack enable
 pnpm install --frozen-lockfile
 pnpm run setup:env
-pnpm run generate
-pnpm run dev:api # separate terminal
-pnpm run dev
+./scripts/dev.sh
 ```
 
-Vite reads `web/.env`, listens on `http://localhost:5173`, and proxies `/api` and `/auth` to `LOCAL_API_URL`, then `API_URL`, then `http://127.0.0.1:3000`. The API reads `api/.env`. Never use `VITE_` for secrets.
+Open **http://localhost:5173**. Compose starts the web app, the API in AWS's Node 24 Lambda container, PostgreSQL, and self-hosted Supabase Auth. It applies database migrations and adds sample league data for public browsing. AWS credentials and a hosted Supabase project are not required.
 
-`setup:env` initializes both app files from their examples and generates missing cookie, origin, and local Auth signing keys once. Existing settings and keys are preserved; conflicting `ORIGIN_SECRET` values fail without overwriting either file. Setup is explicit: application startup never rewrites configuration.
+`setup:env` creates [`api/.env`](api/.env.example) and [`web/.env`](web/.env.example) from their examples and generates missing cookie, origin, and Auth signing keys once. Existing settings and keys are preserved. The shared `ORIGIN_SECRET` must match in both files. Startup only reads these files; rerun setup explicitly when needed. Pass `-d` to start in the background: `./scripts/dev.sh -d`.
 
-Before starting the apps, configure reachable PostgreSQL and Auth services in `api/.env`. `SUPABASE_AUTH_URL` is the complete public Auth base URL: `http://localhost:54321` for standalone local GoTrue or `https://PROJECT.supabase.co/auth/v1` for hosted Supabase. `SUPABASE_AUTH_INTERNAL_URL` can override the server's request destination while redirects and JWT issuer validation still use the public URL. `DATABASE_URL` needs a restricted login with the permissions described in [Runtime Settings](#runtime-settings). Never commit actual `.env` files.
+| File | Responsibility |
+| --- | --- |
+| [`docker-compose.yml`](docker-compose.yml) | Connect services and start them in dependency order. |
+| [`api/Dockerfile`](api/Dockerfile) | Package the API and run it in AWS's Lambda runtime image. The deployment SAM template remains in `api/template.yaml`. |
+| [`web/Dockerfile`](web/Dockerfile) | Run the frontend with live reload. |
+| [`supabase/`](supabase/) | Keep database bootstrap, migrations, and sample data together. |
+| [`scripts/`](scripts/) | Start Compose and apply database setup. |
+
+| Service | Local address | Purpose |
+| --- | --- | --- |
+| Web | `http://localhost:5173` | Browse the app; its proxy forwards `/api` and `/auth` to the Lambda handler. |
+| Supabase Auth | `http://localhost:54321` | Complete the local authentication flow through GoTrue. |
+| PostgreSQL | `localhost:54322` | Store local league data, users, and sessions. |
+| Lambda invocation | `http://localhost:9000/2015-03-31/functions/function/invocations` | Invoke the runtime with a Lambda event; browser requests go through the web app. |
+
+Use `localhost` for browser URLs so the OAuth redirects and cookies share the configured origin. All published ports bind only to your machine. The small `api` service translates HTTP requests into Lambda Function URL events; the Lambda container executes the packaged API. AWS's Runtime Interface Emulator exercises that runtime and event handling, but does not reproduce AWS IAM authorization or scaling.
+
+Keys persist in the ignored app `.env` files. PostgreSQL data persists in `postgres-data`, including changes made through the app. Compose sets database and Auth addresses for its internal network; the app examples use localhost addresses for native development. Production CI receives its settings from GitHub secrets and variables.
+
+The API uses complete Auth base URLs: `SUPABASE_AUTH_URL=http://localhost:54321` locally or `https://PROJECT.supabase.co/auth/v1` for hosted Supabase. Compose supplies `SUPABASE_AUTH_INTERNAL_URL=http://auth:9999` for container requests; browser redirects and JWT issuer validation use the public URL. GoTrue is exposed directly without a reverse proxy.
+
+### Discord sign-in with Compose
+
+Public pages work with the example configuration. To test real Discord sign-in:
+
+1. Create or select an OAuth application in the Discord Developer Portal. Add **`http://localhost:54321/callback`** to its OAuth2 redirects.
+2. Edit `api/.env`: set `DISCORD_ENABLED=true`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_GUILD_ID` to your development application's credentials and Discord server ID.
+3. Run `./scripts/dev.sh` again to apply the configuration. Open `http://localhost:5173` and choose **Sign in with Discord** with an account that belongs to the configured server.
+
+Discord returns to the local Supabase Auth callback on port 54321. GoTrue then returns to the app's `http://localhost:5173/auth/callback`, where the API completes the PKCE exchange, verifies server membership, and creates the local account and session. No Discord bot or AWS account is needed. GoTrue and the API store authentication and league data in the same local PostgreSQL instance.
+
+The real Discord browser authorization flow requires your OAuth credentials and has not yet been verified end to end with them.
+
+### Working with the containers
+
+Edits under `web/src` reload in the browser. API code is packaged into the Lambda image, so rebuild it after API changes:
+
+```sh
+./scripts/dev.sh -d lambda
+```
+
+Rebuild both images after shared-contract or dependency changes with `./scripts/dev.sh -d lambda web`. Changes to web files outside `web/src`, including Vite configuration, also require rebuilding the web image.
+
+| Command | Purpose |
+| --- | --- |
+| `docker compose --env-file api/.env logs -f web api lambda auth` | Follow application and authentication logs. |
+| `docker compose --env-file api/.env exec db psql -U postgres -d napl_local` | Inspect the local database. |
+| `docker compose --env-file api/.env down` | Stop the stack and preserve database data. |
+| `docker compose --env-file api/.env down --volumes` | **Delete all local database data.** Environment files and keys remain. |
+
+### Native pnpm alternative
+
+After the initial setup above, you can run the web and API on your machine while keeping Compose's database and Auth services running:
+
+```sh
+docker compose --env-file api/.env stop web api lambda
+pnpm run generate
+```
+
+Run `pnpm run dev:api` and `pnpm run dev` in separate terminals. The API reads `api/.env`; Vite reads `web/.env`. The defaults use PostgreSQL at `localhost:54322`, Supabase Auth at `http://localhost:54321`, and the native API at `http://127.0.0.1:3000`.
+
+Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` using `LOCAL_API_URL`, then `API_URL`, then the default API address. Keep `ORIGIN_SECRET` equal in both app files and never prefix secrets with `VITE_`.
 
 ## Checks
 

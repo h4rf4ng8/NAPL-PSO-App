@@ -10,7 +10,7 @@ const tokensSchema = z.object({
   provider_token: z.string().optional(),
   provider_refresh_token: z.string().optional(),
   user: z.object({
-    id: z.string().uuid(),
+    id: z.uuid(),
     identities: z.array(z.object({
       provider: z.string(),
       identity_data: z.record(z.string(), z.unknown()).optional(),
@@ -48,9 +48,9 @@ export class SupabaseClient implements SupabaseAuth {
         requiredClaims: ['sub', 'exp', 'session_id'],
       });
       return {
-        userId: z.string().uuid().parse(payload.sub),
-        sessionId: z.string().uuid().parse(payload.session_id),
-        expiresAt: z.number().int().positive().parse(payload.exp),
+        userId: z.uuid().parse(payload.sub),
+        sessionId: z.uuid().parse(payload.session_id),
+        expiresAt: z.int().positive().parse(payload.exp),
         claims: payload,
       };
     } catch (error) {

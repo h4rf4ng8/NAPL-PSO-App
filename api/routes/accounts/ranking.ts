@@ -13,7 +13,7 @@ export const DEFAULT_POSITION_WEIGHTS: Record<string, Record<string, number>> = 
   [POS.FLEX]: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.25, passesPerGame: 0.25 },
 };
 
-const weightsSchema = z.record(z.string(), z.record(z.string(), z.number().finite()));
+const weightsSchema = z.record(z.string(), z.record(z.string(), z.number()));
 const emptyStats: AccountStats = accountStatsSchema.parse(
   Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key => [key, 0])),
 );

@@ -21,6 +21,17 @@ test('origin secret has the same minimum length in test and production', () => {
   assert.equal(readConfig({ ...environment, ORIGIN_SECRET: 'x'.repeat(32) }).ORIGIN_SECRET.length, 32);
 });
 
+test('port defaults and coerces bounded integer values', () => {
+  const local = { ...environment, ORIGIN_SECRET: 'x'.repeat(32) };
+  assert.equal(readConfig(local).PORT, 3000);
+  for (const [value, expected] of [['1', 1], ['65535', 65_535], [' 3000 ', 3000], ['3e3', 3000]] as const) {
+    assert.equal(readConfig({ ...local, PORT: value }).PORT, expected);
+  }
+  for (const value of ['', ' ', '0', '-1', '65536', '3000.5', '9007199254740992', 'Infinity', 'NaN', 'not-a-port']) {
+    assert.throws(() => readConfig({ ...local, PORT: value }), /PORT/);
+  }
+});
+
 test('production browser origin requires HTTPS', () => {
   const production = { ...environment, NODE_ENV: 'production', DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full', ORIGIN_SECRET: 'x'.repeat(32) };
   assert.throws(() => readConfig({ ...production, PUBLIC_ORIGIN: 'http://league.example' }), /HTTPS/);

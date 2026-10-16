@@ -11,7 +11,7 @@ export const AWARD = {
 export const AWARD_IDS = [AWARD.GLOVE, AWARD.STRIKER, AWARD.DEFENDER, AWARD.PLAYMAKER] as const;
 export const awardIdSchema = z.enum(AWARD_IDS);
 
-export const matchSchema = z.object({
+export const matchSchema = z.looseObject({
   id: accountId,
   date: z.number(),
   season: z.string(),
@@ -34,10 +34,10 @@ export const matchSchema = z.object({
   stadium: z.string().optional(),
   matchLength: z.number().optional(),
   source: z.string().optional(),
-}).passthrough();
+});
 
 // Historical assignments may contain ids and metadata from older award systems.
-export const awardSchema = z.object({
+export const awardSchema = z.looseObject({
   id: z.string().optional(),
   awardId: z.string().min(1),
   season: z.string(),
@@ -45,26 +45,26 @@ export const awardSchema = z.object({
   assignedBy: z.string().optional(),
   awardedAt: z.number().optional(),
   awardedBy: z.string().optional(),
-}).passthrough();
+});
 
-export const championshipSchema = z.object({
+export const championshipSchema = z.looseObject({
   season: z.string(),
   placement: z.string(),
   teamId: accountId,
   awardedAt: z.number(),
-}).passthrough();
+});
 
 export const accountStatsSchema = z.object({
-  games: z.number().finite(), wins: z.number().finite(), draws: z.number().finite(), losses: z.number().finite(),
-  goals: z.number().finite(), assists: z.number().finite(), passes: z.number().finite(), tackles: z.number().finite(),
-  deflects: z.number().finite(), catches: z.number().finite(), cleanSheets: z.number().finite(), motm: z.number().finite(),
-}).catchall(z.number().finite());
+  games: z.number(), wins: z.number(), draws: z.number(), losses: z.number(),
+  goals: z.number(), assists: z.number(), passes: z.number(), tackles: z.number(),
+  deflects: z.number(), catches: z.number(), cleanSheets: z.number(), motm: z.number(),
+}).catchall(z.number());
 
 export const seasonStatsSchema = z.record(z.string(), accountStatsSchema);
 
 export const accountRankingSchema = z.object({
-  score: z.number().finite(), percentile: z.number().finite(), ranked: z.boolean(),
-  gamesPlayed: z.number().finite(), tier: z.enum(['DIAMOND', 'GOLD', 'SILVER', 'BRONZE']),
+  score: z.number(), percentile: z.number(), ranked: z.boolean(),
+  gamesPlayed: z.number(), tier: z.enum(['DIAMOND', 'GOLD', 'SILVER', 'BRONZE']),
 });
 export const accountCardStatCellSchema = z.object({ label: z.string(), value: z.string() });
 export const accountCardStatSeasonSchema = z.object({
@@ -78,8 +78,8 @@ export const accountMatchPageSchema = z.object({
 });
 
 export const accountOpponentsSchema = z.array(z.object({
-  opponent: z.string(), games: z.number().finite(), w: z.number().finite(), d: z.number().finite(), l: z.number().finite(),
-  goals: z.number().finite(), assists: z.number().finite(), motm: z.number().finite(),
+  opponent: z.string(), games: z.number(), w: z.number(), d: z.number(), l: z.number(),
+  goals: z.number(), assists: z.number(), motm: z.number(),
 }));
 
 export type Match = z.infer<typeof matchSchema>;

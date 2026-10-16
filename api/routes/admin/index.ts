@@ -13,9 +13,9 @@ export function registerAdmin(app: FastifyInstance, { db }: Dependencies): void 
             role: 'super_admin'
         }
     }, async (request) => {
-        const { userIds } = z.object({
-            userIds: z.array(z.string().uuid()).max(100)
-        }).strict().parse(request.body);
+        const { userIds } = z.strictObject({
+            userIds: z.array(z.uuid()).max(100)
+        }).parse(request.body);
         await db.transaction(async (tx) => {
             const previous = await tx.query<{ user_id: string }>(Prisma.sql `SELECT user_id::text FROM auth_gateway.user_roles WHERE role='admin' ORDER BY user_id`);
             const previousIds = previous.map(row => row.user_id);

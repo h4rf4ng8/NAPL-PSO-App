@@ -126,9 +126,9 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
             role: 'admin'
         }
     }, async (request) => {
-        const { ids } = z.object({
+        const { ids } = z.strictObject({
             ids: z.array(id).max(1000)
-        }).strict().parse(request.body);
+        }).parse(request.body);
         await db.transaction(async (tx) => {
             for (const [index, key] of ids.entries())
                 await patch(tx, 'rules_sections', key, {
@@ -144,9 +144,9 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
             role: 'admin'
         }
     }, async (request) => {
-        const { matches } = z.object({
+        const { matches } = z.strictObject({
             matches: z.array(scheduleInput).max(MAX_SCHEDULE_MATCHES)
-        }).strict().parse(request.body);
+        }).parse(request.body);
         return db.transaction(async (tx) => {
             const rows = [];
             for (const m of matches)
@@ -160,9 +160,9 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
         }
     }, async (request) => {
         const season = id.trim().min(1).parse(parameters(request).season);
-        const { matches } = z.object({
+        const { matches } = z.strictObject({
             matches: z.array(scheduleInput.omit({ season: true })).min(1).max(MAX_SCHEDULE_MATCHES)
-        }).strict().parse(request.body);
+        }).parse(request.body);
         return db.transaction(async (tx) => {
             await tx.execute(Prisma.sql `DELETE FROM public.scheduled_matches WHERE season=${season}`);
             const rows = [];
@@ -204,9 +204,9 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
             role: 'admin'
         }
     }, async (request) => {
-        const input = z.object({
+        const input = z.strictObject({
             windowType: z.enum(['league', 'cross_league']).nullable()
-        }).strict().parse(request.body);
+        }).parse(request.body);
         return transferDto(await patch(db, 'transfers', parameters(request).id!, {
             window_type: input.windowType
         }));

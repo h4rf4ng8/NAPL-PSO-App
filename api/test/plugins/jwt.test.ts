@@ -49,6 +49,11 @@ test('merged API verifier requires signatures, expiry, issuer, audience and sess
                 aud: 'different'
             }])
             await assert.rejects(async () => verify(await token(override)));
+        for (const claim of ['sub', 'session_id']) {
+            for (const value of ['not-a-uuid', '11111111-1111-4111-7111-111111111111']) {
+                await assert.rejects(async () => verify(await token({ [claim]: value })), /session_invalid/);
+            }
+        }
         const valid = await token();
         await assert.rejects(() => verify(valid.slice(0, -4) + 'xxxx'));
     }

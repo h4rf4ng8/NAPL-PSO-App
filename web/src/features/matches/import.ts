@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const objectSchema = z.record(z.string(), z.unknown());
 const candidatesSchema = z.array(z.unknown());
-const numericSchema = z.number().finite().nonnegative();
+const numericSchema = z.number().nonnegative();
 const idSchema = z.union([z.string(), z.number(), z.literal(Infinity), z.literal(-Infinity)]);
 const stringSchema = z.string();
 const importedPlayerSchema = z.object({ player_id: z.string(), username: z.string(), team: z.enum(['home', 'away']), stats: z.record(z.string(), z.number()) });

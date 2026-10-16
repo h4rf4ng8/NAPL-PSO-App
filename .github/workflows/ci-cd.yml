@@ -163,7 +163,7 @@ jobs:
           EXISTING_VERCEL_OIDC_PROVIDER_ARN: ${{ vars.EXISTING_VERCEL_OIDC_PROVIDER_ARN }}
           APPLICATION_ROLE_BOUNDARY_ARN: ${{ vars.APPLICATION_ROLE_BOUNDARY_ARN }}
         run: |
-          pnpm run env:sam
+          SUPABASE_AUTH_URL="${SUPABASE_URL%/}/auth/v1" pnpm run env:sam
           install -m 600 api/.env.sam.json api/.env.sam.yaml
       - name: Skip commits superseded on main
         id: release

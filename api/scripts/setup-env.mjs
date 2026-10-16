@@ -1,29 +1,60 @@
-import { randomBytes } from 'node:crypto';
-import { chmod, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { createPrivateKey, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'node:crypto';
+import { open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { CookieCrypto } from '../plugins/session/crypto.ts';
 
-const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const examplePath = path.resolve(scriptDir, '../.env.example');
-const defaultEnvPath = path.resolve(scriptDir, '../.env');
-const placeholder = 'REPLACE_WITH_A_JSON_KEY_RING';
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+const apiKeys = ['COOKIE_KEYS', 'ORIGIN_SECRET', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS'];
+const missing = value => !value?.trim() || value.startsWith('REPLACE_');
 
-function cookieAssignment(contents) {
-  const lines = contents.split(/(?<=\n)/);
-  const matches = [];
-  for (const [index, line] of lines.entries()) {
-    if (/^\s*(?:export\s+)?COOKIE_KEYS\s*=/.test(line)) matches.push(index);
+async function readEnv(file) {
+  let contents;
+  try { contents = await readFile(file, 'utf8'); }
+  catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+    contents = await readFile(`${file}.example`, 'utf8');
   }
-  if (matches.length > 1) throw new Error('Multiple COOKIE_KEYS entries found in env file');
-  return matches[0];
+  const values = parseEnv(contents);
+  const names = new Set();
+  for (const match of contents.matchAll(/^\s*(?:export\s+)?([A-Z_][A-Z_0-9]*)\s*=/gm)) {
+    const name = match[1];
+    if (names.has(name)) throw new Error(`Multiple ${name} entries in ${path.basename(path.dirname(file))}/.env`);
+    if (values[name] === undefined) throw new Error(`${name} is malformed`);
+    names.add(name);
+  }
+  return { file, contents, values };
 }
 
-function validateKeyRing(encoded) {
-  try { new CookieCrypto(encoded); }
-  catch (error) {
-    throw new Error('COOKIE_KEYS must be a valid JSON key ring of 32-byte base64 keys', { cause: error });
+function setValue(env, name, value) {
+  const line = `${name}='${value}'`;
+  if (value.includes('\n') || parseEnv(line)[name] !== value) throw new Error(`${name} must fit on one quoted line`);
+  const assignment = new RegExp(String.raw`^([\t ]*(?:export[\t ]+)?${name}[\t ]*=[\t ]*)[^\r\n]*`, 'm');
+  env.contents = assignment.test(env.contents)
+    ? env.contents.replace(assignment, () => line)
+    : `${env.contents}${env.contents && !env.contents.endsWith('\n') ? '\n' : ''}${line}\n`;
+  env.values[name] = value;
+}
+
+function validate(name, value) {
+  try {
+    if (name === 'COOKIE_KEYS') {
+      new CookieCrypto(value);
+    } else if (name === 'GOTRUE_JWT_KEYS') {
+      const keys = JSON.parse(value);
+      if (!Array.isArray(keys) || keys.length !== 1) throw new Error('Expected one signing key');
+      const [key] = keys;
+      if (key.kty !== 'EC' || key.crv !== 'P-256' || key.alg !== 'ES256' || key.use !== 'sig'
+          || typeof key.kid !== 'string' || !key.kid || !Array.isArray(key.key_ops) || !key.key_ops.includes('sign')) throw new Error('Expected an ES256 signing key');
+      const privateKey = createPrivateKey({ key, format: 'jwk' });
+      const probe = Buffer.from('local signing key check');
+      if (!verify('sha256', probe, privateKey, sign('sha256', probe, privateKey))) throw new Error('Invalid signing key pair');
+    } else if (value.length < 32) {
+      throw new Error('Secret must have at least 32 characters');
+    }
+  } catch {
+    throw new Error(`${name} is invalid`);
   }
 }
 
@@ -38,65 +69,58 @@ async function acquireLock(lockPath) {
   }
 }
 
-export async function setupEnv(envPath = defaultEnvPath, sourcePath = examplePath, environment = process.env) {
-  const target = path.resolve(envPath);
-  const lockPath = `${target}.setup-lock`;
+export async function setupEnv(root = repoRoot) {
+  const lockPath = path.resolve(root, 'api/.env.setup-lock');
   const lock = await acquireLock(lockPath);
+  const temporaryFiles = [];
   try {
-    let contents;
-    try { contents = await readFile(target, 'utf8'); }
-    catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      contents = await readFile(sourcePath, 'utf8');
-      try { await writeFile(target, contents, { flag: 'wx', mode: 0o600 }); }
-      catch (writeError) {
-        if (writeError.code !== 'EEXIST') throw writeError;
-        contents = await readFile(target, 'utf8');
+    const api = await readEnv(path.resolve(root, 'api/.env'));
+    const web = await readEnv(path.resolve(root, 'web/.env'));
+    if (['COOKIE_KEYS', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS', 'DISCORD_CLIENT_SECRET'].some(name => Object.hasOwn(web.values, name))) {
+      throw new Error('API and Auth secrets belong in api/.env, not web/.env');
+    }
+    for (const name of apiKeys) if (!missing(api.values[name])) validate(name, api.values[name]);
+    if (!missing(web.values.ORIGIN_SECRET)) {
+      validate('ORIGIN_SECRET', web.values.ORIGIN_SECRET);
+      if (!missing(api.values.ORIGIN_SECRET) && api.values.ORIGIN_SECRET !== web.values.ORIGIN_SECRET) {
+        throw new Error('ORIGIN_SECRET differs between api/.env and web/.env');
       }
     }
+    for (const name of apiKeys) {
+      if (!missing(api.values[name])) continue;
+      let value;
+      if (name === 'COOKIE_KEYS') {
+        value = JSON.stringify({ local: randomBytes(32).toString('base64') });
+      } else if (name === 'GOTRUE_JWT_KEYS') {
+        const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+        value = JSON.stringify([{ ...privateKey.export({ format: 'jwk' }), kid: randomUUID(), alg: 'ES256', use: 'sig', key_ops: ['sign', 'verify'] }]);
+      } else {
+        value = name === 'ORIGIN_SECRET' && !missing(web.values.ORIGIN_SECRET)
+          ? web.values.ORIGIN_SECRET : randomBytes(32).toString('hex');
+      }
+      setValue(api, name, value);
+    }
+    if (missing(web.values.ORIGIN_SECRET)) setValue(web, 'ORIGIN_SECRET', api.values.ORIGIN_SECRET);
 
-    await chmod(target, 0o600);
-    const parsed = parseEnv(contents);
-    const assignment = cookieAssignment(contents);
-    const injected = environment.COOKIE_KEYS;
-    if (injected !== undefined) {
-      validateKeyRing(injected);
-      return 'Using injected COOKIE_KEYS';
+    // Validate both files before replacing either; the lock serializes setup calls.
+    for (const env of [api, web]) {
+      const temporary = `${env.file}.${randomUUID()}.tmp`;
+      temporaryFiles.push(temporary);
+      await writeFile(temporary, env.contents, { flag: 'wx', mode: 0o600 });
     }
-    if (assignment !== undefined && parsed.COOKIE_KEYS === undefined) throw new Error('COOKIE_KEYS is malformed');
-    if (assignment !== undefined && parsed.COOKIE_KEYS && parsed.COOKIE_KEYS !== placeholder) {
-      validateKeyRing(parsed.COOKIE_KEYS);
-      return 'Existing COOKIE_KEYS preserved';
-    }
-
-    const generated = JSON.stringify({ v1: randomBytes(32).toString('base64') });
-    const updated = contents.split(/(?<=\n)/);
-    if (assignment === undefined) {
-      const separator = contents && !contents.endsWith('\n') ? '\n' : '';
-      updated.push(`${separator}COOKIE_KEYS='${generated}'\n`);
-    } else {
-      const originalLine = updated[assignment];
-      let newline = '';
-      if (originalLine.endsWith('\r\n')) newline = '\r\n';
-      else if (originalLine.endsWith('\n')) newline = '\n';
-      const prefix = originalLine.match(/^(\s*(?:export\s+)?COOKIE_KEYS\s*=\s*)/)?.[1] ?? 'COOKIE_KEYS=';
-      updated[assignment] = `${prefix}'${generated}'${newline}`;
-    }
-    const tempPath = `${target}.${process.pid}.tmp`;
-    await writeFile(tempPath, updated.join(''), { flag: 'wx', mode: 0o600 });
-    await rename(tempPath, target);
-    await chmod(target, 0o600);
-    return 'Generated COOKIE_KEYS';
+    await rename(temporaryFiles[0], api.file);
+    await rename(temporaryFiles[1], web.file);
   } finally {
+    await Promise.all(temporaryFiles.map(file => rm(file, { force: true })));
     await lock.close();
-    try { await unlink(lockPath); } catch { /* lock may already be gone */ }
+    await rm(lockPath, { force: true });
   }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const result = await setupEnv();
-    process.stdout.write(`${result} in api/.env\n`);
+    await setupEnv();
+    process.stdout.write('Configured api/.env and web/.env; existing keys preserved.\n');
   } catch (error) {
     process.stderr.write(`Environment setup failed: ${error.message}\n`);
     process.exitCode = 1;

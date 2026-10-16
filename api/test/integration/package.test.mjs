@@ -40,6 +40,7 @@ test('SAM template describes the bounded Lambda and IAM-protected Function URL',
   assert.equal(template.Parameters.DatabaseUrl.NoEcho, true);
   assert.equal(fn.Environment.Variables.NODE_ENV, 'production');
   assert.equal(fn.Environment.Variables.DATABASE_URL, 'DatabaseUrl');
+  assert.equal(fn.Environment.Variables.SUPABASE_AUTH_URL, 'SupabaseUrl');
   assert.deepEqual(Object.keys(fn.Environment.Variables).filter(name => name.endsWith('DATABASE_URL')), ['DATABASE_URL']);
   assert.equal(fn.Environment.Variables.SUPABASE_SECRET_KEY[2], 'AWS::NoValue');
   assert.equal(fn.Environment.Variables.DISCORD_TRANSFER_WEBHOOK[2], 'AWS::NoValue');
@@ -54,7 +55,7 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
   const values = {
     NODE_ENV: 'test',
     PUBLIC_ORIGIN: 'http://localhost:5173',
-    SUPABASE_URL: 'https://invalid-supabase.example.test',
+    SUPABASE_AUTH_URL: 'https://invalid-supabase.example.test/auth/v1',
     SUPABASE_PUBLISHABLE_KEY: `publishable-${canary}`,
     DISCORD_CLIENT_ID: '123456789',
     DISCORD_CLIENT_SECRET: `discord-${canary}`,

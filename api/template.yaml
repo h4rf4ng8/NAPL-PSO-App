@@ -11,7 +11,7 @@ Parameters:
     Description: PostgreSQL runtime connection URL for application queries and authentication state.
   SupabaseUrl:
     Type: String
-    Description: Supabase project URL.
+    Description: Complete Supabase Auth base URL, including /auth/v1 for hosted Supabase.
   SupabasePublishableKey:
     Type: String
     Description: Supabase publishable key used for Auth requests.
@@ -190,7 +190,7 @@ Resources:
         Variables:
           NODE_ENV: production
           DATABASE_URL: !Ref DatabaseUrl
-          SUPABASE_URL: !Ref SupabaseUrl
+          SUPABASE_AUTH_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
           SUPABASE_SECRET_KEY: !If [HasSupabaseSecretKey, !Ref SupabaseSecretKey, !Ref AWS::NoValue]
           SUPABASE_JWT_AUDIENCE: !Ref SupabaseJwtAudience

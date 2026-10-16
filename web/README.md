@@ -69,7 +69,7 @@ pnpm run dev:api
 pnpm run dev
 ```
 
-Open `http://localhost:5173`. Set the same `ORIGIN_SECRET` as the API in the Vite environment or `web/.env`. The [environment example](.env.example) also documents the local API target. These settings are server-only; never prefix secrets with `VITE_`.
+Open `http://localhost:5173`. Vite reads `web/.env`; `pnpm run setup:env` initializes its proxy target and the same `ORIGIN_SECRET` as the API. The [environment example](.env.example) documents these server-only settings; never prefix secrets with `VITE_`.
 
 ## Checks
 

@@ -1,7 +1,11 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+
+const envDir = fileURLToPath(new URL('.', import.meta.url));
+
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), ['LOCAL_API_URL', 'API_URL', 'ORIGIN_SECRET']);
+  const env = loadEnv(mode, envDir, ['LOCAL_API_URL', 'API_URL', 'ORIGIN_SECRET']);
   const target = process.env.LOCAL_API_URL ?? process.env.API_URL ?? env.LOCAL_API_URL ?? env.API_URL ?? 'http://127.0.0.1:3000';
   const originSecret = process.env.ORIGIN_SECRET ?? env.ORIGIN_SECRET;
   const proxy = {
@@ -15,6 +19,7 @@ export default defineConfig(({ mode }) => {
     },
   };
   return {
+    envDir,
     plugins: [react()],
     server: {
       port: 5173,

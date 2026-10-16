@@ -4,7 +4,7 @@ import type { Database, Row } from './plugins/db/client.js';
 import { object, string } from './plugins/db/records.js';
 import { HttpError, type Identity, actor, isAdmin, requireMember, requireActiveSession, roles } from './plugins/auth/identity.js';
 import { registerAccounts } from './routes/accounts/routes.js';
-import { registerTeams } from './routes/teams/index.js';
+import { registerTeams } from './routes/teams/routes.js';
 import { registerContent } from './routes/content/routes.js';
 import { registerMatches } from './routes/matches/index.js';
 import { registerVoting } from './routes/voting/index.js';

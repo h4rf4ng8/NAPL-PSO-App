@@ -94,9 +94,9 @@ test('Supabase verifier enforces signatures, audience, issuer, expiration and se
   try {
     const address = server.address();
     assert.ok(address && typeof address === 'object');
-    const url = `http://127.0.0.1:${address.port}`;
-    const verifier = new SupabaseClient({ ...config, SUPABASE_URL: url });
-    const issue = (overrides: Record<string, unknown> = {}) => new SignJWT({ sub: userId, session_id: sessionId, iss: `${url}/auth/v1`, aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 60, ...overrides }).setProtectedHeader({ alg: 'ES256', kid: 'test' }).sign(privateKey);
+    const url = `http://127.0.0.1:${address.port}/auth/v1`;
+    const verifier = new SupabaseClient({ ...config, SUPABASE_AUTH_URL: url });
+    const issue = (overrides: Record<string, unknown> = {}) => new SignJWT({ sub: userId, session_id: sessionId, iss: url, aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 60, ...overrides }).setProtectedHeader({ alg: 'ES256', kid: 'test' }).sign(privateKey);
     assert.equal((await verifier.verify(await issue())).userId, userId);
     await assert.rejects(async () => verifier.verify(await issue({ iss: 'https://evil.example' })), /session_invalid/);
     await assert.rejects(async () => verifier.verify(await issue({ aud: 'other' })), /session_invalid/);

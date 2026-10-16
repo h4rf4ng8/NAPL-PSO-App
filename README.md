@@ -269,9 +269,11 @@ pnpm run dev:api # separate terminal
 pnpm run dev
 ```
 
-Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` to `LOCAL_API_URL`, then `API_URL`, then `http://127.0.0.1:3000`. Set `ORIGIN_SECRET` in the Vite process or local `web/.env`; never use `VITE_` for secrets. API settings are documented in [api/.env.example](api/.env.example).
+Vite reads `web/.env`, listens on `http://localhost:5173`, and proxies `/api` and `/auth` to `LOCAL_API_URL`, then `API_URL`, then `http://127.0.0.1:3000`. The API reads `api/.env`. Never use `VITE_` for secrets.
 
-`setup:env` creates `api/.env` if needed and generates `COOKIE_KEYS` once, preserving existing keys and other settings. Fill in provider/database values locally. Set `DATABASE_URL` to a restricted database login with the application and authentication permissions described in [Runtime Settings](#runtime-settings). Never commit actual `.env` files or regenerate the cookie key at startup.
+`setup:env` initializes both app files from their examples and generates missing cookie, origin, and local Auth signing keys once. Existing settings and keys are preserved; conflicting `ORIGIN_SECRET` values fail without overwriting either file. Setup is explicit: application startup never rewrites configuration.
+
+Before starting the apps, configure reachable PostgreSQL and Auth services in `api/.env`. `SUPABASE_AUTH_URL` is the complete public Auth base URL: `http://localhost:54321` for standalone local GoTrue or `https://PROJECT.supabase.co/auth/v1` for hosted Supabase. `SUPABASE_AUTH_INTERNAL_URL` can override the server's request destination while redirects and JWT issuer validation still use the public URL. `DATABASE_URL` needs a restricted login with the permissions described in [Runtime Settings](#runtime-settings). Never commit actual `.env` files.
 
 ## Checks
 
@@ -313,7 +315,7 @@ pnpm run test:sam
 
 ### Runtime Settings
 
-Start with the [environment example](api/.env.example). The setup command creates the local file if needed and generates cookie keys only when none have been configured. It preserves a valid existing key ring and rejects malformed keys instead of replacing them.
+Start with the [environment example](api/.env.example). The setup command initializes both app files, preserves valid existing keys, and rejects malformed keys instead of replacing them.
 
 ```sh
 pnpm run setup:env
@@ -324,7 +326,7 @@ Supply production values through a protected local file or the deployment enviro
 | Setting | Purpose |
 | --- | --- |
 | `DATABASE_URL` | One Supabase PostgreSQL connection URL for league data and authentication state. Its restricted runtime login must inherit both `app_runtime` and `gateway_runtime`; use `sslmode=verify-full` in production. |
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project HTTPS URL and authentication publishable key. |
+| `SUPABASE_AUTH_URL`, `SUPABASE_PUBLISHABLE_KEY` | Complete Auth HTTPS base URL, such as `https://PROJECT.supabase.co/auth/v1`, and authentication publishable key. |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_GUILD_ID` | Discord OAuth application credentials and the guild used for membership checks. |
 | `PUBLIC_ORIGIN` | Exact HTTPS address of the public frontend, without a path or trailing slash. Configure allowed sign-in redirects for this frontend origin. |
 | `COOKIE_KEYS` | Persistent JSON key ring shared by all API instances. Each key is a base64-encoded 32-byte value. |
@@ -388,7 +390,7 @@ The database login requires both runtime role grants and the migrations describe
 | `AWS_CLOUDFORMATION_ROLE_ARN` | Bootstrap stack output `CloudFormationExecutionRoleArn`. |
 | `AWS_DEPLOYMENT_BUCKET` | Bootstrap stack output `DeploymentBucket`. |
 | `APPLICATION_ROLE_BOUNDARY_ARN` | Bootstrap stack output `ApplicationRoleBoundaryArn`. |
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL and publishable API key. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL and publishable API key. CI appends `/auth/v1` to supply the API's `SUPABASE_AUTH_URL`. |
 | `PUBLIC_ORIGIN` | Public website's exact HTTPS origin. |
 | `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` | Discord application ID and league server ID. |
 | `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Vercel team's URL slug and project name. |

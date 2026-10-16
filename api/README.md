@@ -79,7 +79,7 @@ Run from the repository root:
 pnpm run dev:api
 ```
 
-The development command runs environment setup first, preserves configured cookie keys, reads the local environment file, and watches the API source for changes. The default listener is `http://127.0.0.1:3000`; `HOST` and `PORT` can override it. Run the web app in another terminal so its development proxy supplies the API's origin secret and client address.
+Run `pnpm run setup:env` explicitly before the first start. The development command reads `api/.env` and watches the API source without rewriting configuration. The default listener is `http://127.0.0.1:3000`; `HOST` and `PORT` can override it. Run the web app in another terminal so its development proxy supplies the API's origin secret and client address.
 
 ## Checks
 

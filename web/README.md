@@ -52,6 +52,8 @@ Screens load the information they need, prepare it for display, and show loading
 
 The [GraphQL client](src/api/graphql.ts) sends reads to `POST /api/graphql` and reuses complete, successful results for 30 seconds. The [loading hook](src/hooks/use-resource.ts) keeps older responses from replacing newer screen data. Some screens also use HTTP reads, such as the [season schedule](src/features/matches/api.ts).
 
+Player rankings and card-stat season rows come from the API. Rankings use stored account statistics and configured position weights; card rows use season aggregates from stored match history. The browser selects and renders those results for each screen; it does not own the canonical ranking or name-validation rules.
+
 ### Saving Changes
 
 Feature API modules send changes as HTTP commands. For example, the [match import screen](src/features/matches/match-import.tsx) submits player mappings and match data through [matches.importMatch](src/features/matches/api.ts) to `POST /api/import-match`. The API validates and saves the import, then returns counts for the screen to display.

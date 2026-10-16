@@ -2,7 +2,7 @@ import { Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { VOTE_FIELDS, VOTE_POSITIONS, type VoteKey, type VotePosition } from '@napl/contracts/league';
 import { voting as votingApi } from './api';
-import type { Account, Rankings } from '../accounts/models';
+import type { Account } from '../accounts/models';
 import type { VotingPeriod } from './models';
 import { C } from '../../theme/theme';
 import { useResource } from '../../hooks/use-resource';
@@ -14,7 +14,7 @@ import { choicesFromVotes, emptyVoteChoices, hasCompleteVote } from './voting-ut
 // configured vote position from the eligible pool, then submit. Once
 // submitted, the tab shows what they voted for and lets them change votes
 // until the period closes.
-export const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }: { account: Account; period: VotingPeriod; allPlayers: Account[]; rankings?: Rankings | null; onRefresh: () => void }) => {
+export const VotingTab = ({ account, period, allPlayers, onRefresh }: { account: Account; period: VotingPeriod; allPlayers: Account[]; onRefresh: () => void }) => {
   const [myVotes, setMyVotes] = useState(emptyVoteChoices);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -35,13 +35,11 @@ export const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }: 
     }
     // Sort each list by overall rating (highest first) so star players show on top
     const sortFn = (a: Account, b: Account) => {
-      const ra = rankings?.get ? (rankings.get(a.username.toLowerCase())?.score || 0) : 0;
-      const rb = rankings?.get ? (rankings.get(b.username.toLowerCase())?.score || 0) : 0;
-      return rb - ra;
+      return b.ranking.score - a.ranking.score;
     };
     for (const position of VOTE_POSITIONS) result[position].sort(sortFn);
     return result;
-  }, [period, allPlayers, account.username, rankings]);
+  }, [period, allPlayers, account.username]);
 
   const { data: priorVotes, error: priorVotesError } = useResource(
     () => votingApi.listTotwVotes(period.id),
@@ -148,7 +146,7 @@ export const VotingTab = ({ account, period, allPlayers, rankings, onRefresh }: 
               <div className="space-y-1 max-h-72 overflow-y-auto">
                 {list.map(p => {
                   const isPicked = picked === p.username;
-                  const ov = rankings?.get ? (rankings.get(p.username.toLowerCase())?.score || 0) : 0;
+                  const ov = p.ranking.score;
                   const s = p.stats || {};
                   return (
                     <button

@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account } from './models';
 import { ModalShell } from '../../components/Ui';
 import { C } from '../../theme/theme';
-import { checkUsernameProfanity } from '../../utils/input';
 
 
 // EditName Modal
@@ -18,11 +17,6 @@ export const EditNameModal = ({ account, onClose, onSave }: { account: Account; 
     if (trimmed === account.username) { onClose(); return; }
     if (trimmed.length < 3) { setError('Username must be at least 3 characters'); return; }
     if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError('Letters, numbers, and underscores only'); return; }
-    // Profanity filter applies to player self-rename
-    if (checkUsernameProfanity(trimmed)) {
-      setError('That username isn\'t allowed. Please choose a different one.');
-      return;
-    }
     setBusy(true);
     try {
       await accountApi.renameAccount(account.id, trimmed);

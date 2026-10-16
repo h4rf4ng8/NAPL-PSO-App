@@ -14,7 +14,7 @@ test('season summary replaces full history and retains rounded pass average', ()
   assert.deepEqual(collectSeasons([account], 'S2'), ['S2', 'S1']);
 });
 
-test('legacy account history remains a fallback while summary data is absent', () => {
+test('season stats are read from the server summary without aggregating match history in the browser', () => {
   const account = {
     username: 'player', stats: overall,
     matches: [
@@ -22,5 +22,9 @@ test('legacy account history remains a fallback while summary data is absent', (
       { season: 'S1', goals: 2, assists: 1, passes: 6, tackles: 2, result: 'L' },
     ],
   } as Account;
-  assert.deepEqual(getStatsForSeason(account, 'S1'), s1);
+  assert.deepEqual(getStatsForSeason(account, 'S1'), {
+    games: 0, goals: 0, assists: 0, tackles: 0, passes: 0,
+    cleanSheets: 0, deflects: 0, catches: 0, motm: 0,
+    wins: 0, losses: 0, draws: 0,
+  });
 });

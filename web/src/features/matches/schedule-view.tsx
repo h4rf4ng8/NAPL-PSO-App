@@ -1,5 +1,5 @@
 import { Calendar, Plus } from 'lucide-react';
-import React, { useEffect,useMemo,useState } from 'react';
+import { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
 import { loadTeamRecords, matches as matchApi } from './api';
 import { useResource } from '../../hooks/use-resource';

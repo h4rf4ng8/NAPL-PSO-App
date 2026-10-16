@@ -9,11 +9,16 @@ import { get, need, insert, patch, remove, string, array, object, toColumns } fr
 import { accountDto } from '../accounts/dto.js';
 import { teamDto } from './dto.js';
 import { listTeams } from './queries.js';
+import { checkBlockedName } from '../name-validation.js';
 const map = {
     name: 'name', tag: 'tag', color: 'color', description: 'description', logoUrl: 'logo_url', seasons: 'seasons', formation: 'formation', lineup: 'lineup', totw: 'totw', totwSetAt: 'totw_set_at'
 };
 const same = (a: unknown, b: unknown) => string(a).toLowerCase() === string(b).toLowerCase();
 const invited = (team:Row,name:unknown) => Boolean(name) && array(team.pending_members).some(entry=>same(typeof entry==='string'?entry:object(entry).username,name));
+function validateTeamNames(name?: string, tag?: string): void {
+    if ((name !== undefined && checkBlockedName(name)) || (tag !== undefined && checkBlockedName(tag)))
+        throw new HttpError(400, 'name_not_allowed', 'That team name or tag isn\'t allowed. Please choose something else.');
+}
 export async function moveMember(database: Database, player: Row, target: Row | null, reviewer: string): Promise<Row> {
     const from = string(player.team_id) || null, to = target ? string(target.id) : null, name = string(player.username);
     if (from === to)
@@ -88,7 +93,9 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         return teamDto(row);
     });
     app.post('/api/teams', async (request) => {
-        const input = teamInput.parse(request.body), name = await actorName(db, request);
+        const input = teamInput.parse(request.body);
+        validateTeamNames(input.name, input.tag);
+        const name = await actorName(db, request);
         return db.transaction(async (tx) => {
             const self = await need(tx, 'accounts', actor(request).id, true);
             if (!self.strikers_id)
@@ -118,7 +125,9 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         });
     });
     app.patch('/api/teams/:id', async (request) => {
-        const input = teamPatch.parse(request.body), name = await actorName(db, request);
+        const input = teamPatch.parse(request.body);
+        validateTeamNames(input.name, input.tag);
+        const name = await actorName(db, request);
         return db.transaction(async (tx) => {
             const row = await need(tx, 'teams', parameters(request).id!, true);
             if (!isAdmin(request) && !same(row.owner_username, name))

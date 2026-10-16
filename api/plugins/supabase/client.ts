@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { z } from 'zod';
 import type { Config } from '../cfg.js';
 import { GatewayError } from '../auth/errors.js';
@@ -48,7 +48,7 @@ export class SupabaseClient implements SupabaseAuth {
         userId: z.string().uuid().parse(payload.sub),
         sessionId: z.string().uuid().parse(payload.session_id),
         expiresAt: z.number().int().positive().parse(payload.exp),
-        claims: payload as JWTPayload,
+        claims: payload,
       };
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? error.code : '';

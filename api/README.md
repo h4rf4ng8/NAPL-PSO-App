@@ -22,7 +22,7 @@ See the root README for the [system architecture](../README.md#system-architectu
 | --- | --- |
 | [lambda.ts](lambda.ts) and [dev.ts](dev.ts) | Start the application as a Lambda handler or a local HTTP server. The Lambda entry point uses [createHandler()](plugins/lambda.ts) to adapt incoming events to Fastify. |
 | [createApp()](app.ts) | Registers routes and applies request, session, permission, and error handling. |
-| [createRuntime()](plugins/runtime.ts) | Connects the application to its databases, Supabase Auth, and Discord, then supplies those dependencies to the app. |
+| [createRuntime()](plugins/runtime.ts) | Connects the application to PostgreSQL, Supabase Auth, and Discord, then supplies those dependencies to the app. |
 | [GraphQL routes](routes/graphql/) | Validate and execute read queries. The schema combines fields defined by each league area. |
 | [League routes](routes/) | Handle accounts, teams, matches, content, voting, settings, and administrator actions. |
 | [Database and connectDatabase()](plugins/db/client.ts) | Provide parameterized SQL access and transactions through Prisma. [Record helpers](plugins/db/records.ts) load and save rows and prepare responses. |
@@ -59,7 +59,7 @@ REST handlers check permissions and validate submitted data with Zod. Shared com
 
 For example, the [match import handler](routes/matches/index.ts#L147) handles `POST /api/import-match`. It validates the imported match, locks mapped player accounts, adds match records, and recalculates player statistics. These account changes commit together before the API returns the match ID and import counts.
 
-Related writes [run in transactions](plugins/db/client.ts) that protect against conflicting concurrent changes and have a 15-second timeout. A failed transaction rolls back its changes. The application and authentication stores use separate database connections and permissions. The [root command walkthrough](../README.md#updating-league-data) covers the other core workflows.
+Related writes [run in transactions](plugins/db/client.ts) that protect against conflicting concurrent changes and have a 15-second timeout. A failed transaction rolls back its changes. League data and authentication state share the database login configured by `DATABASE_URL`. That login needs both sets of runtime permissions described in [Runtime Settings](../README.md#runtime-settings). The [root command walkthrough](../README.md#updating-league-data) covers the other core workflows.
 
 ### Sign-in and Sessions
 

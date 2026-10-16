@@ -5,6 +5,16 @@ VALUES ('44444444-4444-4444-8444-444444444444', 'admin');
 DO $$
 DECLARE
 BEGIN
+  IF NOT pg_has_role('api_test', 'app_runtime', 'USAGE')
+     OR NOT pg_has_role('api_test', 'gateway_runtime', 'USAGE') THEN
+    RAISE EXCEPTION 'the API login must inherit application and authentication permissions';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_roles WHERE rolname = 'api_test'
+      AND (rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'the API login must remain restricted';
+  END IF;
   IF NOT has_table_privilege('supabase_auth_admin', 'auth_gateway.user_roles', 'SELECT') THEN
     RAISE EXCEPTION 'auth hook role cannot read canonical roles';
   END IF;
@@ -17,7 +27,8 @@ BEGIN
   IF has_function_privilege('anon', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE')
      OR has_function_privilege('authenticated', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE')
      OR has_function_privilege('app_runtime', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE')
-     OR has_function_privilege('gateway_runtime', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
+     OR has_function_privilege('gateway_runtime', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE')
+     OR has_function_privilege('api_test', 'auth_gateway.custom_access_token_hook(jsonb)', 'EXECUTE') THEN
     RAISE EXCEPTION 'a client or runtime role can execute the auth hook';
   END IF;
   IF has_table_privilege('anon', 'auth_gateway.user_roles', 'SELECT')

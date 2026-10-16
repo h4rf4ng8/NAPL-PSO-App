@@ -9,7 +9,6 @@ const ring = JSON.stringify({ active: Buffer.alloc(32, 7).toString('base64'), pr
 const env = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full',
-  AUTH_DATABASE_URL: 'postgres://db.example/auth?sslmode=verify-full',
   SUPABASE_URL: 'https://project.supabase.co',
   SUPABASE_PUBLISHABLE_KEY: 'public-key',
   SUPABASE_SECRET_KEY: '',
@@ -23,6 +22,7 @@ const env = {
   DISCORD_TRANSFER_WEBHOOK: '',
   VERCEL_TEAM_SLUG: 'napl-team',
   VERCEL_PROJECT_NAME: 'napl-web',
+  APPLICATION_ROLE_BOUNDARY_ARN: 'arn:aws:iam::123456789012:policy/napl-deployment-boundary',
 };
 
 async function paths(t: import('node:test').TestContext) {
@@ -44,6 +44,7 @@ test('maps validated production values to SAM parameters and preserves cookie JS
   assert.equal(params.VercelTeamSlug, 'napl-team');
   assert.equal(params.VercelProjectName, 'napl-web');
   assert.equal(params.ExistingVercelOidcProviderArn, '');
+  assert.equal(params.RolePermissionsBoundaryArn, env.APPLICATION_ROLE_BOUNDARY_ARN);
   assert.equal(params.PATH, undefined);
   assert.equal(params.NODE_ENV, undefined);
 });
@@ -80,6 +81,18 @@ test('rejects missing or malformed COOKIE_KEYS without generating or writing a k
     if (cookieValue === undefined) delete (values as Partial<typeof values>).COOKIE_KEYS;
     else values.COOKIE_KEYS = cookieValue;
     await assert.rejects(prepareSamParams({ ...files, environment: values }), /COOKIE_KEYS/);
+    await assert.rejects(readFile(files.outputPath));
+  }
+});
+
+test('requires a permissions-boundary policy ARN without exposing invalid values', async t => {
+  for (const boundary of ['', 'REPLACE_WITH_PRIVATE_VALUE', 'arn:aws:iam::123456789012:role/not-a-policy']) {
+    const files = await paths(t);
+    await assert.rejects(prepareSamParams({ ...files, environment: { ...env, APPLICATION_ROLE_BOUNDARY_ARN: boundary } }), error => {
+      assert.match(error.message, /RolePermissionsBoundaryArn/);
+      if (boundary) assert.ok(!error.message.includes(boundary));
+      return true;
+    });
     await assert.rejects(readFile(files.outputPath));
   }
 });

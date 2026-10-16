@@ -5,10 +5,12 @@ import { PrismaClient } from '../../generated/prisma/client.js';
 import { PostgresMembershipStore } from '../../plugins/membership/store.js';
 import { userId } from './fixtures.js';
 
-test('Prisma membership model uses the restricted gateway role', { skip: !process.env.AUTH_TEST_DATABASE_URL }, async () => {
-  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.AUTH_TEST_DATABASE_URL, max: 1 }) });
+test('one restricted login can read application data and maintain membership', { skip: !process.env.API_TEST_DATABASE_URL }, async () => {
+  const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.API_TEST_DATABASE_URL, max: 1 }) });
   const store = new PostgresMembershipStore(db);
   try {
+    const accounts = await db.$queryRaw<Array<{ username: string }>>`SELECT username FROM public.accounts WHERE id = '11111111-1111-4111-8111-111111111111'::uuid`;
+    assert.deepEqual(accounts, [{ username: 'Alice' }]);
     await store.save(userId, '123456789', true);
     assert.equal(await store.fresh(userId), true);
     const positive = await db.membership.findUniqueOrThrow({ where: { user_id: userId } });

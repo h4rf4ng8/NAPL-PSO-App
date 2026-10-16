@@ -15,7 +15,7 @@ export function createRuntime(config: Config): Dependencies {
   const db = connectDatabase(config.DATABASE_URL);
   const authClient = new PrismaClient({
     adapter: new PrismaPg({
-      connectionString: config.AUTH_DATABASE_URL,
+      connectionString: config.DATABASE_URL,
       max: 1,
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 30_000,

@@ -7,6 +7,10 @@ BEGIN
   IF NOT has_table_privilege('app_runtime', 'auth_gateway.role_audit_events', 'INSERT') THEN
     RAISE EXCEPTION 'API runtime cannot append role audit events';
   END IF;
+  IF NOT has_table_privilege('api_test', 'auth_gateway.role_audit_events', 'INSERT')
+     OR has_table_privilege('api_test', 'auth_gateway.role_audit_events', 'SELECT, UPDATE, DELETE, TRUNCATE') THEN
+    RAISE EXCEPTION 'the shared API login must only append role audit events';
+  END IF;
   IF has_table_privilege('app_runtime', 'auth_gateway.role_audit_events', 'SELECT')
      OR has_table_privilege('app_runtime', 'auth_gateway.role_audit_events', 'UPDATE')
      OR has_table_privilege('app_runtime', 'auth_gateway.role_audit_events', 'DELETE')

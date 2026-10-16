@@ -5,11 +5,10 @@ const schema = z.object({
   PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
   HOST: z.string().default('127.0.0.1'),
   PUBLIC_ORIGIN: z.string().url(),
-  SUPABASE_AUTH_URL: z.string().url(),
-  SUPABASE_AUTH_INTERNAL_URL: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
+  SUPABASE_URL: z.string().url(),
+  SUPABASE_JWKS_URL: z.string().url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_SECRET_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().startsWith('sb_secret_').optional()),
-  SUPABASE_JWT_AUDIENCE: z.string().default('authenticated'),
   DISCORD_CLIENT_ID: z.string().regex(/^\d+$/),
   DISCORD_CLIENT_SECRET: z.string().min(1),
   DISCORD_GUILD_ID: z.string().regex(/^\d+$/),
@@ -25,11 +24,14 @@ export function readConfig(environment: NodeJS.ProcessEnv = process.env) {
   if (origin.origin !== config.PUBLIC_ORIGIN || (config.NODE_ENV === 'production' && origin.protocol !== 'https:')) {
     throw new Error('PUBLIC_ORIGIN must be an exact origin; production requires HTTPS');
   }
-  if (config.NODE_ENV === 'production' && new URL(config.SUPABASE_AUTH_URL).protocol !== 'https:') {
-    throw new Error('SUPABASE_AUTH_URL must use HTTPS in production');
-  }
-  if (config.NODE_ENV === 'production' && config.SUPABASE_AUTH_INTERNAL_URL && new URL(config.SUPABASE_AUTH_INTERNAL_URL).protocol !== 'https:') {
-    throw new Error('SUPABASE_AUTH_INTERNAL_URL must use HTTPS in production');
+  for (const name of ['SUPABASE_URL', 'SUPABASE_JWKS_URL'] as const) {
+    const url = new URL(config[name]);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+      throw new Error(`${name} must be an HTTP(S) URL without credentials, query or fragment`);
+    }
+    if (config.NODE_ENV === 'production' && url.protocol !== 'https:') {
+      throw new Error(`${name} must use HTTPS in production`);
+    }
   }
   if (config.NODE_ENV === 'production' && config.DISCORD_TRANSFER_WEBHOOK && new URL(config.DISCORD_TRANSFER_WEBHOOK).protocol !== 'https:') {
     throw new Error('DISCORD_TRANSFER_WEBHOOK must use HTTPS in production');

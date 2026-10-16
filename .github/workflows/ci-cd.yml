@@ -154,7 +154,7 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
-          SUPABASE_JWT_AUDIENCE: ${{ vars.SUPABASE_JWT_AUDIENCE || 'authenticated' }}
+          SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
           DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
           DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
@@ -163,7 +163,7 @@ jobs:
           EXISTING_VERCEL_OIDC_PROVIDER_ARN: ${{ vars.EXISTING_VERCEL_OIDC_PROVIDER_ARN }}
           APPLICATION_ROLE_BOUNDARY_ARN: ${{ vars.APPLICATION_ROLE_BOUNDARY_ARN }}
         run: |
-          SUPABASE_AUTH_URL="${SUPABASE_URL%/}/auth/v1" pnpm run env:sam
+          pnpm run env:sam
           install -m 600 api/.env.sam.json api/.env.sam.yaml
       - name: Skip commits superseded on main
         id: release

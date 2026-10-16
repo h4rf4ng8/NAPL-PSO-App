@@ -9,19 +9,21 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Install pinned pnpm version
+        uses: pnpm/action-setup@v4
       - name: Set up Node.js and dependency cache
         uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: {node-version: 24, cache: pnpm}
       - name: Install locked workspace dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Lint workspaces
-        run: npm run lint
+        run: pnpm run lint
       - name: Generate Prisma client
-        run: npm run prisma:generate
+        run: pnpm run prisma:generate
       - name: Check GraphQL freshness
-        run: npm run gql:check
+        run: pnpm run gql:check
       - name: Type-check workspaces
-        run: npm run typecheck
+        run: pnpm run typecheck
       - name: Install AWS SAM CLI
         uses: aws-actions/setup-sam@v2
         with: {version: '1.165.0', use-installer: true}
@@ -54,13 +56,15 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Install pinned pnpm version
+        uses: pnpm/action-setup@v4
       - name: Set up Node.js and dependency cache
         uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: {node-version: 24, cache: pnpm}
       - name: Install locked workspace dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Generate Prisma client for tests
-        run: npm run prisma:generate
+        run: pnpm run prisma:generate
       - name: Run API and web integration tests
         run: bash api/test/integration/run.sh --tests
 
@@ -74,19 +78,21 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+      - name: Install pinned pnpm version
+        uses: pnpm/action-setup@v4
       - name: Set up Node.js and dependency cache
         uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: {node-version: 24, cache: pnpm}
       - name: Install locked workspace dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Generate Prisma client for the Lambda build
-        run: npm run prisma:generate
+        run: pnpm run prisma:generate
       - name: Build shared contracts
-        run: npm run build -w @napl/contracts
+        run: pnpm --filter @napl/contracts run build
       - name: Build Lambda package
-        run: npm run build -w @napl/api
+        run: pnpm --filter @napl/api run build
       - name: Build frontend and proxy
-        run: npm run build -w @napl/web
+        run: pnpm --filter @napl/web run build
       - name: Verify built Lambda package against disposable PostgreSQL
         run: bash api/test/integration/run.sh --package
       - name: Upload tested Lambda package
@@ -123,11 +129,13 @@ jobs:
       - name: Check out the validated commit
         uses: actions/checkout@v4
         with: {ref: '${{ github.sha }}'}
+      - name: Install pinned pnpm version
+        uses: pnpm/action-setup@v4
       - name: Set up Node.js and dependency cache
         uses: actions/setup-node@v4
-        with: {node-version: 24, cache: npm}
+        with: {node-version: 24, cache: pnpm}
       - name: Install locked workspace dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
       - name: Install AWS SAM CLI
         uses: aws-actions/setup-sam@v2
         with: {version: '1.165.0', use-installer: true}
@@ -155,7 +163,7 @@ jobs:
           EXISTING_VERCEL_OIDC_PROVIDER_ARN: ${{ vars.EXISTING_VERCEL_OIDC_PROVIDER_ARN }}
           APPLICATION_ROLE_BOUNDARY_ARN: ${{ vars.APPLICATION_ROLE_BOUNDARY_ARN }}
         run: |
-          npm run env:sam
+          pnpm run env:sam
           install -m 600 api/.env.sam.json api/.env.sam.yaml
       - name: Skip commits superseded on main
         id: release

@@ -6,7 +6,7 @@
   "scripts": {
     "setup:env": "node --import tsx scripts/setup-env.mjs",
     "env:sam": "node --import tsx scripts/sam-env.mjs",
-    "predev": "npm run setup:env",
+    "predev": "pnpm run setup:env",
     "dev": "node --env-file-if-exists=.env --import tsx --watch dev.ts",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
@@ -18,7 +18,7 @@
   "dependencies": {
     "@fastify/aws-lambda": "6.4.2",
     "@fastify/cookie": "^11.0.2",
-    "@napl/contracts": "*",
+    "@napl/contracts": "workspace:*",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
     "fastify": "^5.0.0",
@@ -30,6 +30,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@apollo/client": "4.3.3",
     "@types/aws-lambda": "8.10.161",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",

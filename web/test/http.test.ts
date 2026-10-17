@@ -84,8 +84,8 @@ test('reads GraphQL error extensions.code for session refresh and reuses the req
    ?json({errors:[{message:'Session expired',extensions:{code:'membership_refresh_required'}}]},401)
    :json({data:{accounts:[]}});
  });
- assert.deepEqual(await request('/api/graphql','POST',{query:'query { accounts { id } }'}),{data:{accounts:[]}});
- assert.deepEqual(calls.map(call=>call.url),['/api/graphql','/auth/refresh','/api/graphql']);
+ assert.deepEqual(await request('/api/standings','POST',{variables:{}}),{data:{accounts:[]}});
+ assert.deepEqual(calls.map(call=>call.url),['/api/standings','/auth/refresh','/api/standings']);
  assert.equal(calls[0]!.headers.get('Idempotency-Key'),calls[2]!.headers.get('Idempotency-Key'));
  assert.equal(calls[2]!.headers.get('X-CSRF-Token'),'after');
 });

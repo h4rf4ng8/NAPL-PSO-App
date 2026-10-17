@@ -19,7 +19,7 @@ export const auth = {
   },
   async signOut():Promise<void> {
     await request<void>('/auth/logout','POST',{});
-    resetClient();
+    await resetClient();
     resetCsrf();
     localStorage.setItem('napl-session-change',String(Date.now()));
   },

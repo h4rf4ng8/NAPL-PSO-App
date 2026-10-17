@@ -14,7 +14,7 @@ import { choicesFromVotes, emptyVoteChoices, hasCompleteVote } from './voting-ut
 // configured vote position from the eligible pool, then submit. Once
 // submitted, the tab shows what they voted for and lets them change votes
 // until the period closes.
-export const VotingTab = ({ account, period, allPlayers, onRefresh }: { account: Account; period: VotingPeriod; allPlayers: Account[]; onRefresh: () => void }) => {
+export const VotingTab = ({ account, period, allPlayers }: { account: Account; period: VotingPeriod; allPlayers: Account[] }) => {
   const [myVotes, setMyVotes] = useState(emptyVoteChoices);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -69,7 +69,6 @@ export const VotingTab = ({ account, period, allPlayers, onRefresh }: { account:
       await votingApi.submitTotwVotes(period.id, myVotes);
       setSubmitted(true);
       setInfo('✓ Your votes are in. You can change them until voting closes.');
-      onRefresh?.();
       setTimeout(() => setInfo(''), 4000);
     } catch (error_) {
       setError('Could not submit: ' + (error_ instanceof Error ? error_.message : String(error_)));

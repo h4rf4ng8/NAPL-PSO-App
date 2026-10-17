@@ -23,7 +23,7 @@ See the root README for the [system architecture](../README.md#system-architectu
 | [lambda.ts](lambda.ts) and [dev.ts](dev.ts) | Start the application as a Lambda handler or a local HTTP server. The Lambda entry point uses [createHandler()](plugins/lambda.ts) to adapt incoming events to Fastify. |
 | [createApp()](app.ts) | Registers routes and applies request, session, permission, and error handling. |
 | [createRuntime()](plugins/runtime.ts) | Connects the application to PostgreSQL, Supabase Auth, and Discord, then supplies those dependencies to the app. |
-| [GraphQL routes](routes/graphql/) | Validate and execute read queries. The schema combines fields defined by each league area. |
+| [GraphQL routes](routes/graphql/) | Validate parameters and execute fixed server-owned reads. The schema combines fields defined by each league area. |
 | [League routes](routes/) | Keep request validation, authorization, and HTTP handling in each feature’s `routes.ts`, database operations in `queries.ts`, and response mapping in `dto.ts`. |
 | [Database and connectDatabase()](plugins/db/client.ts) | Expose typed Prisma models, parameterized SQL, and Serializable transactions. [Record utilities](plugins/db/records.ts) normalize historical JSON and dates and preserve UUID text matching. |
 | [createSession()](plugins/auth/session.ts) and [SessionRefresher](plugins/session/refresh.ts) | Handle sign-in, session renewal, sign-out, and checks on API requests. |
@@ -42,7 +42,7 @@ Requests that use methods such as POST or PUT also need protection against forge
 
 ### Reading League Data
 
-The browser sends GraphQL queries to `POST /api/graphql`. The [query handler](routes/graphql/index.ts) accepts one query, checks its size and complexity, validates its fields, and executes it against the [schema](routes/graphql/schema.ts). GraphQL mutations and subscriptions are not supported; league changes use REST endpoints.
+Each GraphQL operation has a named POST endpoint, such as `/api/standings` or `/api/dashboard`. The [shared endpoint list](../pkgs/contracts/src/index.ts) keeps browser routing and API registration aligned. The [handler](routes/graphql/index.ts) accepts a strict `{variables: ...}` body and selects the fixed server-owned document assigned to that URL. It rejects query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation and field authorization remain in force. `/api/graphql` is not registered; league changes use REST endpoints.
 
 | Component | What it does |
 | --- | --- |
@@ -51,7 +51,7 @@ The browser sends GraphQL queries to `POST /api/graphql`. The [query handler](ro
 | [Match fields](routes/matches/schema.ts) | Return team records calculated from imported player match histories. |
 | [read()](routes/graphql/context.ts) | Reuses matching loads within one query request and converts database errors into GraphQL errors. |
 
-The frontend owns named queries such as [PublicLeagueData and MemberLeagueData](../web/src/features/dashboard/league.graphql). The [root query walkthrough](../README.md#reading-league-data) connects those queries to their screens and API field definitions. Some screens also use the REST read routes alongside GraphQL.
+The API owns named queries such as [Standings and MemberLeagueData](routes/graphql/operations/league.graphql). The existing generator produces trusted server documents and browser typed documents from these same sources, including Apollo cache metadata. The [root query walkthrough](../README.md#reading-league-data) connects those queries to their screens and API field definitions. Some screens also use the REST read routes alongside GraphQL.
 
 ### Saving Changes
 

@@ -2,8 +2,9 @@ import { Trophy } from 'lucide-react';
 import { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
 import { inStandings } from '../teams/selectors';
-import { useResource } from '../../hooks/use-resource';
-import { loadTeamRecords } from './api';
+import { skipToken, useQuery } from '@apollo/client/react';
+import { TeamRecordsDocument } from '../../api/generated/graphql';
+import { mapTeamRecords } from './api';
 import type { TeamRecord } from '@napl/contracts/matches';
 
 import type { Account } from '../accounts/models';
@@ -17,11 +18,8 @@ import { C } from '../../theme/theme';
 // Points → Wins → Goal Diff → Total Goals → team name alphabetically.
 export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { allTeams?: Team[]; allPlayers?: Account[]; records?: TeamRecord[] }) => {
   const [season, setSeason] = useState('all');
-  const [refresh, setRefresh] = useState(0);
-  const { data: fetchedRecords = [], loading: recordsLoading, error: recordsError } = useResource(
-    () => records ? Promise.resolve(records) : loadTeamRecords(refresh > 0), [records, refresh],
-  );
-  const teamRecords = records ?? fetchedRecords;
+  const { data, loading: recordsLoading, error: recordsError, refetch } = useQuery(TeamRecordsDocument, records ? skipToken : {});
+  const teamRecords = records ?? (data ? mapTeamRecords(data) : []);
 
   // Available seasons for the filter dropdown
   const seasons = useMemo(() => {
@@ -73,7 +71,7 @@ export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { all
         )}
       </div>
 
-      {recordsError && <p role="alert">{recordsError} <button onClick={() => setRefresh(value => value + 1)}>Try again</button></p>}
+      {recordsError && <p role="alert">{recordsError.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
       {recordsLoading ? <p role="status">Loading standings…</p> : (hasAnyMatches ? (
         <div className="rounded-lg overflow-x-auto" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
           <table className="w-full text-sm">

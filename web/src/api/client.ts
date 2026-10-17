@@ -10,17 +10,22 @@ export function createClient() {
     } }),
     defaultOptions: {
       // Apollo's default errorPolicy `none` rejects partial results.
-      query: { fetchPolicy: 'network-only' },
+      query: { fetchPolicy: 'cache-first' },
+      watchQuery: { fetchPolicy: 'cache-first' },
     },
   });
 }
 
-const state = { client: createClient() };
-export const getClient = () => state.client;
+const client = createClient();
+export const getClient = () => client;
+
+// Stop departing observers so an already queued resetStore cannot refetch them.
 export function resetClient() {
-  const previous = state.client;
-  state.client = createClient();
-  // Stop old requests before clearing; late responses cannot populate the new cache.
-  previous.stop();
-  previous.cache.restore({});
+  for (const observable of client.getObservableQueries('all')) observable.stop();
+  return client.clearStore();
+}
+
+export async function resetQueries() {
+  try { await client.resetStore(); }
+  catch { /* Refetch errors belong to query subscribers; the REST command succeeded. */ }
 }

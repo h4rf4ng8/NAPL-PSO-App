@@ -1,9 +1,6 @@
-import { graphql } from '../../api/graphql';
 import {
-  MemberLeagueDataDocument,
-  PublicLeagueDataDocument,
   type MemberLeagueDataQuery,
-  type PublicLeagueDataQuery,
+  type StandingsQuery,
 } from '../../api/generated/graphql';
 import { isRole } from '../admin/models';
 import { mapAccount } from '../accounts/api';
@@ -16,7 +13,7 @@ import type { Team } from '../teams/models';
 import { mapVotingPeriod } from '../voting/api';
 import type { VotingPeriod } from '../voting/models';
 
-export function mapPublicLeague(data: PublicLeagueDataQuery): { players: Account[]; teams: Team[]; teamRecords: TeamRecord[] } {
+export function mapPublicLeague(data: StandingsQuery): { players: Account[]; teams: Team[]; teamRecords: TeamRecord[] } {
   const records = teamRecordsSchema.safeParse(data.teamRecords);
   if (!records.success) throw new Error('Invalid GraphQL team records data.');
   return { players: data.accounts.map(mapAccount), teams: data.teams.map(mapTeam), teamRecords: records.data };
@@ -42,12 +39,4 @@ export function mapMemberLeague(data: MemberLeagueDataQuery): {
     news, tickerNews: news.slice(0, 8),
     periods: data.votingPeriods.map(mapVotingPeriod), me,
   };
-}
-
-export async function loadPublicLeague(): Promise<{ players: Account[]; teams: Team[]; teamRecords: TeamRecord[] }> {
-  return mapPublicLeague(await graphql(PublicLeagueDataDocument, {}));
-}
-
-export async function loadMemberLeague() {
-  return mapMemberLeague(await graphql(MemberLeagueDataDocument, {}));
 }

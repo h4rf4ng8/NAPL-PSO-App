@@ -4,23 +4,26 @@ import { useEffect, useState } from 'react';
 import type { Account } from './models';
 import { EmptyState, RecordBox, ResultBadge, SmallStat } from '../../components/Ui';
 import { C } from '../../theme/theme';
-import { useResource } from '../../hooks/use-resource';
-import { loadAccountMatchPage, loadAccountOpponents } from './api';
+import { skipToken, useQuery } from '@apollo/client/react';
+import { AccountMatchesDocument, AccountOpponentsDocument } from '../../api/generated/graphql';
+import { mapAccountMatchPage, mapAccountOpponents } from './api';
 
 export const HeadToHead = ({ account }: { account: Account }) => {
   const [opponent, setOpponent] = useState('');
   const [cursorState, setCursorState] = useState<{ key: string; cursor: string | null; back: (string | null)[] }>({ key: '', cursor: null, back: [] });
-  const [refresh, setRefresh] = useState(0);
-  const { data: opponents = [], loading: opponentsLoading, error: opponentsError } = useResource(
-    () => loadAccountOpponents(account.id, refresh > 0), [account.id, refresh],
+  const { data: opponentData, loading: opponentsLoading, error: opponentsError, refetch: refetchOpponents } = useQuery(
+    AccountOpponentsDocument, { variables: { id: account.id } },
   );
+  const opponents = opponentData ? mapAccountOpponents(opponentData) : [];
   const selected = opponents.find(item => item.opponent === opponent);
   const historyKey = `${account.id}:${opponent}`;
   const cursor = cursorState.key === historyKey ? cursorState.cursor : null;
-  const { data: page, loading: historyLoading, error: historyError } = useResource(
-    () => opponent ? loadAccountMatchPage(account.id, cursor, null, opponent, refresh > 0) : Promise.resolve({ nodes: [], pageInfo: { endCursor: null, hasNextPage: false } }),
-    [account.id, opponent, cursor, refresh],
+  const { data: historyData, loading: historyLoading, error: historyError, refetch: refetchHistory } = useQuery(
+    AccountMatchesDocument, opponent ? {
+      variables: { id: account.id, first: 25, after: cursor, season: null, opponent },
+    } : skipToken,
   );
+  const page = historyData ? mapAccountMatchPage(historyData) : undefined;
   useEffect(() => { setOpponent(''); setCursorState({ key: '', cursor: null, back: [] }); }, [account.id]);
   useEffect(() => { setCursorState({ key: historyKey, cursor: null, back: [] }); }, [historyKey]);
 
@@ -41,7 +44,7 @@ export const HeadToHead = ({ account }: { account: Account }) => {
       <Swords size={22} style={{ color: C.redLight }} />
       <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>HEAD TO HEAD</h3>
     </div>
-    {opponentsError && <p role="alert">{opponentsError} <button onClick={() => setRefresh(value => value + 1)}>Retry</button></p>}
+    {opponentsError && <p role="alert">{opponentsError.message} <button onClick={() => { void refetchOpponents().catch(() => {}); }}>Retry</button></p>}
     {opponentsLoading ? <p role="status">Loading opponent records…</p> : (opponents.length === 0 ? (
       <EmptyState icon={<Swords size={40} />} text="Log matches to track your record vs each opponent" />
     ) : (
@@ -76,7 +79,7 @@ export const HeadToHead = ({ account }: { account: Account }) => {
             </div>
             <div>
               <h4 className="font-display text-xl tracking-wider mb-2" style={{ color: C.cream }}>MATCH HISTORY</h4>
-              {historyError && <p role="alert">{historyError} <button onClick={() => { setCursorState({ key: historyKey, cursor: null, back: [] }); setRefresh(value => value + 1); }}>Retry from newest</button></p>}
+              {historyError && <p role="alert">{historyError.message} <button onClick={() => { setCursorState({ key: historyKey, cursor: null, back: [] }); void refetchHistory({ after: null }).catch(() => {}); }}>Retry from newest</button></p>}
               {historyLoading ? <p role="status">Loading match history…</p> : <>
                 <div className="space-y-1 max-h-72 overflow-y-auto">
                   {(page?.nodes || []).map((m, i) => <div key={m.id || i} className="rounded p-2 flex items-center gap-3 text-sm" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33` }}>

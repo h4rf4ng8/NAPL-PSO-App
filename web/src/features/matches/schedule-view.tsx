@@ -1,8 +1,10 @@
 import { Calendar, Plus } from 'lucide-react';
 import { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
-import { loadTeamRecords, matches as matchApi } from './api';
+import { mapTeamRecords, matches as matchApi } from './api';
 import { useResource } from '../../hooks/use-resource';
+import { useQuery } from '@apollo/client/react';
+import { TeamRecordsDocument } from '../../api/generated/graphql';
 
 import type { Account } from '../accounts/models';
 import type { ScheduledMatch } from './models';
@@ -13,14 +15,15 @@ import { AddMatchModal, EditMatchModal, GenerateScheduleModal } from './schedule
 
 export const ScheduleView = ({ account }: { account: Account | null }) => {
   const { data, loading, error: loadError, reload } = useResource(async () => {
-    const [matches, teams, teamRecords] = await Promise.all([
-      matchApi.listScheduledMatches(), teamApi.listTeams(), loadTeamRecords(),
+    const [matches, teams] = await Promise.all([
+      matchApi.listScheduledMatches(), teamApi.listTeams(),
     ]);
-    return { matches, teams, teamRecords };
+    return { matches, teams };
   }, []);
   const matches = data?.matches ?? [];
   const teams = data?.teams ?? [];
-  const teamRecords = data?.teamRecords ?? [];
+  const records = useQuery(TeamRecordsDocument);
+  const teamRecords = records.data ? mapTeamRecords(records.data) : [];
   const [season, setSeason] = useState('');
   const [editing, setEditing] = useState<ScheduledMatch | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -140,8 +143,8 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         </div>
       </div>
 
-      {loadError && <p role="alert">{loadError}</p>}
-      {loading ? (
+      {(loadError || records.error) && <p role="alert">{loadError || records.error?.message}</p>}
+      {(loading || records.loading) ? (
         <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading schedule...</div>
       ) : (filtered.length === 0 ? (
         <div className="text-center py-10 font-mono text-sm rounded" style={{ color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}44` }}>

@@ -97,8 +97,8 @@ try {
   assert.equal(csrfResponse.cookies.length, 1);
   const cookie = csrfResponse.cookies[0].split(';', 1)[0];
   const auth = { origin, 'x-csrf-token': csrf, 'content-type': 'application/json' };
-  const dashboard = await invoke('base64 GraphQL body and database-backed reads', event('/api/graphql', {
-    method: 'POST', headers: auth, cookies: [cookie], base64: true, body: { query: '{ accounts { id username } teams { id } }' },
+  const dashboard = await invoke('base64 GraphQL body and database-backed reads', event('/api/dashboard', {
+    method: 'POST', headers: auth, cookies: [cookie], base64: true, body: { variables: {} },
   }), 200);
   const payload = JSON.parse(dashboard.body);
   assert.equal(payload.errors, undefined);

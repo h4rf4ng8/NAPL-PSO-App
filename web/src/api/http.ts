@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { graphqlEndpoints } from '@napl/contracts';
+
+const readEndpoints = new Set<string>(Object.values(graphqlEndpoints));
 
 export class ApiError extends Error {
   constructor(public status:number, public code:string, message:string) { super(message); }
@@ -57,10 +60,9 @@ export async function request<T>(path:string, method='GET', body?:unknown, retry
     signal?.throwIfAborted();
     const response=await fetch(path,{method,headers,signal,credentials:'same-origin',...(body!==undefined&&{body:JSON.stringify(body)})});
     if(response.ok) {
-      if(mutates && path !== '/api/graphql' && path.startsWith('/api/')) {
-        // Reuse session reset: cancel pre-command reads so they cannot refill stale data.
-        const { resetClient } = await import('./client');
-        resetClient();
+      if(mutates && !readEndpoints.has(path) && path.startsWith('/api/')) {
+        const { resetQueries } = await import('./client');
+        await resetQueries();
       }
       return response.status===204?undefined as T:response.json();
     }

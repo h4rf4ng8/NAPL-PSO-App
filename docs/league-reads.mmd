@@ -3,9 +3,9 @@ sequenceDiagram
     participant API as Lambda API
     participant DB as Supabase (PostgreSQL)
     User->>User: Open league dashboard
-    User->>API: POST /api/graphql with query and variables
-    API->>API: Validate query and field permissions
+    User->>API: POST named read endpoint with variables only
+    API->>API: Validate inputs and permissions for fixed query
     API->>DB: Read requested teams, players and records
     DB-->>API: League data
     API-->>User: 200 OK with GraphQL data
-    User->>User: Display dashboard
+    User->>User: Apollo caches data and updates dashboard

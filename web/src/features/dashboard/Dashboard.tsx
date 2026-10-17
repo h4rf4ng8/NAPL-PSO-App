@@ -11,8 +11,9 @@ import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
 import { ScheduleView, StandingsView } from '../matches';
 import { TeamsView, TransfersView } from '../teams';
 import { VotingTab } from '../voting';
-import { loadMemberLeague } from './api';
-import { useResource } from '../../hooks/use-resource';
+import { mapMemberLeague } from './api';
+import { useQuery } from '@apollo/client/react';
+import { MemberLeagueDataDocument } from '../../api/generated/graphql';
 import { Header } from './Header';
 import { MatchLog } from './MatchLog';
 import { MyCard, type CardAction } from './MyCard';
@@ -25,7 +26,8 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const [selectedPlayer, setSelectedPlayer] = useState<Account | null>(null);
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
-  const { data, loading, error, reload } = useResource(loadMemberLeague, [account.id]);
+  const { data: result, loading, error, refetch } = useQuery(MemberLeagueDataDocument);
+  const data = useMemo(() => result ? mapMemberLeague(result) : undefined, [result]);
   const updateRef = useRef(onUpdate);
   updateRef.current = onUpdate;
   useEffect(() => { if (data?.me.id === account.id) updateRef.current(data.me); }, [data, account.id]);
@@ -44,7 +46,6 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
       ranking: updated.ranking ?? data?.me.ranking ?? account.ranking,
       cardStats: updated.cardStats ?? data?.me.cardStats ?? account.cardStats,
     });
-    void reload();
   };
 
   return (
@@ -56,7 +57,7 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         currentVotingPeriod={period} onLogout={onLogout} theme={theme} toggleTheme={toggleTheme} />
       <main className="relative max-w-6xl mx-auto px-4 py-6 fade-in">
         {loading && !data && <p role="status">Loading league…</p>}
-        {error && <p role="alert">{error} <button onClick={() => void reload()}>Try again</button></p>}
+        {error && <p role="alert">{error.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
         {data && view === 'home' && <HomeView account={data.me} allPlayers={players} allTeams={teams} news={data.news} currentSeason={currentSeason} onJump={setView} onUpdate={savedAccount} />}
         {data && view === 'me' && <MyCard account={data.me} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} onEdit={setModal} />}
         {view === 'matches' && <MatchLog account={account} season={season} />}
@@ -69,8 +70,8 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         {view === 'transfers' && <TransfersView account={account} />}
         {view === 'rules' && <RulesView onJump={setView} />}
         {view === 'news' && <NewsHub account={account} allTeams={teams} />}
-        {data && view === 'vote' && (period ? <VotingTab account={data.me} period={period} allPlayers={players} onRefresh={reload} /> : <p>No voting period is open.</p>)}
-        {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} onLeagueChanged={reload} /> : <p role="alert">Administrator access is required.</p>)}
+        {data && view === 'vote' && (period ? <VotingTab account={data.me} period={period} allPlayers={players} /> : <p>No voting period is open.</p>)}
+        {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} /> : <p role="alert">Administrator access is required.</p>)}
       </main>
       {modal === 'pos' && <EditPositionModal account={account} onClose={closeModal} />}
       {modal === 'name' && <EditNameModal account={account} onClose={closeModal} onSave={savedAccount} />}

@@ -4,18 +4,12 @@ import { createApp } from '../helper.js';
 import { type Database, type Row, Prisma, connectDatabase } from '../../plugins/db/client.js';
 import { accountDto } from '../../routes/accounts/dto.js';
 import { aggregate } from '../../routes/matches/routes.js';
-import { InMemoryCache } from '@apollo/client';
-import { print } from 'graphql';
-import { MemberLeagueDataDocument, PublicLeagueDataDocument } from '../../../web/src/api/generated/graphql.ts';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { accountMatchPageSchema } from '@napl/contracts/accounts';
 import { inStandings } from '../../../web/src/features/teams/selectors.js';
 import type { Team } from '../../../web/src/features/teams/models.js';
 import { mapAccount } from '../../../web/src/features/accounts/api.js';
 import type { PublicAccountFieldsFragment } from '../../../web/src/api/generated/graphql.js';
-const apolloCache = new InMemoryCache();
-const PUBLIC_LEAGUE_QUERY = print(apolloCache.transformDocument(PublicLeagueDataDocument));
-const MEMBER_LEAGUE_QUERY = print(apolloCache.transformDocument(MemberLeagueDataDocument));
 const alice = '11111111-1111-4111-8111-111111111111', bob = '22222222-2222-4222-8222-222222222222', admin = '33333333-3333-4333-8333-333333333333', newUser = '44444444-4444-4444-8444-444444444444';
 const verify = async (token: string) => {
     if (![alice, bob, admin, newUser].includes(token))
@@ -155,7 +149,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             const otherSeasonMatch = { ...match, id: 'legacy_match_other_season', season: 'S1', date: 3, strikersMatchId: 125 };
             const championship = { season: 'S0', placement: '1st', teamId: 'legacy_team', awardedAt: 1, historicalField: 'kept' };
             await ok('PATCH', `/api/accounts/${bob}`, admin, { matches: [match, secondMatch, otherSeasonMatch], championships: [championship] });
-            const response = await call('POST', '/api/graphql', undefined, { query: PUBLIC_LEAGUE_QUERY });
+            const response = await call('POST', '/api/standings', undefined, { variables: {} });
             const result = response.json<{ errors?: unknown; data: { accounts: PublicAccountFieldsFragment[] } }>();
             assert.equal(result.errors, undefined);
             const decoded = mapAccount(result.data.accounts.find(account => account.id === bob)!);
@@ -163,26 +157,22 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal(decoded.seasonStats?.S0?.games, 2);
             assert.equal(decoded.seasonStats?.S1?.games, 1);
             assert.deepEqual(decoded.championships, [championship]);
-            const firstResponse = await call('POST', '/api/graphql', undefined, { query: `{
-              accountMatches(id: "${bob}", first: 1, season: "S0") { nodes pageInfo { endCursor hasNextPage } }
-            }` });
+            const firstResponse = await call('POST', '/api/account-matches', undefined, { variables: { id: bob, first: 1, season: "S0" } });
             assert.equal(firstResponse.statusCode, 200, firstResponse.body);
             const firstPage = accountMatchPageSchema.parse(firstResponse.json<{ data: { accountMatches: unknown } }>().data.accountMatches);
             assert.equal(firstPage.nodes[0]?.strikersMatchId, '123');
             assert.equal(firstPage.nodes[0]?.historicalField, 'kept');
             assert.equal(firstPage.pageInfo.hasNextPage, true);
             assert.ok(firstPage.pageInfo.endCursor);
-            const secondResponse = await call('POST', '/api/graphql', undefined, {
-                query: 'query($after:String){ accountMatches(id:"' + bob + '",first:1,season:"S0",after:$after){nodes pageInfo {endCursor hasNextPage}} }',
-                variables: { after: firstPage.pageInfo.endCursor },
+            const secondResponse = await call('POST', '/api/account-matches', undefined, {
+                variables: { id: bob, first: 1, season: "S0", after: firstPage.pageInfo.endCursor },
             });
             const secondPage = accountMatchPageSchema.parse(secondResponse.json<{ data: { accountMatches: unknown } }>().data.accountMatches);
             assert.equal(secondPage.nodes[0]?.id, 'legacy_match_second');
             assert.equal(secondPage.pageInfo.hasNextPage, false);
             await ok('PATCH', `/api/accounts/${bob}`, admin, { country: 'US' });
-            const stale = await call('POST', '/api/graphql', undefined, {
-                query: 'query($after:String){ accountMatches(id:"' + bob + '",first:1,season:"S0",after:$after){nodes pageInfo {endCursor hasNextPage}} }',
-                variables: { after: firstPage.pageInfo.endCursor },
+            const stale = await call('POST', '/api/account-matches', undefined, {
+                variables: { id: bob, first: 1, season: "S0", after: firstPage.pageInfo.endCursor },
             });
             assert.equal(stale.statusCode, 409, stale.body);
             assert.equal(stale.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'stale_cursor');
@@ -196,7 +186,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 await database.execute(Prisma.sql `UPDATE public.news SET author=NULL, notes=NULL WHERE id='nullable_news'`);
                 const news = (await call('GET', '/api/news')).json<Row[]>().find(row => row.id === 'nullable_news');
                 assert.equal(news?.author, '');
-                const response = await call('POST', '/api/graphql', alice, { query: MEMBER_LEAGUE_QUERY });
+                const response = await call('POST', '/api/dashboard', alice, { variables: {} });
                 const result = response.json<{ errors?: unknown; data: { news: Row[]; me: Row } }>();
                 assert.equal(result.errors, undefined, response.body);
                 assert.equal(result.data.me.id, alice);
@@ -344,14 +334,14 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal(saved.length, 20);
             assert.ok(versions.some((matches, index) => responses[index]?.statusCode === 200 && JSON.stringify(matches.map(match => match.id).toSorted((a, b) => a.localeCompare(b))) === JSON.stringify(savedIds)), JSON.stringify(savedIds));
         });
-        const publicLeague = await call('POST', '/api/graphql', undefined, { query: PUBLIC_LEAGUE_QUERY });
+        const publicLeague = await call('POST', '/api/standings', undefined, { variables: {} });
         assert.equal(publicLeague.statusCode, 200, publicLeague.body);
         const publicData = publicLeague.json<{ data: { accounts: Array<Record<string, unknown>>; teams: Array<Record<string, unknown>> } }>().data;
         assert.ok(publicData.accounts.some(account => account.username === 'Alice'));
         assert.equal(publicData.accounts.find(account => account.username === 'Alice')?.email, undefined);
         assert.deepEqual(publicData.teams.map(team => String(team.name)).toSorted((a, b) => a.localeCompare(b)), ['Away Team', 'Home Team']);
-        const memberLeague = await call('POST', '/api/graphql', alice, {
-            query: MEMBER_LEAGUE_QUERY,
+        const memberLeague = await call('POST', '/api/dashboard', alice, {
+            variables: {},
         });
         assert.equal(memberLeague.statusCode, 200, memberLeague.body);
         const memberData = memberLeague.json<{ data: { me: { email: string }; admins?: unknown } }>().data;

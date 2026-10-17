@@ -1,16 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { InMemoryCache } from '@apollo/client';
+import { graphqlEndpoints } from '@napl/contracts';
 import { createApp } from '../helper.js';
 import { type Database, type Row, Prisma } from '../../plugins/db/client.js';
-import { parse, print, validate } from 'graphql';
+import { graphql, parse, print, validate } from 'graphql';
+import type { FastifyRequest } from 'fastify';
 import { schema } from '../../routes/graphql/schema.js';
 import { HttpError } from '../../plugins/auth/identity.js';
-import { AccountMatchesDocument, AccountOpponentsDocument, MemberLeagueDataDocument, PublicLeagueDataDocument, TeamRecordsDocument } from '../../../web/src/api/generated/graphql.ts';
+import { AccountMatchesDocument, AccountOpponentsDocument, MemberLeagueDataDocument, StandingsDocument, TeamRecordsDocument } from '../../../web/src/api/generated/graphql.ts';
 
 const apolloCache = new InMemoryCache();
 const MEMBER_LEAGUE_QUERY = print(apolloCache.transformDocument(MemberLeagueDataDocument));
-const PUBLIC_LEAGUE_QUERY = print(apolloCache.transformDocument(PublicLeagueDataDocument));
+const PUBLIC_LEAGUE_QUERY = print(apolloCache.transformDocument(StandingsDocument));
 
 const alice = '11111111-1111-4111-8111-111111111111';
 const admin = '33333333-3333-4333-8333-333333333333';
@@ -41,7 +43,7 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
       totwVotingPeriod: { findMany: async () => [] },
       setting: { findUnique: async ({ where }: { where: { key: string } }) => {
         if (failSettings) throw new Error('database detail must stay private');
-        if (options.settingsError) throw options.settingsError;
+        if (options.settingsError && where.key === 'current_season') throw options.settingsError;
         const key = `client.setting.${where.key}`;
         seen.set(key, (seen.get(key) ?? 0) + 1);
         return { key: where.key, value: where.key === 'current_season' ? 'S2' : '{"CM":{"goals":1}}' };
@@ -50,10 +52,13 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
     query: async <T extends Row>(sql: Prisma.Sql) => {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       if (failSettings && key.includes('public."settings"')) throw new Error('database detail must stay private');
-      if (options.settingsError && key.includes('public."settings"')) throw options.settingsError;
+      if (options.settingsError && key.includes('public."settings"') && sql.values[0] === 'current_season') throw options.settingsError;
       seen.set(key, (seen.get(key) ?? 0) + 1);
       let rows: Row[] = [];
       if (key.startsWith('SELECT r.user_id::text')) rows = roleForAlice.map(role => ({ userId: admin, username: 'Alice', role }));
+      else if (key.startsWith('WITH match_rows AS')) rows = [];
+      else if (key.startsWith('WITH target AS')) rows = [{ version: '1', match: null, ordinality: null }];
+      else if (key.includes('AS opponent')) rows = [];
       else if (key.includes('public."accounts"') || key.includes('public.accounts')) rows = [options.account ?? account];
       else if (key.includes('public."teams"')) rows = options.teams ?? [team];
       else if (key.includes('public."news"')) rows = [{ id: 'news-1', type: 'update', title: 'Hello', body: '', pinned: false, author: 'Alice', created_at: new Date(0) }];
@@ -72,7 +77,7 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
     db: database,
     verify: async token => ({ id: token, sessionId: token, claims: { sub: token } }),
   });
-  return { app, seen };
+  return { app, seen, database };
 }
 
 test('dashboard query documents validate against the feature-owned schema', () => {
@@ -87,161 +92,115 @@ test('account history and team-record operations validate against their feature 
   }
 });
 
-test('aggregated query shares domain reads and caches aliases without internal HTTP requests', async () => {
+test('fixed endpoints execute their own documents and the generic endpoint is gone', async () => {
+  const { app } = appFor();
+  const fields = { Standings: ['accounts', 'teams', 'teamRecords'], MemberLeagueData: ['accounts', 'teams', 'season', 'news', 'votingPeriods', 'me'], TeamRecords: ['teamRecords'], AccountMatches: ['accountMatches'], AccountOpponents: ['accountOpponents'], AccountCardPreviews: ['accountCardPreviews'], DefaultPositionWeights: ['defaultPositionWeights'] };
+  try {
+    for (const [name, url] of Object.entries(graphqlEndpoints)) {
+      const variables = name === 'AccountMatches' || name === 'AccountOpponents' ? { id: alice } : {};
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables } });
+      assert.equal(response.statusCode, 200, `${url}: ${response.body}`);
+      assert.equal(response.json().errors, undefined);
+      assert.deepEqual(Object.keys(response.json().data).toSorted((a, b) => a.localeCompare(b)), fields[name as keyof typeof fields].toSorted((a, b) => a.localeCompare(b)), url);
+    }
+    const removed = await app.inject({ method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+    assert.equal(removed.statusCode, 404);
+  } finally { await app.close(); }
+});
+
+test('fixed endpoints reject document overrides and unknown variables before domain reads', async () => {
   const { app, seen } = appFor();
-  const requests: string[] = [];
-  app.addHook('onRequest', async request => { requests.push(request.url); });
   try {
-    const response = await app.inject({
-      method: 'POST', url: '/api/graphql',
-      payload: { query: '{ accounts { id username stats } accountsAgain: accounts { id } teams { id name invitations { username } } season weightings news { id title } votingPeriods { id } }' },
-    });
-    assert.equal(response.statusCode, 200, response.body);
-    const result = response.json<{ data: Record<string, unknown> }>();
-    assert.notEqual(result.data, null, response.body);
-    assert.equal(result.data.season, 'S2');
-    assert.equal((result.data.accounts as Array<Record<string, unknown>>)[0]?.email, undefined);
-    assert.equal((result.data.teams as Array<Record<string, unknown>>)[0]?.name, 'Blue', response.body);
-    const accountSummaryQueries = [...seen].filter(([key]) => key.includes('SELECT a.id') && key.includes('season_stats'));
-    assert.equal(accountSummaryQueries.reduce((total, [, count]) => total + count, 0), 1);
-    assert.deepEqual(requests, ['/api/graphql']);
+    for (const url of Object.values(graphqlEndpoints)) {
+      for (const payload of [
+        { variables: {}, query: '{ admins { userId } }' },
+        { variables: {}, operationName: 'Standings' },
+        { variables: {}, extensions: { persistedQuery: {} } },
+        { variables: {}, url: '/api/roles' },
+        { variables: { unexpected: true } },
+        [{ variables: {} }],
+      ]) {
+        const response = await app.inject({ method: 'POST', url, payload });
+        assert.equal(response.statusCode, 400, `${url}: ${response.body}`);
+        assert.equal(response.json().errors[0].extensions.code, 'invalid_request');
+        assert.equal(seen.size, 0, 'invalid input must not reach the database');
+      }
+    }
   } finally { await app.close(); }
 });
 
-test('private account fields are absent from the public GraphQL type and me preserves 401', async () => {
+test('history endpoints preserve required variables, defaults, nulls and bounds', async () => {
   const { app } = appFor();
   try {
-    const publicField = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ accounts { email } }' } });
-    assert.equal(publicField.statusCode, 400);
-    assert.match(publicField.body, /Cannot query field/);
-    const historyField = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ accounts { matches } }' } });
-    assert.equal(historyField.statusCode, 400);
-    assert.match(historyField.body, /Cannot query field/);
-    const me = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ me { email roles } }' } });
-    assert.equal(me.statusCode, 401);
-    assert.equal(me.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'authentication_required');
-    const current = await app.inject({ method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` }, payload: { query: '{ me { email roles } }' } });
-    assert.equal(current.statusCode, 200, current.body);
-    assert.deepEqual(current.json<{ data: { me: { email: string; roles: string[] } } }>().data.me, { email: 'private@example.test', roles: [] }, current.body);
-  } finally { await app.close(); }
-});
-
-test('admins stays super-admin-only and mutations are rejected', async () => {
-  const { app } = appFor();
-  try {
-    const denied = await app.inject({ method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` }, payload: { query: '{ admins { username } }' } });
-    assert.equal(denied.statusCode, 403);
-    const mutation = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: 'mutation { anything }' } });
-    assert.equal(mutation.statusCode, 400);
-    assert.equal(mutation.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'query_only');
-  } finally { await app.close(); }
-});
-
-test('super admins can read role assignments through the feature resolver', async () => {
-  const { app } = appFor(['super_admin']);
-  try {
-    const response = await app.inject({
-      method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${admin}` },
-      payload: { query: '{ admins { userId username role } }' },
-    });
-    assert.equal(response.statusCode, 200, response.body);
-    assert.deepEqual(response.json<{ data: { admins: unknown[] } }>().data.admins, [{ userId: admin, username: 'Alice', role: 'super_admin' }]);
-  } finally { await app.close(); }
-});
-
-test('REST and GraphQL role reads perform each auth lookup once and reload roles on the next request', async () => {
-  for (const [method, url, payload] of [
-    ['GET', '/api/roles', undefined],
-    ['POST', '/api/graphql', { query: '{ admins { userId } again: admins { userId } }' }],
-  ] as const) {
-    const currentRoles: ('admin' | 'super_admin')[] = ['super_admin'];
-    const { app, seen } = appFor(currentRoles);
-    const count = (part: string) => [...seen].filter(([sql]) => sql.includes(part)).reduce((sum, [, value]) => sum + value, 0);
-    try {
-      const response = await app.inject({ method, url, payload, headers: { authorization: `Bearer ${admin}` } });
+    for (const variables of [{ id: alice }, { id: alice, first: null, after: null, season: null, opponent: null }]) {
+      const response = await app.inject({ method: 'POST', url: '/api/account-matches', payload: { variables } });
       assert.equal(response.statusCode, 200, response.body);
-      assert.equal(count('FROM auth_gateway.memberships'), 1);
-      assert.equal(count('SELECT role FROM auth_gateway.user_roles'), 1);
-      assert.equal(count('session_active'), 1);
-      assert.equal(count('SELECT r.user_id::text'), 1);
-      currentRoles[0] = 'admin';
-      const denied = await app.inject({ method, url, payload, headers: { authorization: `Bearer ${admin}` } });
-      assert.equal(denied.statusCode, 403, denied.body);
-      assert.equal(count('SELECT role FROM auth_gateway.user_roles'), 2);
-      assert.equal(count('SELECT r.user_id::text'), 1);
-    } finally { await app.close(); }
-  }
+      assert.deepEqual(response.json().data.accountMatches.nodes, []);
+      assert.equal(response.json().data.accountMatches.pageInfo.hasNextPage, false);
+    }
+    for (const variables of [{}, { id: null }, { id: alice, first: 0 }, { id: alice, first: 51 }, { id: alice, first: '25' }, { id: alice, after: 'invalid' }]) {
+      const response = await app.inject({ method: 'POST', url: '/api/account-matches', payload: { variables } });
+      assert.equal(response.statusCode, 400, response.body);
+    }
+  } finally { await app.close(); }
 });
 
-test('role reads preserve transport-specific auth error precedence', async () => {
-  for (const fresh of [false, true]) {
-    const { app } = appFor(['super_admin'], false, { membership: { eligible: true, fresh }, activeSession: false });
-    try {
-      const headers = { authorization: `Bearer ${admin}` };
-      const rest = await app.inject({ method: 'GET', url: '/api/roles', headers });
-      const graphql = await app.inject({ method: 'POST', url: '/api/graphql', headers, payload: { query: '{ admins { userId } }' } });
-      assert.equal(rest.statusCode, 401);
-      assert.equal(rest.json().error, fresh ? 'session_expired' : 'membership_refresh_required');
-      assert.equal(graphql.statusCode, 401);
-      assert.equal(graphql.json().error, 'session_expired');
-    } finally { await app.close(); }
-  }
+test('standings stays public and dashboard preserves private fields and authentication', async () => {
+  const { app } = appFor();
+  try {
+    const standings = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    assert.equal(standings.statusCode, 200, standings.body);
+    assert.equal(standings.json().data.accounts[0].email, undefined);
+    assert.equal(standings.json().data.accounts[0].pendingImageUrl, undefined);
+    assert.equal(standings.json().data.me, undefined);
+    const anonymous = await app.inject({ method: 'POST', url: '/api/dashboard', payload: { variables: {} } });
+    assert.equal(anonymous.statusCode, 401);
+    const dashboard = await app.inject({ method: 'POST', url: '/api/dashboard', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+    assert.equal(dashboard.statusCode, 200, dashboard.body);
+    assert.equal(dashboard.json().data.me.email, 'private@example.test');
+    assert.equal(dashboard.json().data.accounts[0].email, undefined);
+    assert.equal(dashboard.json().data.admins, undefined);
+  } finally { await app.close(); }
 });
 
-test('combined accounts and me reads calculate the league once and constrain the current account query', async () => {
+test('dashboard shares league reads and constrains private account lookup', async () => {
   const { app, seen } = appFor();
   try {
-    const response = await app.inject({
-      method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` },
-      payload: { query: '{ accounts { id } me { id email } }' },
-    });
+    const response = await app.inject({ method: 'POST', url: '/api/dashboard', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
     assert.equal(response.statusCode, 200, response.body);
     const summaries = [...seen].filter(([sql]) => sql.includes('AS season_stats'));
     assert.equal(summaries.length, 1);
-    assert.equal(summaries.find(([sql]) => sql.includes('FROM public.accounts a ORDER BY'))?.[1], 1);
-    const privateFields = [...seen].filter(([key]) => key === `client.account.privateFields:${alice}`);
-    assert.equal(privateFields.length, 1);
-    assert.equal(privateFields[0]?.[1], 1);
-    assert.equal(response.json().data.me.id, alice);
-    assert.equal(response.json().data.accounts[0].email, undefined);
+    assert.equal(summaries[0]?.[1], 1);
+    assert.equal(seen.get(`client.account.privateFields:${alice}`), 1);
   } finally { await app.close(); }
 });
 
-test('query breadth is bounded and request envelopes reject batch/arbitrary properties', async () => {
-  const { app } = appFor();
+test('schema-only selections preserve alias deduplication and privileged resolver checks', async () => {
+  const { app, database, seen } = appFor(['super_admin']);
+  const request = { identity: { id: admin }, userRoles: ['super_admin'] } as unknown as FastifyRequest;
   try {
-    const wideQuery = `{ ${Array.from({ length: 11 }, (_, index) => `field${index}: season`).join(' ')} }`;
-    const wide = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: wideQuery } });
-    assert.equal(wide.statusCode, 400);
-    assert.equal(wide.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'query_too_complex');
-    const batch = await app.inject({ method: 'POST', url: '/api/graphql', payload: [{ query: '{ season }' }] });
-    assert.equal(batch.statusCode, 400);
-    const arbitrary = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ season }', url: '/api/roles' } });
-    assert.equal(arbitrary.statusCode, 400);
-    const tokenFlood = `{ ${Array.from({ length: 251 }, () => 'season').join(' ')} }`;
-    const tooManyTokens = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: tokenFlood } });
-    assert.equal(tooManyTokens.statusCode, 400);
-    assert.equal(tooManyTokens.json<{ errors: Array<{ extensions: { code: string } }> }>().errors[0]?.extensions.code, 'query_too_complex');
+    const result = await graphql({ schema, source: '{ admins { userId } again: admins { userId } }', contextValue: { db: database, request, reads: new Map() } });
+    assert.equal(result.errors, undefined);
+    assert.equal([...seen].filter(([key]) => key.startsWith('SELECT r.user_id::text')).reduce((sum, [, count]) => sum + count, 0), 1);
+    request.userRoles = [];
+    const denied = await graphql({ schema, source: '{ admins { userId } }', contextValue: { db: database, request, reads: new Map() } });
+    assert.equal(denied.errors?.[0]?.extensions.status, 403);
+    const anonymous = await graphql({ schema, source: '{ me { email } }', contextValue: { db: database, request: { userRoles: [] }, reads: new Map() } });
+    assert.equal(anonymous.errors?.[0]?.extensions.status, 401);
+    for (const field of ['email', 'matches']) assert.match(validate(schema, parse(`{ accounts { ${field} } }`))[0]!.message, /Cannot query field/);
   } finally { await app.close(); }
 });
 
-test('transient downstream failures remain visible without leaking internal details', async () => {
-  const { app } = appFor([], true);
-  try {
-    const response = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ season }' } });
-    assert.equal(response.statusCode, 503);
-    assert.match(response.body, /Request failed/);
-    assert.doesNotMatch(response.body, /database detail/);
-  } finally { await app.close(); }
-});
-
-test('unexpected resolver serialization errors fail closed with a safe 503', async () => {
-  const { app } = appFor([], false, { account: { ...account, created_at: new Date(NaN) } });
-  try {
-    const response = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ accounts { createdAt } }' } });
-    assert.equal(response.statusCode, 503);
-    assert.deepEqual(response.json().errors, [{ message: 'Request failed', extensions: { code: 'internal_error', status: 503 } }]);
-  } finally { await app.close(); }
+test('schema-only privileged reads preserve membership admission errors', async () => {
+  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
+    const { app, database } = appFor(['super_admin'], false, { membership });
+    try {
+      const result = await graphql({ schema, source: '{ admins { userId } }', contextValue: {
+        db: database, request: { identity: { id: admin }, userRoles: ['super_admin'] }, reads: new Map(),
+      } });
+      assert.equal(result.errors?.[0]?.extensions.status, membership.fresh ? 403 : 401);
+    } finally { await app.close(); }
+  }
 });
 
 test('GraphQL and REST share pending-team visibility rules', async () => {
@@ -251,41 +210,50 @@ test('GraphQL and REST share pending-team visibility rules', async () => {
     for (const token of [undefined, alice]) {
       const headers = token ? { authorization: `Bearer ${token}` } : {};
       const rest = await app.inject({ method: 'GET', url: '/api/teams', headers });
-      const gql = await app.inject({ method: 'POST', url: '/api/graphql', headers, payload: { query: '{ teams { id } }' } });
+      const gql = await app.inject({ method: 'POST', url: '/api/standings', headers, payload: { variables: {} } });
       assert.equal(gql.statusCode, 200, gql.body);
       const expected = token ? ['team-1', 'pending'] : ['team-1'];
       assert.deepEqual(rest.json<Array<{ id: string }>>().map(row => row.id), expected);
-      assert.deepEqual(gql.json<{ data: { teams: { id: string }[] } }>().data.teams.map(row => row.id), expected);
+      assert.deepEqual(gql.json().data.teams.map((row: { id: string }) => row.id), expected);
     }
   } finally { await app.close(); }
 });
 
-test('privileged feature reads enforce roles and membership for either transport', async () => {
-  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
-    const { app } = appFor(['super_admin'], false, { membership });
+test('fixed reads preserve expired-session errors', async () => {
+  for (const options of [{ activeSession: false }]) {
+    const { app } = appFor([], false, options);
     try {
-      for (const [method, url, payload] of [['GET', '/api/roles', undefined], ['POST', '/api/graphql', { query: '{ admins { userId } }' }]] as const) {
-        const response = await app.inject({ method, url, headers: { authorization: `Bearer ${admin}` }, payload });
-        assert.equal(response.statusCode, membership.fresh ? 403 : 401, response.body);
-      }
+      const response = await app.inject({ method: 'POST', url: '/api/dashboard', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+      assert.equal(response.statusCode, 401, response.body);
     } finally { await app.close(); }
   }
-  const { app } = appFor();
-  try {
-    const response = await app.inject({ method: 'GET', url: '/api/roles', headers: { authorization: `Bearer ${alice}` } });
-    assert.equal(response.statusCode, 403, response.body);
-  } finally { await app.close(); }
 });
 
-test('domain admission errors retain status, code and Retry-After', async () => {
+test('fixed reads retain safe downstream errors and Retry-After', async () => {
   for (const status of [429, 503]) {
     const { app } = appFor([], false, { settingsError: new HttpError(status, 'dependency_busy', 'private detail', 7) });
     try {
-      const response = await app.inject({ method: 'POST', url: '/api/graphql', payload: { query: '{ season }' } });
+      const response = await app.inject({ method: 'POST', url: '/api/dashboard', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
       assert.equal(response.statusCode, status, response.body);
       assert.equal(response.headers['retry-after'], '7');
       assert.equal(response.json().errors[0].extensions.code, status === 503 ? 'service_unavailable' : 'dependency_busy');
       assert.doesNotMatch(response.body, /private detail/);
     } finally { await app.close(); }
   }
+  const { app } = appFor([], true);
+  try {
+    const response = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    assert.equal(response.statusCode, 503);
+    assert.doesNotMatch(response.body, /database detail/);
+  } finally { await app.close(); }
+});
+
+test('unexpected resolver serialization errors fail closed', async () => {
+  const { app } = appFor([], false, { account: { ...account, created_at: new Date(NaN) } });
+  try {
+    const response = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.json().errors[0].extensions.code, 'internal_error');
+    assert.equal(response.json().errors[0].message, 'Request failed');
+  } finally { await app.close(); }
 });

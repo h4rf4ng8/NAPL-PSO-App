@@ -103,7 +103,7 @@ See the [web guide](web/README.md) for package internals and development command
 
 | Component | What it does |
 | --- | --- |
-| [web/src/features/](web/src/features/) | League screens, admin tools, domain models, commands, and GraphQL selections. |
+| [web/src/features/](web/src/features/) | League screens, admin tools, domain models, commands, and typed query consumers. |
 | [web/src/api/](web/src/api/) | Sends HTTP and GraphQL requests, caches reads, handles session refresh, and contains generated GraphQL types. |
 | [web/src/auth/](web/src/auth/) | Starts Discord sign-in, loads the current account, and signs out. |
 | [web/src/hooks/](web/src/hooks/) | Tracks loading, data, and errors while ignoring outdated request results. |
@@ -151,45 +151,35 @@ If a request reports that the session needs renewal, the browser renews it and t
 
 ### Reading League Data
 
-Each screen asks for the league information it needs. The public page loads players, teams, and team records. The member dashboard also loads news, voting periods, and the current account. The app prepares the returned data for display, shows loading or error messages, and ignores older responses that arrive after a newer request. The [dashboard loaders](web/src/features/dashboard/api.ts#L61) and [loading-state handling](web/src/hooks/resource.ts#L7) implement this behavior.
+The browser selects a named endpoint and supplies its parameters. The Lambda API owns the query and chooses which fields to load. It never executes a query document supplied by the browser.
 
-The named queries are defined beside their features:
-
-| Query | Used by | Data requested |
+| Operation | POST endpoint | Used for |
 | --- | --- | --- |
-| [PublicLeagueData](web/src/features/dashboard/league.graphql#L1) | `PublicLeague` → `loadPublicLeague()` | Public account summaries, visible teams, and imported team records. |
-| [MemberLeagueData](web/src/features/dashboard/league.graphql#L11) | `Dashboard` → `loadMemberLeague()` | Accounts, teams, current season, weightings, news, voting periods, and the current account (`me`). |
-| [AccountMatches](web/src/features/accounts/accounts.graphql#L40) | [MatchLog](web/src/features/dashboard/MatchLog.tsx#L9) and [HeadToHead](web/src/features/accounts/HeadToHead.tsx#L10) → [loadAccountMatchPage](web/src/features/accounts/api.ts#L51) | Up to 25 match records per page, with cursor, season, and opponent parameters. |
-| [AccountOpponents](web/src/features/accounts/accounts.graphql#L50) | `HeadToHead` → [loadAccountOpponents](web/src/features/accounts/api.ts#L58) | Opponent totals for one account. |
-| [TeamRecords](web/src/features/matches/matches.graphql#L1) | [TeamStandings](web/src/features/matches/standings.tsx#L18) when records are not supplied, and [ScheduleView](web/src/features/matches/schedule-view.tsx#L14) → [loadTeamRecords](web/src/features/matches/api.ts#L20) | Team records aggregated from imported match history. |
+| `Standings` | `/api/standings` | Public players, visible teams, and team records. |
+| `MemberLeagueData` | `/api/dashboard` | Member dashboard, news, voting periods, season, and the current account. |
+| `TeamRecords` | `/api/team-records` | Standings and schedule records. |
+| `AccountMatches` | `/api/account-matches` | Bounded match-history pages with account, cursor, season, and opponent parameters. |
+| `AccountOpponents` | `/api/account-opponents` | Opponent totals for one account. |
+| `AccountCardPreviews` | `/api/account-card-previews` | Sample player cards calculated by the API. |
+| `DefaultPositionWeights` | `/api/default-position-weights` | Default ranking weights. |
 
-For example, this is the [public dashboard query](web/src/features/dashboard/league.graphql#L1):
+For example, the initial request is `POST /api/standings` with this body:
 
-```graphql
-query PublicLeagueData {
-  accounts {
-    ...PublicAccountFields
-  }
-  teams {
-    ...TeamFields
-  }
-  teamRecords
-}
+```json
+{"variables": {}}
 ```
 
-The query reuses shared field lists for [player profiles](web/src/features/accounts/accounts.graphql#L1) and [teams](web/src/features/teams/teams.graphql#L1). This keeps different screens consistent about the information they request. A [generation script](web/scripts/codegen.ts) checks these queries against the API's available fields and creates TypeScript definitions so the browser code knows the shape of each response.
+The [query handler](api/routes/graphql/index.ts) binds each endpoint to its fixed document. It rejects client-supplied query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation, authorization, history bounds, and cursor checks still apply. `/api/graphql` is not registered.
 
-The browser sends GraphQL reads and league changes through the same [request handling](web/src/api/http.ts#L27). Both carry session cookies and use the same protections against forged requests and expired sessions.
+Canonical selections and fragments live in [API operations](api/routes/graphql/operations/). The [existing generation script](web/scripts/codegen.ts) validates them against the API schema and creates both server execution documents and browser typed documents. The browser uses its documents for Apollo's types and normalized cache; the [transport](web/src/api/link.ts) sends only variables. Generated server documents include the `__typename` fields needed by that cache.
 
-The Lambda API checks that each GraphQL request contains one valid query within the allowed size and complexity limits. It then loads the requested fields from the database. The [query handler](api/routes/graphql/index.ts#L73) coordinates this work, with each area of the league responsible for its own data:
+The browser sends these reads and REST commands through the same [request handling](web/src/api/http.ts). Both carry session cookies and retain protection against forged requests and expired sessions. Database access remains in the API:
 
-- [Account reads](api/routes/accounts/schema.ts#L59) return public player profiles and statistics. The current user's account also includes their email, pending profile image, and roles.
-- [Team reads](api/routes/teams/queries.ts#L11) return the teams the caller is allowed to see.
-- [Team records](api/routes/matches/records.ts#L5) are calculated from imported player match histories. Records for the same team and imported match are counted once, even when several players have that match in their history.
+- [Account fields](api/routes/accounts/schema.ts) return public profiles, rankings, and card statistics. Private current-account fields require an authenticated caller.
+- [Team reads](api/routes/teams/queries.ts) filter teams by the caller's visibility.
+- [Team records](api/routes/matches/records.ts) deduplicate imported match histories before aggregation.
 
-Account reads also include the API-computed player ranking and card-stat season rows. Rankings use stored account statistics and configured position weights; card rows use season aggregates from stored match history. The browser renders those results. Name and team-tag rules are enforced by API writes, so existing stored names are not rewritten when the rules change.
-
-Within one request, the API [reuses data it has already loaded](api/routes/graphql/context.ts#L13). The browser also keeps recently loaded data for repeat visits, as described in [Browser Cache](#browser-cache).
+Rankings use stored account statistics and configured position weights; card rows use season aggregates. The browser renders those results. Within a request, the API [reuses matching loads](api/routes/graphql/context.ts). Browser caching is described below.
 
 ### Updating League Data
 
@@ -213,25 +203,27 @@ Other league changes follow the same pattern of checking permissions, validating
 
 The [shared validation rules](pkgs/contracts/src/index.ts) define the accepted data for these commands. Manual match review remains implemented, but its [Stats tab is currently hidden](web/src/features/admin/AdminPanel.tsx#L104). Imported matches are saved directly; they do not pass through manual approval.
 
-After a successful change, the browser [clears cached query results and stops older queries still in progress](web/src/api/client.ts#L20). The screen then reloads the information it needs, while late responses cannot refill the cache with old data.
+After a successful change, the browser [clears cached query results and stops older queries still in progress](web/src/api/client.ts#L20). Apollo refetches active GraphQL queries; REST screens keep their explicit reloads. Late responses cannot refill the cache with old data.
 
 ## Browser Cache
 
-The browser can reuse complete, successful GraphQL responses for 30 seconds after they finish loading. Each query and its parameters has a separate entry. An ordinary dashboard reload may use this recent data; screens can explicitly request fresh data when needed. Failed reads never add cache entries. Everything stays in browser memory and belongs to the current browser client. See the [read implementation](web/src/api/graphql.ts#L7).
+GraphQL screens use Apollo's React hooks and normalized `InMemoryCache` with `cache-first`. A complete cached result is reused without another request, and simultaneous identical queries share a request. Mounted screens subscribe to cache changes. Explicit refresh uses Apollo's `refetch()`; it does not permanently force later reads onto the network.
 
-The cache holds at most 32 entries, with different parameters counting as separate entries even for the same query. When a successful result needs a new entry and the cache is full, the browser clears all existing entries before saving it. This limit also applies when several queries finish at the same time.
+There is no custom 30-second expiry or 32-entry whole-cache wipe. Results stay in browser memory until invalidation, session clearing, or page reload. Changes made by another user appear after a refresh. REST-only screens retain their existing loading hooks.
 
-Successful changes to league data clear cached reads and stop older queries still in progress. Failed changes leave the cache intact. Sending a GraphQL query does not clear it, because that request only reads data. Signing out or changing sessions uses the same reset process, and late responses from the previous client cannot refill the new cache. See [request handling](web/src/api/http.ts#L38) and [cache reset](web/src/api/client.ts#L20).
+Successful REST commands clear cached GraphQL reads, cancel older reads, and refetch active queries through Apollo's native lifecycle. Failed commands leave the cache intact. A failed refetch is shown as a read error and does not turn a completed write into a failed command. Named read requests do not invalidate the cache.
 
-The API's reuse of data within a single request ends with that request. It is separate from the browser's 30-second cache.
+Session changes and logout clear the cache without refetching the departing user's queries. Public `Account` and private `CurrentAccount` remain separate cache types. The response link validates opaque domain data before passing it to Apollo; malformed data and partial GraphQL failures cannot become successful cached results. See the [client lifecycle](web/src/api/client.ts), [transport](web/src/api/link.ts), and [HTTP handling](web/src/api/http.ts).
 
-Run the browser tests to check expiration, forced reads, successful and failed changes, cancellation, concurrent query limits, and session isolation:
+The API's reuse of data within a single request ends with that request. It is independent of the browser cache.
+
+Run browser tests for cache reuse, explicit refetch, reactive updates, validation, command invalidation, cancellation, and session isolation:
 
 ```sh
 pnpm --filter @napl/web test
 ```
 
-The relevant checks are in the [cache tests](web/test/cache.test.ts), [client reset tests](web/test/client.test.ts), and [GraphQL tests](web/test/graphql.test.ts).
+The relevant checks are in the [cache tests](web/test/cache.test.ts), [client lifecycle tests](web/test/client.test.ts), and [GraphQL tests](web/test/graphql.test.ts).
 
 ## Administrator Assignment History
 

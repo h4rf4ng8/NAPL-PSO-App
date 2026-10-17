@@ -18,12 +18,12 @@ The React application provides public league pages, member dashboards, and admin
 | Component | What it does |
 | --- | --- |
 | [src/main.tsx](src/main.tsx) and [src/App.tsx](src/App.tsx) | Start React, apply the saved theme, and choose the public page or member dashboard. |
-| [src/features/](src/features/) | Groups screens, models, API calls, and GraphQL selections by league area: accounts, administration, content, dashboard, matches, teams, and voting. |
+| [src/features/](src/features/) | Groups screens, models, API calls, and query consumers by league area: accounts, administration, content, dashboard, matches, teams, and voting. |
 | [src/api/](src/api/) | Sends requests, handles session renewal, and keeps recent GraphQL results in memory. |
 | [src/auth/session.ts](src/auth/session.ts) | Loads the current account, starts Discord sign-in, and signs out. |
-| [src/hooks/](src/hooks/) | Tracks loading, data, and errors; ignores responses from outdated requests. |
+| [src/hooks/](src/hooks/) | Tracks loading, data, and errors for REST consumers; GraphQL consumers use Apollo hooks. |
 | [src/components/](src/components/), [src/styles/](src/styles/), and [src/theme/](src/theme/) | Provide shared UI elements, styling, and theme preferences. |
-| [scripts/codegen.ts](scripts/codegen.ts) | Checks feature queries against the API schema and generates typed GraphQL documents. |
+| [scripts/codegen.ts](scripts/codegen.ts) | Checks API-owned queries and generates server execution documents and browser typed documents. |
 | [api/proxy.ts](api/proxy.ts) and [server/proxy.ts](server/proxy.ts) | Forward production requests to Lambda with AWS signatures and the origin secret. Credentials stay on the server. |
 | [../pkgs/contracts/](../pkgs/contracts/) | Shares domain types and validation rules with the API. |
 
@@ -42,23 +42,27 @@ Browser requests use relative `/api` and `/auth` URLs. The [Vite configuration](
 
 ### Reading League Data
 
-Screens load the information they need, prepare it for display, and show loading or error states. GraphQL selections live beside their features. Generated documents give those queries and responses TypeScript types; regenerate them after changing a selection or the API schema.
+GraphQL screens use `useQuery` and `useLazyQuery` through `ApolloProvider`. Apollo supplies loading, error, data, and refetch state. Pure feature mappers prepare validated results for display. Canonical selections live in [API operations](../api/routes/graphql/operations/); the browser uses generated typed documents.
 
-| Query | Used by | Data requested |
+| Query | Used by | Data returned |
 | --- | --- | --- |
-| [PublicLeagueData](src/features/dashboard/league.graphql) | [PublicLeague](src/features/dashboard/PublicLeague.tsx) through [loadPublicLeague](src/features/dashboard/api.ts) | Public players, teams, and team records. |
-| [MemberLeagueData](src/features/dashboard/league.graphql) | [Dashboard](src/features/dashboard/Dashboard.tsx) through [loadMemberLeague](src/features/dashboard/api.ts) | League data, season settings, news, voting periods, and the current account. |
-| [AccountMatches and AccountOpponents](src/features/accounts/accounts.graphql) | [MatchLog](src/features/dashboard/MatchLog.tsx) uses match pages; [HeadToHead](src/features/accounts/HeadToHead.tsx) uses both queries through [account loaders](src/features/accounts/api.ts). | Match pages and opponent summaries. |
+| `Standings` | [PublicLeague](src/features/dashboard/PublicLeague.tsx) | Public players, teams, and team records. |
+| `MemberLeagueData` | [Dashboard](src/features/dashboard/Dashboard.tsx) | League data, season, news, voting periods, and the current account. |
+| `AccountMatches` and `AccountOpponents` | [MatchLog](src/features/dashboard/MatchLog.tsx) and [HeadToHead](src/features/accounts/HeadToHead.tsx) | Match pages and opponent summaries. |
+| `TeamRecords` | Standings and schedule screens | Aggregated team records. |
+| `AccountCardPreviews` and `DefaultPositionWeights` | Player-card previews and ranking controls | Server-calculated samples and default weights. |
 
-The [GraphQL client](src/api/graphql.ts) sends reads to `POST /api/graphql` and reuses complete, successful results for 30 seconds. The [loading hook](src/hooks/use-resource.ts) keeps older responses from replacing newer screen data. Some screens also use HTTP reads, such as the [season schedule](src/features/matches/api.ts).
+The [transport](src/api/link.ts) sends only `{variables: ...}` to each operation's [named endpoint](../pkgs/contracts/src/index.ts). It validates response data before Apollo caches it. The server rejects client query documents and operation overrides.
 
-Player rankings and card-stat season rows come from the API. Rankings use stored account statistics and configured position weights; card rows use season aggregates from stored match history. The browser selects and renders those results for each screen; it does not own the canonical ranking or name-validation rules.
+Apollo uses `cache-first`, without a custom expiry timer. Repeat reads reuse complete cached data; explicit refresh requests fresh data. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks.
+
+Player rankings and card statistics remain calculated by the API. The browser selects and renders those results; canonical ranking and name-validation rules stay on the server.
 
 ### Saving Changes
 
 Feature API modules send changes as HTTP commands. For example, the [match import screen](src/features/matches/match-import.tsx) submits player mappings and match data through [matches.importMatch](src/features/matches/api.ts) to `POST /api/import-match`. The API validates and saves the import, then returns counts for the screen to display.
 
-Successful league changes clear cached reads and cancel older queries. The affected screen then reloads its data. See [request handling](src/api/http.ts), [cache reset](src/api/client.ts), and the [administrator refresh](src/features/admin/AdminPanel.tsx).
+Successful league changes clear cached reads and cancel older queries. Apollo refetches active GraphQL queries; REST screens retain their explicit reloads. Refetch failures do not make a successful command fail. See [request handling](src/api/http.ts), [cache reset](src/api/client.ts), and the [administrator refresh](src/features/admin/AdminPanel.tsx).
 
 ## Running Locally
 

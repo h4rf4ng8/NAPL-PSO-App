@@ -22,6 +22,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
   let verifications = 0;
   let currentUsername = 'Before';
   const database: Database = {
+    client: { setting: { findUnique: async () => { databaseReads++; return null; } }, account: { findMany: async () => [] } } as unknown as Prisma.TransactionClient,
     query: async <T extends Row>(sql: Prisma.Sql) => {
       databaseReads++;
       if (sql.sql.includes('auth_gateway.session_active')) return [{ active: true }] as T[];

@@ -1,9 +1,12 @@
 import { teamRecordsSchema, type TeamRecord } from '@napl/contracts/matches';
-import type { Database, Row } from '../../plugins/db/client.js';
+import type { Database } from '../../plugins/db/client.js';
 import { Prisma } from '../../plugins/db/client.js';
 
+type TeamRecordRow = Omit<TeamRecord, 'gf' | 'ga' | 'gd'> & { gf: number | string | Prisma.Decimal; ga: number | string | Prisma.Decimal; gd: number | string | Prisma.Decimal };
+
+// JSON match expansion and first-record deduplication stay in one SQL aggregate.
 export async function loadTeamRecords(database: Database): Promise<TeamRecord[]> {
-  const rows = await database.query<Row>(Prisma.sql`WITH match_rows AS (
+  const rows = await database.query<TeamRecordRow>(Prisma.sql`WITH match_rows AS (
     SELECT a.created_at, a.id AS account_id, m.ordinality,
       m.value->>'ownTeamId' AS "teamId",
       COALESCE(NULLIF(m.value->>'season',''),'S1') AS season,

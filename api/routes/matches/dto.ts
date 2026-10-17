@@ -1,8 +1,10 @@
-import type { Row } from '../../plugins/db/client.js';
-import { dto } from '../../plugins/db/records.js';
+import type { Submission } from '../../generated/prisma/client.js';
+import { timestamp } from '../../plugins/db/records.js';
 
-export function scheduleDto(row: Row): Row {
-  const fields = ['id', 'season', 'week', 'home_team_id', 'away_team_id', 'scheduled_date', 'stream_url', 'match_type', 'playoff_round', 'status', 'home_score', 'away_score', 'linked_match_id', 'notes', 'created_at', 'updated_at'];
-  const result = dto(Object.fromEntries(fields.map(key => [key, row[key]])));
-  return result;
+export function submissionDto(row: Submission) {
+  return {
+    id: row.id, matchInfo: row.match_info, playerStats: row.player_stats, edits: row.edits,
+    status: row.status, submittedBy: row.submitted_by, submittedAt: timestamp(row.submitted_at),
+    reviewedBy: row.reviewed_by, reviewedAt: timestamp(row.reviewed_at), rejectionReason: row.rejection_reason,
+  };
 }

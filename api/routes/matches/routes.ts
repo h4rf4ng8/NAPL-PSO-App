@@ -5,7 +5,9 @@ import type { Dependencies } from '../../app.js';
 import { params as parameters } from '../../plugins/request.js';
 import { HttpError, actorName, isAdmin } from '../../plugins/auth/identity.js';
 import { type Row } from '../../plugins/db/client.js';
-import { list, get, need, patch, remove, dto, object, array, string, upsert } from '../../plugins/db/records.js';
+import { object, array } from '../../plugins/db/records.js';
+import { submissionDto } from './dto.js';
+import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews } from './queries.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
         games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0, motm: 0
@@ -33,8 +35,8 @@ const importInput = z.strictObject({
 export function registerMatches(app: FastifyInstance, { db }: Dependencies): void {
     app.get('/api/submissions', async (request) => {
         const name = await actorName(db, request);
-        const rows = await list(db, 'submissions');
-        return rows.filter(r => isAdmin(request) || r.submitted_by === name).map(value => dto(value));
+        const rows = await listSubmissions(db, isAdmin(request) ? undefined : name);
+        return rows.map(row => submissionDto(row));
     });
     app.post('/api/submissions', {
         config: {
@@ -43,13 +45,11 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     }, async (request) => {
         const input = submissionInput.parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
-            const old = await get(tx, 'submissions', 'id', input.id, true);
+            const old = await getSubmission(tx, input.id, true);
             if (old && old.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
-            return dto(await upsert(tx, 'submissions', input.id, {
-                match_info: input.matchInfo, player_stats: input.playerStats, edits: input.edits ?? [], ...(!old && {
-                    status: 'pending', submitted_by: reviewer
-                })
+            return submissionDto(await saveSubmission(tx, input.id, {
+                match_info: input.matchInfo, player_stats: input.playerStats, edits: input.edits ?? [], status: 'pending', submitted_by: old?.submitted_by ?? reviewer
             }));
         });
     });
@@ -60,10 +60,10 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     }, async (request) => {
         const input = approveSubmission.parse(request.body);
         return db.transaction(async (tx) => {
-            const old = await need(tx, 'submissions', parameters(request).id!, true);
+            const old = await needSubmission(tx, parameters(request).id!, true);
             if (old.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
-            return dto(await patch(tx, 'submissions', string(old.id), {
+            return submissionDto(await updateSubmission(tx, old.id, {
                 match_info: input.matchInfo, player_stats: input.playerStats, edits: input.edits ?? []
             }));
         });
@@ -74,10 +74,10 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         }
     }, async (request) => {
         await db.transaction(async (tx) => {
-            const row = await need(tx, 'submissions', parameters(request).id!, true);
+            const row = await needSubmission(tx, parameters(request).id!, true);
             if (row.status === 'approved')
                 throw new HttpError(409, 'approved_submission');
-            await remove(tx, 'submissions', string(row.id));
+            await deleteSubmission(tx, row.id);
         });
         return {
             ok: true
@@ -92,10 +92,10 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             reason: z.string().max(2000).default('')
         }).parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
-            const row = await need(tx, 'submissions', parameters(request).id!, true);
+            const row = await needSubmission(tx, parameters(request).id!, true);
             if (row.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
-            return dto(await patch(tx, 'submissions', string(row.id), {
+            return submissionDto(await updateSubmission(tx, row.id, {
                 status: 'rejected', reviewed_by: reviewer, reviewed_at: new Date(), rejection_reason: reason
             }));
         });
@@ -107,22 +107,22 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     }, async (request) => {
         const input = approveSubmission.parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
-            const sub = await need(tx, 'submissions', parameters(request).id!, true);
+            const sub = await needSubmission(tx, parameters(request).id!, true);
             if (sub.status === 'approved')
-                return dto(sub);
+                return submissionDto(sub);
             if (sub.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             const info = input.matchInfo;
             if (info.homeTeamId === info.awayTeamId)
                 throw new HttpError(400, 'same_team');
-            const home = await need(tx, 'teams', info.homeTeamId), away = await need(tx, 'teams', info.awayTeamId);
+            const home = await needMatchTeam(tx, info.homeTeamId), away = await needMatchTeam(tx, info.awayTeamId);
             const seen = new Set<string>();
             for (const ps of input.playerStats) {
                 const key = ps.username.toLowerCase();
                 if (seen.has(key))
                     throw new HttpError(400, 'duplicate_player');
                 seen.add(key);
-                const player = await get(tx, 'accounts', 'username_lower', key, true);
+                const player = await findPlayer(tx, key);
                 if (!player)
                     throw new HttpError(409, 'player_missing');
                 if (player.team_id !== home.id && player.team_id !== away.id)
@@ -132,14 +132,14 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                     id: `m_${sub.id}_${player.id}`, date: info.date, season: info.season, opponent: isHome ? away.name : home.name, ownTeamId: player.team_id, opponentTeamId: isHome ? away.id : home.id, result: my > other ? 'W' : (my < other ? 'L' : 'D'), goalsFor: my, goalsAgainst: other, goals: ps.goals, assists: ps.assists, passes: ps.passes, tackles: ps.tackles, deflects: ps.deflects, catches: ps.catches, cleanSheet: ps.cleanSheet, motm: false
                 };
                 const matches = [...array(player.matches).map(value => object(value)), record];
-                await patch(tx, 'accounts', string(player.id), {
+                await savePlayerMatches(tx, player.id, {
                     matches, stats: aggregate(matches)
                 });
             }
-            await upsert(tx, 'news', `n_result_${sub.id}`, {
+            await saveResultNews(tx, `n_result_${sub.id}`, {
                 type: 'result', home_team_id: home.id, away_team_id: away.id, home_score: info.homeScore, away_score: info.awayScore, event_date: new Date(info.date), author: reviewer, auto_from_submission: sub.id
             });
-            return dto(await patch(tx, 'submissions', string(sub.id), {
+            return submissionDto(await updateSubmission(tx, sub.id, {
                 status: 'approved', reviewed_by: reviewer, reviewed_at: new Date(), match_info: info, player_stats: input.playerStats, edits: input.edits ?? []
             }));
         });
@@ -153,7 +153,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         return db.transaction(async (tx) => {
             if (input.homeTeamId === input.awayTeamId)
                 throw new HttpError(400, 'same_team');
-            const home = await need(tx, 'teams', input.homeTeamId), away = await need(tx, 'teams', input.awayTeamId);
+            const home = await needMatchTeam(tx, input.homeTeamId), away = await needMatchTeam(tx, input.awayTeamId);
             let updated = 0, skipped = 0, alreadyImported = 0;
             const skippedList: Row[] = [];
             const mapped = new Set<string>();
@@ -170,7 +170,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 if (mapped.has(name.toLowerCase()))
                     throw new HttpError(400, 'duplicate_player_mapping');
                 mapped.add(name.toLowerCase());
-                const player = await get(tx, 'accounts', 'username_lower', name.toLowerCase(), true);
+                const player = await findPlayer(tx, name.toLowerCase());
                 if (!player)
                     throw new HttpError(409, 'mapped_player_missing');
                 const matches = array(player.matches).map(value => object(value));
@@ -182,7 +182,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 matches.push({
                     id: `sc_${md.match_id}_${p.player_id}`, strikersMatchId: md.match_id, date: Date.now(), season: input.season, opponent: opponent.name, opponentTeamId: opponent.id, ownTeamId: own.id, result: my > other ? 'W' : (my < other ? 'L' : 'D'), goalsFor: my, goalsAgainst: other, stadium: md.stadium ?? '', matchLength: md.match_length ?? 0, goals: s.goals ?? 0, assists: s.assists ?? 0, passes: s.passes ?? 0, tackles: override === undefined || override === '' ? (s.poke_tackles_won ?? 0) + (s.slide_tackles_won ?? 0) : Number(override), deflects: s.deflects ?? 0, catches: s.catches ?? 0, cleanSheet: other === 0, motm: false, source: 'strikers-club-import'
                 });
-                await patch(tx, 'accounts', string(player.id), {
+                await savePlayerMatches(tx, player.id, {
                     matches, stats: aggregate(matches), ...(!player.strikers_id && {
                         strikers_id: String(p.player_id)
                     })

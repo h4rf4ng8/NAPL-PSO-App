@@ -30,6 +30,23 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
 } = {}) {
   const seen = new Map<string, number>();
   const database: Database = {
+    client: {
+      account: { findUnique: async ({ where, select }: { where: { id?: string }; select?: { email?: boolean } }) => {
+        const key = select?.email ? `client.account.privateFields:${where.id}` : 'client.account.findUnique';
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+        return options.account ?? account;
+      } },
+      team: { findMany: async () => options.teams ?? [team] },
+      news: { findMany: async () => [{ id: 'news-1', type: 'update', title: 'Hello', body: '', pinned: false, author: 'Alice', created_at: new Date(0) }] },
+      totwVotingPeriod: { findMany: async () => [] },
+      setting: { findUnique: async ({ where }: { where: { key: string } }) => {
+        if (failSettings) throw new Error('database detail must stay private');
+        if (options.settingsError) throw options.settingsError;
+        const key = `client.setting.${where.key}`;
+        seen.set(key, (seen.get(key) ?? 0) + 1);
+        return { key: where.key, value: where.key === 'current_season' ? 'S2' : '{"CM":{"goals":1}}' };
+      } },
+    } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       if (failSettings && key.includes('public."settings"')) throw new Error('database detail must stay private');
@@ -182,7 +199,7 @@ test('combined accounts and me reads calculate the league once and constrain the
     const summaries = [...seen].filter(([sql]) => sql.includes('AS season_stats'));
     assert.equal(summaries.length, 1);
     assert.equal(summaries.find(([sql]) => sql.includes('FROM public.accounts a ORDER BY'))?.[1], 1);
-    const privateFields = [...seen].filter(([sql]) => sql.includes('SELECT email, pending_image_url') && sql.includes('FROM public.accounts WHERE id=') );
+    const privateFields = [...seen].filter(([key]) => key === `client.account.privateFields:${alice}`);
     assert.equal(privateFields.length, 1);
     assert.equal(privateFields[0]?.[1], 1);
     assert.equal(response.json().data.me.id, alice);

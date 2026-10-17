@@ -1,16 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { FastifyRequest } from 'fastify';
 import type { Database, Row } from '../../plugins/db/client.js';
 import { Prisma } from '../../plugins/db/client.js';
 import { getCurrentAccount } from '../../routes/accounts/queries.js';
+import { currentAccountDto } from '../../routes/accounts/dto.js';
+import { createApp } from '../helper.js';
 import { loadAccountSummaries } from '../../routes/accounts/summaries.js';
 
 const accountId = '11111111-1111-4111-8111-111111111111';
-
-function request(identity: FastifyRequest['identity']): FastifyRequest {
-  return { identity, userRoles: [] } as FastifyRequest;
-}
 
 function accountDatabase(username: () => string): Database {
   const database: Database = {
@@ -40,11 +37,18 @@ test('separate summary reads and database instances see current account data', a
 
 test('current account ranking uses one population read and keeps private fields UUID-scoped', async () => {
   const statements: Prisma.Sql[] = [];
+  const privateReads: Array<{ where: { id: string }; select: { email: boolean; pending_image_url: boolean } }> = [];
+  const settingsReads: string[] = [];
   const db: Database = {
+    client: {
+      setting: { findUnique: async ({ where }: { where: { key: string } }) => { settingsReads.push(where.key); return null; } },
+      account: { findUnique: async (args: typeof privateReads[number]) => {
+        privateReads.push(args);
+        return { email: 'alice@example.test', pending_image_url: 'private-image' };
+      } },
+    } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       statements.push(sql);
-      if (sql.sql.includes('public."settings"')) return [] as T[];
-      if (sql.sql.includes('SELECT email, pending_image_url')) return [{ email: 'alice@example.test', pending_image_url: 'private-image' }] as T[];
       return [{
         id: accountId, username: 'Alice', position: 'CM', team_id: null, image_url: null, country: null,
         stats: {}, awards: [], championships: [], totw_until: null, cheater: false, strikers_id: null,
@@ -55,31 +59,35 @@ test('current account ranking uses one population read and keeps private fields 
     transaction: async work => work(db),
     close: async () => {},
   };
-  const result = await getCurrentAccount(db, request({ id: accountId, sessionId: 'session', claims: {} }));
+  const result = currentAccountDto(await getCurrentAccount(db, accountId), []);
   const summarySql = statements.find(sql => sql.sql.includes('AS season_stats'))!;
-  const privateSql = statements.find(sql => sql.sql.includes('SELECT email, pending_image_url'))!;
-  const settingsSql = statements.find(sql => sql.sql.includes('public."settings"'))!;
   assert.equal(result?.email, 'alice@example.test');
   assert.equal(result?.pendingImageUrl, 'private-image');
   assert.equal(result?.id, accountId);
   assert.match(summarySql.sql, /FROM public\.accounts a ORDER BY/);
   assert.match(summarySql.sql, /jsonb_array_elements/);
   assert.doesNotMatch(summarySql.sql, /a\.email|a\.pending_image_url/);
-  assert.match(privateSql.sql, /SELECT email, pending_image_url/);
-  assert.ok(privateSql.values.includes(accountId));
-  assert.ok(settingsSql.values.includes('position_weights'));
+  assert.equal(statements.length, 1, 'one population read');
+  assert.deepEqual(privateReads, [{ where: { id: accountId }, select: { email: true, pending_image_url: true } }]);
+  assert.deepEqual(settingsReads, ['position_weights']);
 });
 
 test('current account returns null for a missing row and rejects absent authentication without querying', async () => {
   let calls = 0;
   const db: Database = {
+    client: { setting: { findUnique: async () => { calls++; return null; } } } as unknown as Database['client'],
     query: async <T extends Row>() => { calls++; return [] as T[]; },
     execute: async () => 0,
     transaction: async work => work(db),
     close: async () => {},
   };
-  assert.equal(await getCurrentAccount(db, request({ id: accountId, sessionId: 'session', claims: {} })), null);
+  assert.equal(await getCurrentAccount(db, accountId), null);
   assert.equal(calls, 2, 'one population read and one weighting read');
-  await assert.rejects(getCurrentAccount(db, request(null)), { status: 401, code: 'authentication_required' });
-  assert.equal(calls, 2);
+  const app = createApp({ db, verify: async id => ({ id, sessionId: id, claims: { sub: id } }) });
+  try {
+    const response = await app.inject('/api/users/me');
+    assert.equal(response.statusCode, 401);
+    assert.equal(response.json().error, 'authentication_required');
+    assert.equal(calls, 2);
+  } finally { await app.close(); }
 });

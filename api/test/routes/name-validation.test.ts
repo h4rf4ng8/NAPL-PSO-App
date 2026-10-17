@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { checkBlockedName } from '../../routes/name-validation.js';
 import { createApp } from '../helper.js';
 import { Prisma, type Database, type Row } from '../../plugins/db/client.js';
-import { provisionAccount } from '../../routes/accounts/provision.js';
+import { provisionAccount } from '../../routes/accounts/queries.js';
 
 test('blocked name check catches leetspeak, separators, and repeated letters', () => {
   for (const name of ['sh1t', 'f_u_c_k', 'fuuuuck', 'x_cunt_x'])
@@ -18,6 +18,10 @@ test('blocked name check keeps short words within ordinary names allowed', () =>
 test('provisioning replaces a blocked OAuth username with the safe fallback', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
   const database: Database = {
+    client: { account: {
+      findUnique: async () => null,
+      create: async ({ data }: { data: { username: string; username_lower: string } }) => ({ id, ...data }),
+    } } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => (sql.sql.includes('INSERT INTO')
       ? [{ id, username: 'Player', username_lower: 'player' }]
       : []) as T[],

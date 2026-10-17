@@ -2,7 +2,8 @@ import { GraphQLBoolean, GraphQLFloat, GraphQLID, GraphQLObjectType, GraphQLStri
 import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
 import { read, type GraphQLContext } from '../graphql/context.js';
-import { listTeams } from './queries.js';
+import { listTeams, getAccount } from './queries.js';
+import { isAdmin } from '../../plugins/auth/identity.js';
 
 const Invitation = new GraphQLObjectType({
   name: 'Invitation',
@@ -46,7 +47,10 @@ export const queryFields = {
     type: nonNullList(Team),
     description: 'Teams visible to the current viewer.',
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
-      read(context, 'teams', () => listTeams(context.db, context.request)),
+      read(context, 'teams', async () => {
+        const self = context.request.identity ? await getAccount(context.db, context.request.identity.id) : null;
+        return listTeams(context.db, { username: self?.username, admin: isAdmin(context.request) });
+      }),
   },
 };
 

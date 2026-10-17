@@ -290,7 +290,9 @@ Use `localhost` for browser URLs so the OAuth redirects and cookies share the co
 
 Keys persist in the ignored app `.env` files. PostgreSQL data persists in `postgres-data`, including changes made through the app. Compose sets database and Auth addresses for its internal network; the app examples use localhost addresses for native development. Production CI receives its settings from GitHub secrets and variables.
 
-The API uses complete Auth base URLs: `SUPABASE_AUTH_URL=http://localhost:54321` locally or `https://PROJECT.supabase.co/auth/v1` for hosted Supabase. Compose supplies `SUPABASE_AUTH_INTERNAL_URL=http://auth:9999` for container requests; browser redirects and JWT issuer validation use the public URL. GoTrue is exposed directly without a reverse proxy.
+Use `SUPABASE_URL=https://PROJECT.supabase.co` for hosted Supabase and `SUPABASE_JWKS_URL=https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json` for its signing keys. The API appends `/auth/v1` to project roots; loopback URLs use standalone Auth directly, and an explicit Auth path is preserved. Locally these values are `http://localhost:54321` and `http://localhost:54321/.well-known/jwks.json`. Compose shares Auth's network namespace with Lambda so the same localhost URL works in the browser, native API, and Lambda container. Auth publishes both its own port and Lambda's invocation port; GoTrue has no reverse proxy.
+
+Apply Compose changes with `./scripts/dev.sh -d`. If you force-recreate only Auth, rerun this full-stack command to reconnect Lambda to its network. A normal Auth restart also restarts Lambda.
 
 ### Discord sign-in with Compose
 
@@ -385,14 +387,14 @@ Supply production values through a protected local file or the deployment enviro
 | Setting | Purpose |
 | --- | --- |
 | `DATABASE_URL` | One Supabase PostgreSQL connection URL for league data and authentication state. Its restricted runtime login must inherit both `app_runtime` and `gateway_runtime`; use `sslmode=verify-full` in production. |
-| `SUPABASE_AUTH_URL`, `SUPABASE_PUBLISHABLE_KEY` | Complete Auth HTTPS base URL, such as `https://PROJECT.supabase.co/auth/v1`, and authentication publishable key. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project HTTPS URL, such as `https://PROJECT.supabase.co`, and authentication publishable key. |
+| `SUPABASE_JWKS_URL` | Full signing-key endpoint, usually `https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json`. Used only to fetch keys; the issuer comes from the project Auth URL. |
 | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_GUILD_ID` | Discord OAuth application credentials and the guild used for membership checks. |
 | `PUBLIC_ORIGIN` | Exact HTTPS address of the public frontend, without a path or trailing slash. Configure allowed sign-in redirects for this frontend origin. |
 | `COOKIE_KEYS` | Persistent JSON key ring shared by all API instances. Each key is a base64-encoded 32-byte value. |
 | `ORIGIN_SECRET` | Secret shared by Vercel and the API, at least 32 characters long. |
 | `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Exact team and project identifiers allowed to invoke the production API. |
 | `SUPABASE_SECRET_KEY` | Optional server secret key for forwarding the original client IP to Supabase. |
-| `SUPABASE_JWT_AUDIENCE` | Optional token audience; defaults to `authenticated`. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional destination for roster notices. |
 | `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional existing AWS identity provider for the Vercel team, reused instead of creating another. |
 | `APPLICATION_ROLE_BOUNDARY_ARN` | Permissions boundary created by the deployment bootstrap, limiting the permissions of application roles. |
@@ -425,13 +427,13 @@ aws cloudformation deploy \
   --capabilities CAPABILITY_IAM
 ```
 
-The following setup is in **GitHub**, under this repository's **Settings → Environments → Production**. The repository owner must configure this environment:
+Configure the **Production** environment under GitHub **Settings → Environments** and store deployment values under **Settings → Secrets and variables → Actions** at repository scope:
 
 1. Under **Deployment branches and tags**, select **Selected branches and tags** and allow only the **branch** named `main`. Do not add a tag rule or wildcard.
-2. Add the environment secrets and variables below. Secrets belong in **Environment secrets**, not ordinary variables.
+2. Add the repository secrets and variables below. Secrets belong in **Repository secrets**, not ordinary variables. The Production job inherits these repository settings.
 3. Keep releases automatic; no required reviewer is needed for this workflow.
 
-| Environment secret | Where to obtain it |
+| Repository secret | Where to obtain it |
 | --- | --- |
 | `DATABASE_URL` | Supabase PostgreSQL connection for the shared runtime login, with `sslmode=verify-full`. |
 | `DISCORD_CLIENT_SECRET` | Discord Developer Portal → application → OAuth2 client secret. |
@@ -442,18 +444,18 @@ The following setup is in **GitHub**, under this repository's **Settings → Env
 
 The database login requires both runtime role grants and the migrations described in [Runtime Settings](#runtime-settings) and [Rollout and Rollback](#rollout-and-rollback). Use a restricted runtime login rather than the database administrator account. The same login serves league data and authentication state, so it has the combined permissions of both runtime roles.
 
-| Environment variable | Value or source |
+| Repository variable | Value or source |
 | --- | --- |
 | `AWS_REGION` | `us-east-2` |
 | `AWS_DEPLOY_ROLE_ARN` | Bootstrap stack output `GitHubDeployRoleArn`. |
 | `AWS_CLOUDFORMATION_ROLE_ARN` | Bootstrap stack output `CloudFormationExecutionRoleArn`. |
 | `AWS_DEPLOYMENT_BUCKET` | Bootstrap stack output `DeploymentBucket`. |
 | `APPLICATION_ROLE_BOUNDARY_ARN` | Bootstrap stack output `ApplicationRoleBoundaryArn`. |
-| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL and publishable API key. CI appends `/auth/v1` to supply the API's `SUPABASE_AUTH_URL`. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project URL and publishable API key. |
+| `SUPABASE_JWKS_URL` | Supabase signing-key endpoint: `https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json`. |
 | `PUBLIC_ORIGIN` | Public website's exact HTTPS origin. |
 | `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` | Discord application ID and league server ID. |
 | `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Vercel team's URL slug and project name. |
-| `SUPABASE_JWT_AUDIENCE` | Optional; defaults to `authenticated`. |
 | `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional; use only when the Vercel team's AWS provider already exists. |
 
 After verifying that GitHub's environment allows only the `main` branch, the AWS administrator enables the deployment role:

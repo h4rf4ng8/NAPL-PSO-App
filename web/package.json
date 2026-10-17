@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "vite build && pnpm run build:proxy",
-    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "test": "node --import tsx --test test/*.test.ts",
     "gql:generate": "node --import tsx scripts/codegen.ts",
     "gql:check": "node --import tsx scripts/codegen.ts --check",

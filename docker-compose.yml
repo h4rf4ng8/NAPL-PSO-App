@@ -29,7 +29,7 @@ services:
       GOTRUE_JWT_SECRET: ${GOTRUE_JWT_SECRET:?Run pnpm run setup:env first}
       GOTRUE_JWT_KEYS: ${GOTRUE_JWT_KEYS:?Run pnpm run setup:env first}
       GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
+      GOTRUE_API_PORT: 54321
       API_EXTERNAL_URL: http://localhost:54321
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:local_auth_only@db:5432/napl_local
@@ -43,9 +43,11 @@ services:
       GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_ENABLED: "true"
       GOTRUE_HOOK_CUSTOM_ACCESS_TOKEN_URI: pg-functions://postgres/auth_gateway/custom_access_token_hook
     ports:
-      - "127.0.0.1:54321:9999"
+      - "127.0.0.1:54321:54321"
+      # Lambda shares Auth's network so both use the public localhost Auth URL.
+      - "127.0.0.1:9000:8080"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9999/health"]
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:54321/health"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -67,13 +69,14 @@ services:
 
   lambda:
     platform: linux/arm64
+    network_mode: service:auth
     build:
       context: .
       dockerfile: api/Dockerfile
       target: lambda
     depends_on:
       db-init: {condition: service_completed_successfully}
-      auth: {condition: service_healthy}
+      auth: {condition: service_healthy, restart: true}
     environment:
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID:-0}
       DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-local-not-configured}
@@ -83,13 +86,11 @@ services:
       NODE_ENV: development
       PUBLIC_ORIGIN: http://localhost:5173
       DATABASE_URL: postgres://napl_local:napl_local_only@db:5432/napl_local
-      SUPABASE_AUTH_URL: http://localhost:54321
-      SUPABASE_AUTH_INTERNAL_URL: http://auth:9999
+      SUPABASE_URL: http://localhost:54321
       SUPABASE_PUBLISHABLE_KEY: local-development
-      SUPABASE_JWT_AUDIENCE: authenticated
+      SUPABASE_SECRET_KEY: ""
+      SUPABASE_JWKS_URL: http://localhost:54321/.well-known/jwks.json
       AWS_EC2_METADATA_DISABLED: "true"
-    ports:
-      - "127.0.0.1:9000:8080"
 
   api:
     build:
@@ -99,7 +100,7 @@ services:
     depends_on:
       lambda: {condition: service_started}
     environment:
-      LAMBDA_ENDPOINT: http://lambda:8080/2015-03-31/functions/function/invocations
+      LAMBDA_ENDPOINT: http://auth:8080/2015-03-31/functions/function/invocations
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3000/healthz').then(r => { if (!r.ok) process.exit(1); }).catch(() => process.exit(1))"]
       interval: 2s

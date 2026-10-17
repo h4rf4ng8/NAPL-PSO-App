@@ -30,19 +30,20 @@ export interface SupabaseAuth {
 export class SupabaseClient implements SupabaseAuth {
   private readonly jwks;
   private readonly authUrl: string;
-  private readonly requestUrl: string;
 
   constructor(private readonly config: Config) {
-    this.authUrl = config.SUPABASE_AUTH_URL.replace(/\/$/, '');
-    this.requestUrl = config.SUPABASE_AUTH_INTERNAL_URL?.replace(/\/$/, '') ?? this.authUrl;
-    this.jwks = createRemoteJWKSet(new URL(`${this.requestUrl}/.well-known/jwks.json`), { timeoutDuration: 3000 });
+    const url = new URL(config.SUPABASE_URL);
+    // Local Compose exposes GoTrue directly; hosted project roots use /auth/v1.
+    if (url.pathname === '/' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) url.pathname = '/auth/v1';
+    this.authUrl = url.href.replace(/\/$/, '');
+    this.jwks = createRemoteJWKSet(new URL(config.SUPABASE_JWKS_URL), { timeoutDuration: 3000 });
   }
 
   async verify(token: string): Promise<Identity> {
     try {
       const { payload } = await jwtVerify(token, this.jwks, {
         issuer: this.authUrl,
-        audience: this.config.SUPABASE_JWT_AUDIENCE,
+        audience: 'authenticated',
         algorithms: ['ES256', 'RS256'],
         requiredClaims: ['sub', 'exp', 'session_id'],
       });
@@ -99,7 +100,7 @@ export class SupabaseClient implements SupabaseAuth {
     headers.set('Content-Type', 'application/json');
     if (this.config.SUPABASE_SECRET_KEY) headers.set('Sb-Forwarded-For', ip);
     try {
-      return await fetch(`${this.requestUrl}${path}`, { ...init, headers, signal: AbortSignal.timeout(4000), redirect: 'error' });
+      return await fetch(`${this.authUrl}${path}`, { ...init, headers, signal: AbortSignal.timeout(4000), redirect: 'error' });
     } catch {
       throw new GatewayError(503, 'identity_provider_unavailable', 1);
     }

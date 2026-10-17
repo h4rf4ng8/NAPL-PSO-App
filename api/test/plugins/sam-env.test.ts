@@ -9,10 +9,10 @@ const ring = JSON.stringify({ active: Buffer.alloc(32, 7).toString('base64'), pr
 const env = {
   NODE_ENV: 'test',
   DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full',
-  SUPABASE_AUTH_URL: 'https://project.supabase.co/auth/v1',
+  SUPABASE_URL: 'https://project.supabase.co',
   SUPABASE_PUBLISHABLE_KEY: 'public-key',
   SUPABASE_SECRET_KEY: '',
-  SUPABASE_JWT_AUDIENCE: 'authenticated',
+  SUPABASE_JWKS_URL: 'https://project.supabase.co/auth/v1/.well-known/jwks.json',
   PUBLIC_ORIGIN: 'https://league.example',
   COOKIE_KEYS: ring,
   ORIGIN_SECRET: 'x'.repeat(32),
@@ -38,8 +38,8 @@ test('maps validated production values to SAM parameters and preserves cookie JS
   const params = JSON.parse(await readFile(files.outputPath, 'utf8'));
   assert.equal(params.DatabaseUrl, 'postgres://injected.example/app?sslmode=verify-full');
   assert.equal(params.CookieKeys, ring);
-  assert.equal(params.SupabaseUrl, env.SUPABASE_AUTH_URL);
-  assert.equal(params.SupabaseJwtAudience, 'authenticated');
+  assert.equal(params.SupabaseUrl, env.SUPABASE_URL);
+  assert.equal(params.SupabaseJwksUrl, env.SUPABASE_JWKS_URL);
   assert.equal(params.SupabaseSecretKey, '');
   assert.equal(params.DiscordTransferWebhook, '');
   assert.equal(params.VercelTeamSlug, 'napl-team');
@@ -48,6 +48,14 @@ test('maps validated production values to SAM parameters and preserves cookie JS
   assert.equal(params.RolePermissionsBoundaryArn, env.APPLICATION_ROLE_BOUNDARY_ARN);
   assert.equal(params.PATH, undefined);
   assert.equal(params.NODE_ENV, undefined);
+});
+
+test('requires an explicit HTTPS JWKS endpoint for deployment', async t => {
+  for (const jwks of ['', 'http://localhost:54321/.well-known/jwks.json']) {
+    const files = await paths(t);
+    await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_JWKS_URL: jwks } }), /SupabaseJwksUrl/);
+    await assert.rejects(readFile(files.outputPath));
+  }
 });
 
 test('injected COOKIE_KEYS takes precedence over the local env file', async t => {

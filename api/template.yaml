@@ -11,7 +11,7 @@ Parameters:
     Description: PostgreSQL runtime connection URL for application queries and authentication state.
   SupabaseUrl:
     Type: String
-    Description: Complete Supabase Auth base URL, including /auth/v1 for hosted Supabase.
+    Description: Supabase project URL, or the Auth base URL for a standalone service.
   SupabasePublishableKey:
     Type: String
     Description: Supabase publishable key used for Auth requests.
@@ -20,9 +20,9 @@ Parameters:
     NoEcho: true
     Default: ''
     Description: Optional Supabase secret key for trusted original-IP forwarding.
-  SupabaseJwtAudience:
+  SupabaseJwksUrl:
     Type: String
-    Default: authenticated
+    Description: Complete HTTPS URL of the Supabase Auth public signing keys endpoint.
   PublicOrigin:
     Type: String
     Description: Exact public Vercel site origin, including https scheme.
@@ -190,10 +190,10 @@ Resources:
         Variables:
           NODE_ENV: production
           DATABASE_URL: !Ref DatabaseUrl
-          SUPABASE_AUTH_URL: !Ref SupabaseUrl
+          SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
           SUPABASE_SECRET_KEY: !If [HasSupabaseSecretKey, !Ref SupabaseSecretKey, !Ref AWS::NoValue]
-          SUPABASE_JWT_AUDIENCE: !Ref SupabaseJwtAudience
+          SUPABASE_JWKS_URL: !Ref SupabaseJwksUrl
           PUBLIC_ORIGIN: !Ref PublicOrigin
           COOKIE_KEYS: !Ref CookieKeys
           ORIGIN_SECRET: !Ref OriginSecret

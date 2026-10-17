@@ -19,8 +19,8 @@ const origin = 'http://localhost:5173';
 const environment = {
   NODE_ENV: 'test', PUBLIC_ORIGIN: origin,
   DATABASE_URL: 'postgresql://api_test:napl_test_only@db:5432/napl_test',
-  SUPABASE_AUTH_URL: 'https://supabase.invalid/auth/v1', SUPABASE_PUBLISHABLE_KEY: 'sam-test-only',
-  SUPABASE_SECRET_KEY: '', SUPABASE_JWT_AUDIENCE: 'authenticated',
+  SUPABASE_URL: 'https://supabase.invalid', SUPABASE_PUBLISHABLE_KEY: 'sam-test-only',
+  SUPABASE_SECRET_KEY: '', SUPABASE_JWKS_URL: 'https://supabase.invalid/auth/v1/.well-known/jwks.json',
   DISCORD_CLIENT_ID: '123', DISCORD_CLIENT_SECRET: 'sam-test-only', DISCORD_GUILD_ID: '456',
   DISCORD_TRANSFER_WEBHOOK: '', COOKIE_KEYS: JSON.stringify({ sam: randomBytes(32).toString('base64') }),
   ORIGIN_SECRET: originSecret,

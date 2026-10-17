@@ -20,8 +20,9 @@ test('merged API verifier requires signatures, expiry, issuer, audience and sess
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     assert.ok(address && typeof address === 'object');
-    const url = `http://127.0.0.1:${address.port}/auth/v1`;
-    const client = new SupabaseClient({ ...config, SUPABASE_AUTH_URL: url });
+    const url = 'https://project.supabase.co/auth/v1';
+    const jwksUrl = `http://127.0.0.1:${address.port}/auth/v1/.well-known/jwks.json`;
+    const client = new SupabaseClient({ ...config, SUPABASE_URL: 'https://project.supabase.co', SUPABASE_JWKS_URL: jwksUrl });
     const verify = client.verify.bind(client);
     const token = async (overrides: Record<string, unknown> = {}) => new SignJWT({
         sub: user, session_id: user, iss: url, aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 60, ...overrides
@@ -41,6 +42,10 @@ test('merged API verifier requires signatures, expiry, issuer, audience and sess
             }, {
                 iss: 'https://evil.example'
             }, {
+                iss: 'https://project.supabase.co'
+            }, {
+                iss: jwksUrl
+            }, {
                 aud: 'different'
             }])
             await assert.rejects(async () => verify(await token(override)));
@@ -52,18 +57,17 @@ test('merged API verifier requires signatures, expiry, issuer, audience and sess
     }
 });
 
-for (const [publicPath, internalPath] of [['', ''], ['/auth/v1', '/auth/v1'], ['/auth/v1', '']] as const) {
-    test(`Auth URLs preserve public redirects and issuer (${publicPath || '/'} public, ${internalPath || '/'} internal)`, async () => {
+for (const authPath of ['', '/auth/v1']) {
+    test(`Auth requests and issuer use the configured URL (${authPath || '/'}); JWKS uses its own endpoint`, async () => {
         const { publicKey, privateKey } = await generateKeyPair('ES256');
         const jwk = await exportJWK(publicKey);
-        const publicUrl = `https://public-auth.example.test${publicPath}`;
         const requests: string[] = [];
         const server = createServer((request, response) => {
             requests.push(request.url ?? '');
             response.setHeader('content-type', 'application/json');
-            if (request.url === `${internalPath}/.well-known/jwks.json`) {
+            if (request.url === '/keys') {
                 response.end(JSON.stringify({ keys: [{ ...jwk, kid: 'local', alg: 'ES256', use: 'sig' }] }));
-            } else if (request.url === `${internalPath}/logout?scope=local`) {
+            } else if (request.url === `${authPath}/logout?scope=local`) {
                 response.writeHead(204).end();
             } else {
                 response.end(JSON.stringify({ access_token: 'access', refresh_token: 'refresh' }));
@@ -72,29 +76,45 @@ for (const [publicPath, internalPath] of [['', ''], ['/auth/v1', '/auth/v1'], ['
         await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
         const address = server.address();
         assert.ok(address && typeof address === 'object');
-        const internalUrl = `http://127.0.0.1:${address.port}${internalPath}`;
-        const client = new SupabaseClient({ ...config, SUPABASE_AUTH_URL: `${publicUrl}/`, SUPABASE_AUTH_INTERNAL_URL: `${internalUrl}/` });
+        const publicUrl = `http://127.0.0.1:${address.port}${authPath}`;
+        const jwksUrl = `http://127.0.0.1:${address.port}/keys`;
+        const client = new SupabaseClient({ ...config, SUPABASE_URL: `${publicUrl}/`, SUPABASE_JWKS_URL: jwksUrl });
         const token = (issuer: string) => new SignJWT({ session_id: user })
             .setSubject(user).setIssuer(issuer).setAudience('authenticated').setExpirationTime('1m')
             .setProtectedHeader({ alg: 'ES256', kid: 'local' }).sign(privateKey);
         try {
             const login = new URL(client.loginUrl('challenge', 'transaction'));
             assert.equal(login.origin, new URL(publicUrl).origin);
-            assert.equal(login.pathname, `${publicPath}/authorize`);
+            assert.equal(login.pathname, `${authPath}/authorize`);
             assert.equal(login.searchParams.get('redirect_to'), `${config.PUBLIC_ORIGIN}/auth/callback?transaction=transaction`);
             assert.equal((await client.verify(await token(publicUrl))).userId, user);
-            await assert.rejects(async () => client.verify(await token(internalUrl)), /session_invalid/);
+            await assert.rejects(async () => client.verify(await token(jwksUrl)), /session_invalid/);
             assert.equal((await client.exchange('code', 'verifier', '127.0.0.1')).access_token, 'access');
             assert.equal((await client.refresh('refresh', '127.0.0.1')).refresh_token, 'refresh');
             await client.logout('access', '127.0.0.1');
             assert.deepEqual(requests, [
-                `${internalPath}/.well-known/jwks.json`,
-                `${internalPath}/token?grant_type=pkce`,
-                `${internalPath}/token?grant_type=refresh_token`,
-                `${internalPath}/logout?scope=local`,
+                '/keys',
+                `${authPath}/token?grant_type=pkce`,
+                `${authPath}/token?grant_type=refresh_token`,
+                `${authPath}/logout?scope=local`,
             ]);
         } finally {
             await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
         }
     });
 }
+
+test('project roots use /auth/v1 while direct local Auth uses its root', () => {
+    for (const [url, authUrl] of [
+        ['https://project.supabase.co', 'https://project.supabase.co/auth/v1'],
+        ['https://project.supabase.co/', 'https://project.supabase.co/auth/v1'],
+        ['https://auth.example.test', 'https://auth.example.test/auth/v1'],
+        ['https://project.supabase.co/auth/v1/', 'https://project.supabase.co/auth/v1'],
+        ['http://localhost:54321', 'http://localhost:54321'],
+        ['http://127.0.0.1:54321', 'http://127.0.0.1:54321'],
+        ['http://[::1]:54321', 'http://[::1]:54321'],
+    ] as const) {
+        const client = new SupabaseClient({ ...config, NODE_ENV: 'development', SUPABASE_URL: url });
+        assert.equal(new URL(client.loginUrl('challenge', 'transaction')).href.split('?', 1)[0], `${authUrl}/authorize`);
+    }
+});

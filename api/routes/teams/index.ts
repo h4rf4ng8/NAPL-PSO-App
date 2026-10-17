@@ -148,9 +148,9 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             role: 'admin'
         }
     }, async (request) => {
-        const input = z.object({
+        const input = z.strictObject({
             status: z.enum(['approved', 'rejected']), reason: z.string().max(2000).optional()
-        }).strict().parse(request.body), reviewer = await actorName(db, request);
+        }).parse(request.body), reviewer = await actorName(db, request);
         const result = await db.transaction(async (tx) => {
             let row = await need(tx, 'teams', parameters(request).id!, true);
             if (row.status === input.status)
@@ -183,9 +183,9 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         return result;
     });
     app.post('/api/teams/:id/membership', async (request) => {
-        const input = z.object({
-            action: z.enum(['join', 'leave']), accountId: z.string().uuid().optional()
-        }).strict().parse(request.body);
+        const input = z.strictObject({
+            action: z.enum(['join', 'leave']), accountId: z.uuid().optional()
+        }).parse(request.body);
         const userId = input.accountId ?? actor(request).id;
         if (userId !== actor(request).id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
@@ -212,9 +212,9 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         return {...accountDto(saved, true), ...((actor(request).id === userId) && {roles:request.userRoles})};
     });
     app.post('/api/teams/:id/invitation', async (request) => {
-        const { accept } = z.object({
+        const { accept } = z.strictObject({
             accept: z.boolean()
-        }).strict().parse(request.body), name = await actorName(db, request);
+        }).parse(request.body), name = await actorName(db, request);
         return db.transaction(async (tx) => {
             const row = await need(tx, 'teams', parameters(request).id!, true);
             let isFound = false;

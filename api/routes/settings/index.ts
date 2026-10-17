@@ -8,9 +8,9 @@ import { Prisma, type Database, type Row } from '../../plugins/db/client.js';
 import { get, need, patch, string, object, array } from '../../plugins/db/records.js';
 import { getSetting, settingKey } from './queries.js';
 async function setChampions(database: Database, value: unknown): Promise<void> {
-    const schema = z.record(z.string().min(1).max(160), z.object({
+    const schema = z.record(z.string().min(1).max(160), z.strictObject({
         winnerTeamId: id.nullable(), runnerUpTeamId: id.nullable(), setAt: z.number()
-    }).strict());
+    }));
     const next = schema.parse(value);
     await database.transaction(async (tx) => {
         const previous = await get(tx, 'settings', 'key', 'season_champions', true);
@@ -66,9 +66,9 @@ export function registerSettings(app: FastifyInstance, { db }: Dependencies): vo
         const key = settingKey.parse(parameters(request).key);
         if (key === 'position_weights' && !request.userRoles.includes('super_admin'))
             throw new HttpError(403, 'super_admin_required');
-        const { value } = z.object({
+        const { value } = z.strictObject({
             value: z.json()
-        }).strict().parse(request.body);
+        }).parse(request.body);
         if (key === 'season_champions') {
             await setChampions(db, value);
             return {

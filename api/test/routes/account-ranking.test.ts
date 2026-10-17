@@ -80,6 +80,10 @@ test('finite negative saved weights remain compatible and malformed stored weigh
   const saved = await getSetting(database, 'position_weights');
   assert.throws(() => calculateRankings(accounts, saved), error =>
     error instanceof HttpError && error.status === 503 && error.code === 'invalid_position_weights');
+  for (const goalsPerGame of [NaN, Infinity, -Infinity]) {
+    assert.throws(() => calculateRankings(accounts, { ST: { goalsPerGame } }), error =>
+      error instanceof HttpError && error.status === 503 && error.code === 'invalid_position_weights');
+  }
 });
 
 test('unset position weights use the API-owned defaults', async () => {

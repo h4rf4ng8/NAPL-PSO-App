@@ -5,11 +5,11 @@ import type { GraphQLContext } from './context.js';
 import { schema } from './schema.js';
 import type { Database } from '../../plugins/db/client.js';
 
-const requestBody = z.object({
+const requestBody = z.strictObject({
   query: z.string().min(1).max(12_000),
   operationName: z.string().max(120).optional(),
   variables: z.record(z.string(), z.unknown()).optional(),
-}).strict();
+});
 
 function withinTokenLimit(source: string): boolean {
   try {

@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApp } from '../helper.js';
 import type { Database, Row, Prisma } from '../../plugins/db/client.js';
-import { newsDto, ruleDto, articleDto } from '../../routes/content/dto.js';
-import { scheduleDto } from '../../routes/matches/dto.js';
-import { transferDto } from '../../routes/teams/dto.js';
+import { newsDto, ruleDto, articleDto, scheduleDto, transferDto } from '../../routes/content/dto.js';
 import { periodDto } from '../../routes/voting/dto.js';
 
 const now = 1_700_000_000_000;
@@ -31,15 +29,25 @@ const cases = [
     expected: { id: 'transfers', season: 'S1', playerUsername: 'Player', fromTeamId: null, toTeamId: 'home', kind: 'signing', windowType: null, createdAt: now, createdBy: null },
     input: { id: 'transfers', season: 'S1', playerUsername: 'Player', kind: 'signing' }, patch: { windowType: null } },
   { path: 'voting/periods', table: 'totw_voting_periods', format: periodDto,
-    row: { id: 'period', opens_at: new Date(now), closes_at: new Date(now + 1000), status: 'open', eligible_players: ['Player'], winners: null, created_by: 'Admin', created_at: new Date(now), resolved_at: null },
-    expected: { id: 'period', opensAt: now, closesAt: now + 1000, status: 'open', eligiblePlayers: ['Player'], winners: null, createdBy: 'Admin', createdAt: now, resolvedAt: null },
+    row: { id: '88888888-8888-4888-8888-888888888888', opens_at: new Date(now), closes_at: new Date(now + 1000), status: 'open', eligible_players: ['Player'], winners: null, created_by: 'Admin', created_at: new Date(now), resolved_at: null },
+    expected: { id: '88888888-8888-4888-8888-888888888888', opensAt: now, closesAt: now + 1000, status: 'open', eligiblePlayers: ['Player'], winners: null, createdBy: 'Admin', createdAt: now, resolvedAt: null },
     input: { closesAt: now + 1000, eligiblePlayers: ['Player'] }, patch: { status: 'closed' } },
 ];
 
 for (const fixture of cases) test(`${fixture.path} exposes only documented fields on every response path`, async () => {
   const row = { ...fixture.row, ...privateFields };
   assert.deepEqual(fixture.format(row), fixture.expected);
+  const delegate = {
+    findMany: async () => [row], findUnique: async () => row,
+    create: async () => row, update: async () => row, updateManyAndReturn: async () => [row],
+    deleteMany: async () => ({ count: 0 }),
+  };
   const db: Database = {
+    client: {
+      news: delegate, ruleSection: delegate, article: delegate, scheduledMatch: delegate,
+      transfer: delegate, totwVotingPeriod: delegate,
+      account: { findUnique: async () => ({ username: 'Admin' }) },
+    } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       let rows: Row[] = [];
       if (sql.sql.includes('FROM auth_gateway.memberships')) rows = [{ eligible: true, fresh: true }];

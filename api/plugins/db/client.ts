@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from '../../generated/prisma/client.js';
 import { PrismaPg } from '@prisma/adapter-pg';
 export type Row = Record<string, unknown>;
 export interface Database {
+    readonly client: Prisma.TransactionClient;
     query<T extends Row = Row>(sql: Prisma.Sql): Promise<T[]>;
     execute(sql: Prisma.Sql): Promise<number>;
     transaction<T>(work: (database: Database) => Promise<T>): Promise<T>;
@@ -9,6 +10,7 @@ export interface Database {
 }
 function wrap(client: PrismaClient | Prisma.TransactionClient): Database {
     return {
+        client,
         query: <T extends Row>(sql: Prisma.Sql) => client.$queryRaw<T[]>(sql),
         execute: sql => client.$executeRaw(sql),
         transaction: work => '$transaction' in client ? client.$transaction(tx => work(wrap(tx)), {

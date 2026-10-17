@@ -3,6 +3,8 @@ import { JSONScalar } from '../graphql/scalar.js';
 import { nonNull, nonNullList } from '../graphql/types.js';
 import { read, type GraphQLContext } from '../graphql/context.js';
 import { getCurrentAccount, listAccounts, loadRankedAccounts } from './queries.js';
+import { currentAccountDto } from './dto.js';
+import { actor, isAdmin } from '../../plugins/auth/identity.js';
 import { accountIdSchema, accountMatches, accountOpponents } from './history.js';
 import { POS } from '@napl/contracts/league';
 import { calculateCardStats } from './ranking.js';
@@ -108,7 +110,7 @@ export const queryFields = {
     type: nonNullList(Account),
     description: 'Public account profiles.',
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
-      read(context, 'accounts', async () => listAccounts(context.db, context.request, await accountPopulation(context))),
+      read(context, 'accounts', async () => listAccounts(context.db, isAdmin(context.request), await accountPopulation(context))),
   },
   me: {
     type: CurrentAccount,
@@ -116,7 +118,7 @@ export const queryFields = {
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
       read(context, 'current-account', async () => {
         const accounts = context.request.identity ? await accountPopulation(context) : undefined;
-        return getCurrentAccount(context.db, context.request, accounts);
+        return currentAccountDto(await getCurrentAccount(context.db, actor(context.request).id, accounts), context.request.userRoles);
       }),
   },
   accountCardPreviews: {

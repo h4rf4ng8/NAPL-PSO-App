@@ -1,6 +1,6 @@
 import type { Database, Row } from '../../plugins/db/client.js';
 import { Prisma } from '../../plugins/db/client.js';
-import { dto, object } from '../../plugins/db/records.js';
+import { summaryDto, type AccountSummaryRow } from './dto.js';
 
 const truthyJson = (value: Prisma.Sql) => Prisma.sql`CASE jsonb_typeof(${value})
   WHEN 'boolean' THEN (${value} #>> '{}')::boolean
@@ -45,23 +45,10 @@ const accountColumns = Prisma.sql`a.id, a.username, a.position, a.team_id, a.ima
   ${statsDefaults} || COALESCE(a.stats, '{}'::jsonb) AS stats, a.awards, a.championships, a.totw_until,
   a.cheater, a.strikers_id, a.steam_url, a.created_at`;
 
-const publicDtoFields = [
-  'id', 'username', 'position', 'team_id', 'image_url', 'country', 'stats', 'awards', 'championships',
-  'totw_until', 'cheater', 'strikers_id', 'steam_url', 'created_at',
-] as const;
-
-function summaryDto(row: Row): Row {
-  const projected = Object.fromEntries(publicDtoFields.map(key => [key, row[key]]));
-  const summary = dto(projected);
-  summary.strikersId = row.strikers_id == null ? null : String(row.strikers_id);
-  summary.matches = [];
-  summary.seasonStats = row.season_stats ?? { all: object(row.stats) };
-  return summary;
-}
-
 export async function loadAccountSummaries(database: Database, accountId?: string): Promise<Row[]> {
   const accountFilter = accountId === undefined ? Prisma.empty : Prisma.sql` WHERE a.id=${accountId}::uuid`;
-  const rows = await database.query(Prisma.sql`SELECT ${accountColumns},
+  // JSON aggregation keeps full match histories in PostgreSQL while returning one summary per account.
+  const rows = await database.query<AccountSummaryRow>(Prisma.sql`SELECT ${accountColumns},
     ${seasonStats(Prisma.sql`a.matches`, Prisma.sql`a.stats`)} AS season_stats
     FROM public.accounts a${accountFilter} ORDER BY a.created_at, a.id`);
   return rows.map(row => summaryDto(row));

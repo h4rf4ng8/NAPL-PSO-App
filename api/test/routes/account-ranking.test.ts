@@ -30,6 +30,11 @@ const accounts: Row[] = [
 function appFor() {
   const seen = new Map<string, number>();
   const database: Database = {
+    client: {
+      setting: { findUnique: async ({ where }: { where: { key: string } }) => ({ key: where.key, value: JSON.stringify(positionWeights) }) },
+      account: { findUnique: async ({ where }: { where: { id?: string; username_lower?: string } }) =>
+        accounts.find(row => where.id ? row.id === where.id : row.username_lower === where.username_lower) ?? null },
+    } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       seen.set(key, (seen.get(key) ?? 0) + 1);
@@ -74,7 +79,8 @@ test('finite negative saved weights remain compatible and malformed stored weigh
   assert.equal(negative.get('bob')?.score, 38);
 
   const database: Database = {
-    query: async <T extends Row>() => [{ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }] as T[],
+    client: { setting: { findUnique: async () => ({ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }) } } as unknown as Database['client'],
+    query: async <T extends Row>() => [] as T[],
     execute: async () => 0, transaction: async work => work(database), close: async () => {},
   };
   const saved = await getSetting(database, 'position_weights');
@@ -88,6 +94,7 @@ test('finite negative saved weights remain compatible and malformed stored weigh
 
 test('unset position weights use the API-owned defaults', async () => {
   const database: Database = {
+    client: { setting: { findUnique: async () => null } } as unknown as Database['client'],
     query: async <T extends Row>() => [] as T[], execute: async () => 0,
     transaction: async work => work(database), close: async () => {},
   };

@@ -21,7 +21,7 @@ export const accounts={
 };
 
 const accountStatDefaults = accountStatsSchema.parse(Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key => [key, 0])));
-const accountStatsRecordSchema = z.record(z.string(), z.number().finite());
+const accountStatsRecordSchema = z.record(z.string(), z.number());
 const invalid = (field: string): never => { throw new Error(`Invalid GraphQL ${field} data.`); };
 
 function accountStats(value: unknown): Stats {
@@ -70,7 +70,7 @@ export async function loadAccountCardPreviews() {
 
 export async function loadDefaultPositionWeights() {
   const data = await graphql(DefaultPositionWeightsDocument, {});
-  const parsed = z.record(z.string(), z.record(z.string(), z.number().finite())).safeParse(data.defaultPositionWeights);
+  const parsed = z.record(z.string(), z.record(z.string(), z.number())).safeParse(data.defaultPositionWeights);
   if (!parsed.success) throw new Error('Invalid GraphQL default position weights data.');
   return parsed.data;
 }

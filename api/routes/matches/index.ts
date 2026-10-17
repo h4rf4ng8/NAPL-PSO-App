@@ -20,16 +20,16 @@ export function aggregate(matches: Row[]): Record<string, number> {
     }
     return totals;
 }
-const stat = z.number().finite().nonnegative().max(100_000);
-const importInput = z.object({
+const stat = z.number().nonnegative().max(100_000);
+const importInput = z.strictObject({
     matchData: z.object({
-        match_id: z.union([id, z.number().int().nonnegative()]), score: z.object({
+        match_id: z.union([id, z.int().nonnegative()]), score: z.object({
             home: stat, away: stat
         }), stadium: z.string().max(500).optional(), match_length: stat.optional(), players: z.array(z.object({
-            player_id: z.union([id, z.number().int().nonnegative()]), username: z.string().max(100), team: z.enum(['home', 'away']), stats: z.record(z.string(), z.number().finite().nonnegative()).default({})
+            player_id: z.union([id, z.int().nonnegative()]), username: z.string().max(100), team: z.enum(['home', 'away']), stats: z.record(z.string(), z.number().nonnegative()).default({})
         })).max(30)
     }), playerMap: z.record(z.string(), z.union([username, z.literal('')])), tackleOverrides: z.record(z.string(), z.union([stat, z.string().regex(/^\d*$/)])), homeTeamId: id, awayTeamId: id, season: id
-}).strict();
+});
 export function registerMatches(app: FastifyInstance, { db }: Dependencies): void {
     app.get('/api/submissions', async (request) => {
         const name = await actorName(db, request);
@@ -88,9 +88,9 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             role: 'admin'
         }
     }, async (request) => {
-        const { reason } = z.object({
+        const { reason } = z.strictObject({
             reason: z.string().max(2000).default('')
-        }).strict().parse(request.body), reviewer = await actorName(db, request);
+        }).parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
             const row = await need(tx, 'submissions', parameters(request).id!, true);
             if (row.status !== 'pending')

@@ -2,11 +2,11 @@ import { z } from 'zod';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
-  PORT: z.coerce.number().int().min(1).max(65_535).default(3000),
+  PORT: z.coerce.number().pipe(z.int().min(1).max(65_535)).default(3000),
   HOST: z.string().default('127.0.0.1'),
-  PUBLIC_ORIGIN: z.string().url(),
-  SUPABASE_URL: z.string().url(),
-  SUPABASE_JWKS_URL: z.string().url(),
+  PUBLIC_ORIGIN: z.url(),
+  SUPABASE_URL: z.url(),
+  SUPABASE_JWKS_URL: z.url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
   SUPABASE_SECRET_KEY: z.preprocess(value => value === '' ? undefined : value, z.string().startsWith('sb_secret_').optional()),
   DISCORD_CLIENT_ID: z.string().regex(/^\d+$/),
@@ -14,7 +14,7 @@ const schema = z.object({
   DISCORD_GUILD_ID: z.string().regex(/^\d+$/),
   DATABASE_URL: z.string().min(1),
   COOKIE_KEYS: z.string().min(1),
-  DISCORD_TRANSFER_WEBHOOK: z.preprocess(value => value === '' ? undefined : value, z.string().url().optional()),
+  DISCORD_TRANSFER_WEBHOOK: z.preprocess(value => value === '' ? undefined : value, z.url().optional()),
   ORIGIN_SECRET: z.string().min(32),
 });
 

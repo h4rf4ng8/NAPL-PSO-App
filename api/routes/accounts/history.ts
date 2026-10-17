@@ -4,10 +4,10 @@ import { HttpError } from '../../plugins/auth/identity.js';
 import type { Database, Row } from '../../plugins/db/client.js';
 import { Prisma } from '../../plugins/db/client.js';
 
-export const accountIdSchema = z.string().uuid();
-const cursorSchema = z.object({
-  id: z.string().uuid(), season: z.string().nullable(), opponent: z.string().nullable(), version: z.string().min(1), ordinal: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-}).strict();
+export const accountIdSchema = z.uuid();
+const cursorSchema = z.strictObject({
+  id: z.uuid(), season: z.string().nullable(), opponent: z.string().nullable(), version: z.string().min(1), ordinal: z.int().positive().max(Number.MAX_SAFE_INTEGER),
+});
 type Cursor = z.infer<typeof cursorSchema>;
 
 function decodeCursor(value: string): Cursor {
@@ -26,7 +26,7 @@ export async function accountMatches(database: Database, args: {
   id: string; first?: number | null; after?: string | null; season?: string | null; opponent?: string | null;
 }): Promise<AccountMatchPage> {
   const id = accountIdSchema.parse(args.id);
-  const first = z.number().int().min(1).max(50).parse(args.first ?? 25);
+  const first = z.int().min(1).max(50).parse(args.first ?? 25);
   const season = args.season == null ? null : z.string().min(1).max(64).parse(args.season);
   const opponent = args.opponent == null ? null : z.string().min(1).max(160).parse(args.opponent);
   const afterValue = args.after == null ? null : z.string().min(1).max(512).parse(args.after);

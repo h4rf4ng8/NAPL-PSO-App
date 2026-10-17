@@ -57,4 +57,9 @@ test('match history validates bounds and binds cursors to account and filters', 
     error => error instanceof HttpError && error.status === 400 && error.code === 'cursor_filter_mismatch');
   await assert.rejects(() => accountMatches(fake.database, { id, first: 1, after: 'forged' }),
     error => error instanceof HttpError && error.status === 400 && error.code === 'invalid_cursor');
+  const cursor = JSON.parse(Buffer.from(page.pageInfo.endCursor, 'base64url').toString('utf8')) as Record<string, unknown>;
+  const extraField = Buffer.from(JSON.stringify({ ...cursor, extra: true })).toString('base64url');
+  await assert.rejects(() => accountMatches(fake.database, { id, first: 1, season: 'S2', after: extraField }),
+    error => error instanceof HttpError && error.status === 400 && error.code === 'invalid_cursor');
+  assert.equal(fake.calls, 1);
 });

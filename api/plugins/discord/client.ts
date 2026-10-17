@@ -5,7 +5,7 @@ import { GatewayError } from '../auth/errors.js';
 export const discordTokensSchema = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(1),
-  expires_in: z.number().int().positive(),
+  expires_in: z.int().positive(),
   scope: z.string(),
 });
 export type DiscordTokens = z.infer<typeof discordTokensSchema>;

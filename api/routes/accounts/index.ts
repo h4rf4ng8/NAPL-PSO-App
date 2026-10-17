@@ -56,7 +56,7 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         }
     }, async (request) => listAccounts(db, request));
     app.get('/api/accounts/id/:id', async (request) => {
-        const id = z.string().uuid().parse(parameters(request).id);
+        const id = z.uuid().parse(parameters(request).id);
         if (actor(request).id !== id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
         const row = await need(db, 'accounts', id);
@@ -83,7 +83,7 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         }
     }, async (request) => getCurrentAccount(db, request));
     app.post('/api/users/me', async (request) => {
-        z.object({}).strict().parse(request.body ?? {});
+        z.strictObject({}).parse(request.body ?? {});
         const identity = actor(request);
         const row = await provisionAccount(db, identity);
         const population = await loadRankedAccounts(db);
@@ -95,7 +95,7 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         };
     });
     app.patch('/api/accounts/:id', async (request) => {
-        const id = z.string().uuid().parse(parameters(request).id), admin = isAdmin(request);
+        const id = z.uuid().parse(parameters(request).id), admin = isAdmin(request);
         if (!admin && actor(request).id !== id)
             throw new HttpError(403, 'forbidden');
         const input = (admin ? adminAccountPatch : profilePatch).parse(request.body);
@@ -122,10 +122,10 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
     app.put('/api/accounts/:id/awards/:awardId/:season', {
         config: { role: 'admin' }
     }, async (request, reply) => {
-        const id = z.string().uuid().parse(parameters(request).id);
+        const id = z.uuid().parse(parameters(request).id);
         const awardId = awardIdSchema.parse(parameters(request).awardId);
         const season = awardSeason.parse(parameters(request).season);
-        z.object({}).strict().parse(request.body ?? {});
+        z.strictObject({}).parse(request.body ?? {});
         const assignedBy = await actorName(db, request);
         await db.transaction(async (tx) => {
             const account = await need(tx, 'accounts', id, true);
@@ -147,10 +147,10 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
     app.delete('/api/accounts/:id/awards/:awardId/:season', {
         config: { role: 'admin' }
     }, async (request, reply) => {
-        const id = z.string().uuid().parse(parameters(request).id);
+        const id = z.uuid().parse(parameters(request).id);
         const awardId = historicalAwardId.parse(parameters(request).awardId);
         const season = awardSeason.parse(parameters(request).season);
-        z.object({}).strict().parse(request.body ?? {});
+        z.strictObject({}).parse(request.body ?? {});
         await db.transaction(async (tx) => {
             const account = await need(tx, 'accounts', id, true);
             const awards = array(account.awards);
@@ -164,12 +164,12 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         return reply.code(204).send();
     });
     app.post('/api/accounts/:id/rename', async (request) => {
-        const id = z.string().uuid().parse(parameters(request).id);
+        const id = z.uuid().parse(parameters(request).id);
         if (actor(request).id !== id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
-        const input = z.object({
+        const input = z.strictObject({
             username
-        }).strict().parse(request.body);
+        }).parse(request.body);
         if (!isAdmin(request) && checkBlockedName(input.username))
             throw new HttpError(400, 'name_not_allowed', 'That username isn\'t allowed. Please choose a different one.');
         await db.transaction(tx => rename(tx, id, input.username));
@@ -187,9 +187,9 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         return rows.map(value => dto(value)).toSorted((a, b) => Number(b.createdAt) - Number(a.createdAt));
     });
     app.post('/api/position-requests', async (request) => {
-        const input = z.object({
+        const input = z.strictObject({
             toPos: position, reason: z.string().max(2000).default('')
-        }).strict().parse(request.body);
+        }).parse(request.body);
         return db.transaction(async (tx) => {
             const self = await need(tx, 'accounts', actor(request).id, true);
             if (self.position === input.toPos)
@@ -207,9 +207,9 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
             role: 'admin'
         }
     }, async (request_) => {
-        const input = z.object({
+        const input = z.strictObject({
             status: z.enum(['approved', 'denied']), reviewNote: z.string().max(2000).default('')
-        }).strict().parse(request_.body);
+        }).parse(request_.body);
         const reviewer = await actorName(db, request_);
         return db.transaction(async (tx) => {
             const request = await need(tx, 'position_change_requests', parameters(request_).id!, true);

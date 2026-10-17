@@ -32,6 +32,7 @@ function appFor() {
   const database: Database = {
     client: {
       setting: { findUnique: async ({ where }: { where: { key: string } }) => ({ key: where.key, value: JSON.stringify(positionWeights) }) },
+      team: { findMany: async () => [] },
       account: { findUnique: async ({ where }: { where: { id?: string; username_lower?: string } }) =>
         accounts.find(row => where.id ? row.id === where.id : row.username_lower === where.username_lower) ?? null },
     } as unknown as Database['client'],
@@ -39,6 +40,7 @@ function appFor() {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       seen.set(key, (seen.get(key) ?? 0) + 1);
       if (key.includes('public."settings"')) return [{ key: sql.values[0], value: JSON.stringify(positionWeights) }] as T[];
+      if (key.startsWith('WITH match_rows AS')) return [] as T[];
       if (key.includes('public.accounts') || key.includes('public."accounts"')) {
         const usernameFilter = key.includes('username_lower');
         const idFilter = key.includes('id =');
@@ -132,15 +134,16 @@ test('REST and GraphQL account reads expose computed values without private colu
     assert.equal(restAlice.privateNote, undefined);
 
     const graph = await app.inject({
-      method: 'POST', url: '/api/graphql',
-      payload: { query: '{ accounts { username ranking { score percentile ranked gamesPlayed tier } cardStats { season cells { label value } } } again: accounts { username } defaultPositionWeights }' },
+      method: 'POST', url: '/api/standings',
+      payload: { variables: {} },
     });
     assert.equal(graph.statusCode, 200, graph.body);
     const result = graph.json<{ data: { accounts: Array<Record<string, unknown>>; defaultPositionWeights: Record<string, unknown> } }>();
     const graphAlice = result.data.accounts.find(row => row.username === 'Alice')!;
-    assert.deepEqual(graphAlice.ranking, restAlice.ranking);
+    assert.deepEqual(graphAlice.ranking, { ...restAlice.ranking as object, __typename: 'AccountRanking' });
     assert.equal(graphAlice.email, undefined);
-    assert.ok(result.data.defaultPositionWeights.ST);
+    const weights = await app.inject({ method: 'POST', url: '/api/default-position-weights', payload: { variables: {} } });
+    assert.ok(weights.json().data.defaultPositionWeights.ST);
     const summaryQueries = [...seen].filter(([key]) => key.includes('SELECT a.id') && key.includes('season_stats'));
     assert.equal(summaryQueries.reduce((sum, [, count]) => sum + count, 0), 2, 'one full-population read per REST and GraphQL request');
 

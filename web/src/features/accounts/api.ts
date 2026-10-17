@@ -1,6 +1,5 @@
 import { optional,request,segment } from '../../api/http';
-import { graphql } from '../../api/graphql';
-import { AccountCardPreviewsDocument, AccountMatchesDocument, AccountOpponentsDocument, DefaultPositionWeightsDocument, type PublicAccountFieldsFragment } from '../../api/generated/graphql';
+import type { AccountCardPreviewsQuery, AccountMatchesQuery, AccountOpponentsQuery, DefaultPositionWeightsQuery, PublicAccountFieldsFragment, CurrentAccountFieldsFragment } from '../../api/generated/graphql';
 import { AWARD_IDS, accountCardStatsSchema, accountMatchPageSchema, accountOpponentsSchema, accountRankingSchema, accountStatsSchema, awardSchema, championshipSchema, matchSchema, seasonStatsSchema } from '@napl/contracts/accounts';
 import type { Account, PositionRequest, Stats } from './models';
 import { z } from 'zod';
@@ -29,7 +28,7 @@ function accountStats(value: unknown): Stats {
   return parsed.success ? { ...accountStatDefaults, ...parsed.data } : invalid('account stats');
 }
 
-export function mapAccount(row: PublicAccountFieldsFragment): Account {
+export function mapAccount(row: PublicAccountFieldsFragment | CurrentAccountFieldsFragment): Account {
   const legacyMatches = (row as PublicAccountFieldsFragment & { matches?: unknown }).matches;
   const matches = matchSchema.array().safeParse(legacyMatches ?? []);
   const seasonStats = row.seasonStats == null ? null : seasonStatsSchema.safeParse(row.seasonStats);
@@ -49,27 +48,23 @@ export function mapAccount(row: PublicAccountFieldsFragment): Account {
   };
 }
 
-export async function loadAccountMatchPage(id: string, after: string | null, season: string | null = null, opponent: string | null = null, force = false) {
-  const data = await graphql(AccountMatchesDocument, { id, first: 25, after, season, opponent }, { force });
+export function mapAccountMatchPage(data: AccountMatchesQuery) {
   const parsed = accountMatchPageSchema.safeParse(data.accountMatches);
   if (!parsed.success) throw new Error('Invalid GraphQL match history data.');
   return parsed.data;
 }
 
-export async function loadAccountOpponents(id: string, force = false) {
-  const data = await graphql(AccountOpponentsDocument, { id }, { force });
+export function mapAccountOpponents(data: AccountOpponentsQuery) {
   const parsed = accountOpponentsSchema.safeParse(data.accountOpponents);
   if (!parsed.success) throw new Error('Invalid GraphQL opponent summary data.');
   return parsed.data;
 }
 
-export async function loadAccountCardPreviews() {
-  const data = await graphql(AccountCardPreviewsDocument, {});
+export function mapAccountCardPreviews(data: AccountCardPreviewsQuery) {
   return data.accountCardPreviews.map(preview => ({ ...preview, account: mapAccount(preview.account) }));
 }
 
-export async function loadDefaultPositionWeights() {
-  const data = await graphql(DefaultPositionWeightsDocument, {});
+export function mapDefaultPositionWeights(data: DefaultPositionWeightsQuery) {
   const parsed = z.record(z.string(), z.record(z.string(), z.number())).safeParse(data.defaultPositionWeights);
   if (!parsed.success) throw new Error('Invalid GraphQL default position weights data.');
   return parsed.data;

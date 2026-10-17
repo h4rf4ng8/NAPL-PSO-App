@@ -5,6 +5,15 @@ export * from './league/positions.js';
 export * from './league/formations.js';
 export * from './accounts/index.js';
 export * from './matches/index.js';
+export const graphqlEndpoints = {
+    Standings: '/api/standings',
+    MemberLeagueData: '/api/dashboard',
+    TeamRecords: '/api/team-records',
+    AccountMatches: '/api/account-matches',
+    AccountOpponents: '/api/account-opponents',
+    AccountCardPreviews: '/api/account-card-previews',
+    DefaultPositionWeights: '/api/default-position-weights',
+} as const;
 export const id = z.string().min(1).max(160);
 const season = id;
 export const username = z.string().trim().min(2).max(64).regex(/^[\p{L}\p{N}_. -]+$/u);

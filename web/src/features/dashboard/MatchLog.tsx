@@ -3,18 +3,18 @@ import { useEffect, useState } from 'react';
 import type { Account } from '../accounts/models';
 import { EmptyState, ResultBadge } from '../../components/Ui';
 import { C } from '../../theme/theme';
-import { useResource } from '../../hooks/use-resource';
-import { loadAccountMatchPage } from '../accounts/api';
+import { useQuery } from '@apollo/client/react';
+import { AccountMatchesDocument } from '../../api/generated/graphql';
+import { mapAccountMatchPage } from '../accounts/api';
 
 export function MatchLog({ account, season }: { account: Account; season: string }) {
   const filterKey = `${account.id}:${season}`;
   const [pageState, setPageState] = useState<{ key: string; cursor: string | null; back: (string | null)[] }>({ key: filterKey, cursor: null, back: [] });
-  const [refresh, setRefresh] = useState(0);
   const cursor = pageState.key === filterKey ? pageState.cursor : null;
-  const { data: page, loading, error } = useResource(
-    () => loadAccountMatchPage(account.id, cursor, season === 'all' ? null : season, null, refresh > 0),
-    [account.id, season, cursor, refresh],
-  );
+  const { data, loading, error, refetch } = useQuery(AccountMatchesDocument, {
+    variables: { id: account.id, first: 25, after: cursor, season: season === 'all' ? null : season, opponent: null },
+  });
+  const page = data ? mapAccountMatchPage(data) : undefined;
   useEffect(() => { setPageState({ key: filterKey, cursor: null, back: [] }); }, [filterKey]);
 
   const goNext = () => {
@@ -34,7 +34,7 @@ export function MatchLog({ account, season }: { account: Account; season: string
       <Activity size={22} style={{ color: C.greenLight }} />
       <h3 className="font-display text-3xl tracking-wider">MATCH LOG</h3>
     </div>
-    {error && <p role="alert" className="mb-3">{error} <button onClick={() => { setPageState({ key: filterKey, cursor: null, back: [] }); setRefresh(value => value + 1); }}>Retry from newest</button></p>}
+    {error && <p role="alert" className="mb-3">{error.message} <button onClick={() => { setPageState({ key: filterKey, cursor: null, back: [] }); void refetch({ after: null }).catch(() => {}); }}>Retry from newest</button></p>}
     {loading && <p role="status">Loading match history…</p>}
     {!loading && !error && (!page || page.nodes.length === 0) && <EmptyState icon={<Activity size={40} />} text="No matches yet. Stats will appear here once an admin submits and approves your match data." />}
     {!loading && !error && page && page.nodes.length > 0 && (

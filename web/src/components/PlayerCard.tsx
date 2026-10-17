@@ -5,15 +5,17 @@ Download,
 Share2,
 Sparkles
 } from 'lucide-react';
-import React,{ useEffect,useRef,useState } from 'react';
+import React,{ useRef,useState } from 'react';
 import { settings as adminApi } from '../features/admin/api';
 import type { Account,Team } from '../api/models';
 import type { Weightings } from '../features/admin/models';
 import { C } from '../theme/theme';
 import { flagUrl } from '../utils/league';
 import { cardTier,getCardStatsForSeason,getPlayerAwards } from '../utils/rankings';
-import { loadAccountCardPreviews, loadDefaultPositionWeights } from '../features/accounts/api';
+import { mapAccountCardPreviews, mapDefaultPositionWeights } from '../features/accounts/api';
 import { useResource } from '../hooks/use-resource';
+import { skipToken, useQuery } from '@apollo/client/react';
+import { AccountCardPreviewsDocument, DefaultPositionWeightsDocument } from '../api/generated/graphql';
 import { ASL_LOGO_DIAMOND } from './Icons';
 import { useDialog } from './Ui';
 import { POS, POS_LABELS } from '@napl/contracts/league';
@@ -670,7 +672,8 @@ export const ShareableCardModal = ({ account, team, onClose }: { account: Accoun
 
 // ============ TIER PREVIEW (debug/showcase) ============
 export const TierPreview = () => {
-  const { data: previews = [], loading, error } = useResource(loadAccountCardPreviews, []);
+  const { data, loading, error } = useQuery(AccountCardPreviewsDocument);
+  const previews = data ? mapAccountCardPreviews(data) : [];
   return (
     <div>
       <div className="flex items-center gap-2 mb-4">
@@ -681,7 +684,7 @@ export const TierPreview = () => {
         Each tier rendered with its material treatment. Award winners get a black name bar; the Gold card shows a country flag.
       </p>
       {loading && <p role="status">Loading card previews…</p>}
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{error.message}</p>}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 justify-items-center">
         {previews.map(({ account, label, description }) => (
           <div key={label} className="flex flex-col items-center gap-3">
@@ -721,15 +724,9 @@ export const WeightingsPublicView = () => {
     [POS.ST]: '#ff6b4a', [POS.WG]: '#ff9a3c', [POS.CM]: '#f5cc3e', [POS.DEF]: '#4a90e2', [POS.GK]: '#4caf50', [POS.FLEX]: '#b887ff',
   };
 
-  const [weights, setWeights] = useState<Weightings>({});
-  useEffect(() => {
-    (async () => {
-      try {
-        const saved = await adminApi.getWeightings();
-        setWeights(saved || await loadDefaultPositionWeights());
-      } catch (error) { console.error(error); }
-    })();
-  }, []);
+  const saved = useResource(adminApi.getWeightings, []);
+  const defaults = useQuery(DefaultPositionWeightsDocument, !saved.loading && !saved.error && saved.data === null ? {} : skipToken);
+  const weights: Weightings = saved.data ?? (defaults.data ? mapDefaultPositionWeights(defaults.data) : {});
 
   return (
     <div className="mt-10 rounded-xl p-5" style={{
@@ -749,6 +746,13 @@ export const WeightingsPublicView = () => {
         </div>
       </div>
 
+      {(saved.loading || defaults.loading) && <p role="status">Loading weightings…</p>}
+      {(saved.error || defaults.error) && <p role="alert">
+        {saved.error || defaults.error?.message} <button onClick={() => {
+          if (saved.error) void saved.reload();
+          else void defaults.refetch().catch(() => { /* Apollo exposes the error above. */ });
+        }}>Try again</button>
+      </p>}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {Object.entries(weights).map(([pos, value]) => {
           const posColor = POS_COLOR[pos];

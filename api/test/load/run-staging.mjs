@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
-import { print } from 'graphql';
-import { PublicLeagueDataDocument } from '../../../web/src/api/generated/graphql.ts';
 
 const percentile = (values, p) => values.length > 0 ? Math.round(values.toSorted((a, b) => a - b)[Math.ceil(values.length * p) - 1]) : null;
 const rate = (count, total) => total ? Number((count / total).toFixed(4)) : null;
@@ -47,7 +45,6 @@ async function main() {
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 60_000, 'LOAD_TIMEOUT_MS must be from 1000 to 60000');
   const origin = target.origin;
   const suppliedCookie = process.env.LOAD_COOKIE;
-  const query = print(PublicLeagueDataDocument);
   const reports = [];
 
   async function csrfHeaders() {
@@ -70,7 +67,7 @@ async function main() {
   async function request(csrf) {
     const started = performance.now();
     try {
-      const response = await fetch(new URL('/api/graphql', base), {
+      const response = await fetch(new URL('/api/standings', base), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -78,7 +75,7 @@ async function main() {
           'x-csrf-token': csrf.csrfToken,
           cookie: csrf.cookie,
         },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify({ variables: {} }),
         signal: AbortSignal.timeout(timeoutMs),
       });
       let body = null;
@@ -175,7 +172,7 @@ async function main() {
     ? JSON.parse(await readFile(process.env.LOAD_MEASUREMENTS_FILE, 'utf8')) : null;
   const report = {
     target: { hostname: host, stage: 'staging' },
-    inputs: { concurrency: levels, rounds, requestTimeoutMs: timeoutMs, databaseConnectionBudget: budget, lambdaReservedConcurrency: reservedConcurrency ?? 'unknown', operation: 'PublicLeagueData query; read-only', cookieProvided: Boolean(suppliedCookie) },
+    inputs: { concurrency: levels, rounds, requestTimeoutMs: timeoutMs, databaseConnectionBudget: budget, lambdaReservedConcurrency: reservedConcurrency ?? 'unknown', operation: 'Standings query; read-only', cookieProvided: Boolean(suppliedCookie) },
     observations: {
       databaseConnections: measurements?.databaseConnections ?? 'unknown',
       databaseFailures: measurements?.databaseFailures ?? 'unknown',

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { Account } from '../accounts/models';
 import { ASLLogoFull } from '../../components/Icons';
 import { C } from '../../theme/theme';
@@ -6,11 +6,13 @@ import { StatsView } from '../accounts';
 import { NewsHub, RulesView } from '../content';
 import { ScheduleView, TeamStandings } from '../matches';
 import { PlayerCardModal, TeamRosterFormation, TransfersView } from '../teams';
-import { loadPublicLeague } from './api';
-import { useResource } from '../../hooks/use-resource';
+import { mapPublicLeague } from './api';
+import { useQuery } from '@apollo/client/react';
+import { StandingsDocument } from '../../api/generated/graphql';
 
 export const PublicLeague = ({onLogin}: { onLogin: () => void }) => {
-  const {data,loading,error,reload}=useResource(loadPublicLeague, []);
+  const {data: result,loading,error,refetch}=useQuery(StandingsDocument);
+  const data=useMemo(()=>result ? mapPublicLeague(result) : undefined,[result]);
   const players=data?.players ?? [];
   const teams=data?.teams ?? [];
   const teamRecords=data?.teamRecords ?? [];
@@ -22,7 +24,7 @@ export const PublicLeague = ({onLogin}: { onLogin: () => void }) => {
     <nav className="asl-nav-bar flex flex-wrap justify-center p-2">{['standings','teams','stats','schedule','news','transfers','rules'].map(tab=><button key={tab} onClick={()=>setView(tab)} className={`asl-nav-tab px-3 py-2 ${view===tab?'active':''}`}>{tab}</button>)}</nav>
     <main className="max-w-6xl mx-auto p-4">
       {loading&&<p role="status">Loading league…</p>}
-      {error&&<p role="alert">{error} <button onClick={()=>void reload()}>Try again</button></p>}
+      {error&&<p role="alert">{error.message} <button onClick={()=>{void refetch().catch(()=>{});}}>Try again</button></p>}
       {view==='standings'&&<TeamStandings allTeams={teams} allPlayers={players} records={teamRecords}/>}
       {view==='stats'&&<StatsView allTeams={teams} allPlayers={players} onPlayerClick={setSelectedPlayer}/>}
       {view==='schedule'&&<ScheduleView account={null}/>}

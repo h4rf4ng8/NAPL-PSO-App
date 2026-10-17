@@ -5,7 +5,9 @@ import type { Weightings } from './models';
 import { C } from '../../theme/theme';
 
 import { STAT_KEY_LABELS } from '../../utils/rankings';
-import { loadDefaultPositionWeights } from '../accounts/api';
+import { mapDefaultPositionWeights } from '../accounts/api';
+import { useLazyQuery } from '@apollo/client/react';
+import { DefaultPositionWeightsDocument } from '../../api/generated/graphql';
 import { POS, POS_LABELS } from '@napl/contracts/league';
 
 
@@ -25,23 +27,35 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState('');
   const [error, setError] = useState('');
+  const [loadDefaults] = useLazyQuery(DefaultPositionWeightsDocument);
+  const getDefaults = async () => {
+    const { data } = await loadDefaults();
+    if (!data) throw new Error('Default weightings unavailable.');
+    return mapDefaultPositionWeights(data);
+  };
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
-      const saved = await adminApi.getWeightings();
-      // Convert from 0-1 decimals to 0-100 percentages for editing
-      const source = saved || await loadDefaultPositionWeights();
-      const asPct:Weightings = {};
-      for (const [pos, positionStats] of Object.entries(source)) {
-        asPct[pos] = {};
-        for (const [stat, value] of Object.entries(positionStats)) {
-          asPct[pos][stat] = Math.round(value * 100);
+      try {
+        const saved = await adminApi.getWeightings();
+        if (!mounted) return;
+        // Convert from 0-1 decimals to 0-100 percentages for editing
+        const source = saved || await getDefaults();
+        const asPct:Weightings = {};
+        for (const [pos, positionStats] of Object.entries(source)) {
+          asPct[pos] = {};
+          for (const [stat, value] of Object.entries(positionStats)) {
+            asPct[pos][stat] = Math.round(value * 100);
+          }
         }
-      }
-      setWeights(asPct);
-      setLoading(false);
+        if (mounted) setWeights(asPct);
+      } catch (error) {
+        if (mounted) setError(error instanceof Error ? error.message : 'Could not load weightings.');
+      } finally { if (mounted) setLoading(false); }
     })();
-  }, []);
+    return () => { mounted = false; };
+  }, [loadDefaults]);
 
   const setStat = (pos: string, stat: string, value: string) => {
     const v = Math.max(0, Math.min(100, Number(value) || 0));
@@ -79,16 +93,21 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
 
   const resetToDefault = async () => {
     if (!confirm('Reset all weightings back to the original defaults?')) return;
-    const defaults = await loadDefaultPositionWeights();
-    const asPct:Weightings = {};
-    for (const [pos, positionStats] of Object.entries(defaults)) {
-      asPct[pos] = {};
-      for (const [stat, value] of Object.entries(positionStats)) {
-        asPct[pos][stat] = Math.round(value * 100);
+    setError(''); setInfo('');
+    try {
+      const defaults = await getDefaults();
+      const asPct:Weightings = {};
+      for (const [pos, positionStats] of Object.entries(defaults)) {
+        asPct[pos] = {};
+        for (const [stat, value] of Object.entries(positionStats)) {
+          asPct[pos][stat] = Math.round(value * 100);
+        }
       }
+      setWeights(asPct);
+      setInfo('Defaults loaded — click Save to apply.');
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Could not load default weightings.');
     }
-    setWeights(asPct);
-    setInfo('Defaults loaded — click Save to apply.');
   };
 
   if (loading || !weights) {

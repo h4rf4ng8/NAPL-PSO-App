@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { gql } from '@apollo/client';
 import { getClient, resetClient } from '../src/api/client';
+import { TeamRecordsDocument } from '../src/api/generated/graphql';
 
 const restoreGlobal = (key: 'document' | 'localStorage', value: unknown) => {
   if (value === undefined) Reflect.deleteProperty(globalThis, key);
@@ -31,9 +32,9 @@ function installBrowserStorage() {
   };
 }
 
-afterEach(() => {
+afterEach(async () => {
   mock.restoreAll();
-  resetClient();
+  await resetClient();
 });
 
 test('public and current account records with the same id remain separate cache entities', () => {
@@ -53,20 +54,18 @@ test('public and current account records with the same id remain separate cache 
   assert.equal(records['CurrentAccount:{"id":"same-id"}']?.username, 'private-name', JSON.stringify(records));
 });
 
-test('resetClient aborts old requests, clears both caches and ignores a late old response', async () => {
+test('identity reset keeps a stable client, aborts old requests and ignores late old responses', async () => {
   const browser = installBrowserStorage();
   const oldClient = getClient();
   const fetchResponse = Promise.withResolvers<Response>();
   let requestSignal: AbortSignal | undefined;
   mock.method(globalThis, 'fetch', (_url: string | URL | Request, init?: RequestInit) => {
-    requestSignal = init?.signal;
+    requestSignal = init?.signal ?? undefined;
     return fetchResponse.promise;
   });
-  const query = gql`query SlowAccounts { accounts { __typename id username } }`;
-  oldClient.cache.writeQuery({ query, data: {
-    accounts: [{ __typename: 'Account', id: 'cached-id', username: 'old-session' }],
-  } });
-  assert.equal(oldClient.cache.extract()['Account:cached-id']?.username, 'old-session');
+  const query = TeamRecordsDocument;
+  oldClient.cache.writeQuery({ query, data: { teamRecords: [] } });
+  assert.deepEqual(oldClient.cache.readQuery({ query }), { teamRecords: [] });
   const pending = (async () => {
     try {
       await oldClient.query({ query, fetchPolicy: 'network-only' });
@@ -76,15 +75,14 @@ test('resetClient aborts old requests, clears both caches and ignores a late old
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.ok(requestSignal, 'request should have started');
 
-  resetClient();
+  await resetClient();
   const newClient = getClient();
+  assert.equal(newClient, oldClient);
   assert.equal(requestSignal?.aborted, true);
   assert.deepEqual(oldClient.cache.extract(), {});
   assert.deepEqual(newClient.cache.extract(), {});
 
-  fetchResponse.resolve(Response.json({ data: { accounts: [
-    { __typename: 'Account', id: 'late-id', username: 'old-session' },
-  ] } }));
+  fetchResponse.resolve(Response.json({ data: { teamRecords: [] } }));
   await pending;
   assert.deepEqual(newClient.cache.extract(), {});
   browser.restore();

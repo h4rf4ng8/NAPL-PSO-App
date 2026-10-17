@@ -23,7 +23,7 @@ import { IntegrationsManager } from './IntegrationsManager';
 import { AdminsManager } from './AdminsManager';
 import { partitionReviewTeams } from './team-review';
 // AdminPanel
-export const AdminPanel = ({ account, onLeagueChanged }: { account: Account; onLeagueChanged: () => void }) => {
+export const AdminPanel = ({ account }: { account: Account }) => {
   const [section, setSection] = useState('teams');
   const [teams, setTeams] = useState<Team[]>([]);
   const [loadError, setLoadError] = useState('');
@@ -49,7 +49,6 @@ export const AdminPanel = ({ account, onLeagueChanged }: { account: Account; onL
       setCurrentSeason(season);
       setSeasonInput(season);
       setLoadError('');
-      onLeagueChanged();
     } catch {
       if (currentRequest === requestId.current) setLoadError('Could not load admin data.');
     }

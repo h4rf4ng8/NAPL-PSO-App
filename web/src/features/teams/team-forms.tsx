@@ -4,7 +4,7 @@ import { teams as teamApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Team } from './models';
 
-import { Dialog, ModalShell } from '../../components/Ui';
+import { Dialog, ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { compressImage } from '../../utils/input';
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import React from 'react';
+import {act, create} from 'react-test-renderer';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { PlayerCard } from '../src/components/PlayerCard';
 import { mapAccount } from '../src/features/accounts/api';
@@ -63,4 +64,36 @@ test('account decoding rejects malformed card cells with a valid server ranking'
   cells[2] = { label: 'ASSIST', value: 2 as unknown as string };
 
   assert.throws(() => mapAccount(accountRow({ ranking, cardStats: [{ season: 'S1', cells }] })), /Invalid GraphQL account JSON data/);
+});
+
+test('large cards flip by click, Enter and Space while smaller cards stay display-only', () => {
+  const account = mapAccount(accountRow({ ranking: {score:82, percentile:0.7,ranked:true,gamesPlayed:12,tier:'GOLD'}, cardStats: [] }));
+  let card: ReturnType<typeof create>;
+  const ref = React.createRef<HTMLDivElement>();
+  const host = {} as HTMLDivElement;
+  act(() => { card = create(React.createElement(PlayerCard, {account,size:'lg', ref}), {createNodeMock:()=>host}); });
+  assert.equal(ref.current, host);
+  const shell = () => card!.root.findByProps({role:'button'});
+  assert.equal(shell().props['aria-pressed'], false);
+  const faces = () => card!.root.findAll(node => typeof node.props['aria-hidden'] === 'boolean');
+  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [false, true]);
+  const firstSvg = card!.root.findAllByType('svg')[0];
+  act(() => shell().props.onClick());
+  assert.equal(shell().props['aria-pressed'], true);
+  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [true, false]);
+  assert.equal(card!.root.findAllByType('svg')[0], firstSvg);
+  assert.ok(firstSvg!.findAllByType('text').some(node => node.children.includes('G')));
+  for (const key of ['Enter', ' ']) {
+    let prevented = false;
+    act(() => shell().props.onKeyDown({key,preventDefault:()=>{prevented=true;}}));
+    assert.equal(prevented,true);
+  }
+  assert.equal(shell().props['aria-pressed'],true);
+  act(() => shell().props.onKeyDown({key:'Escape'}));
+  assert.equal(shell().props['aria-pressed'],true);
+  const ids = card!.root.findAll(node => typeof node.props.id === 'string').map(node => node.props.id);
+  assert.equal(new Set(ids).size,ids.length);
+  act(() => card!.update(React.createElement(PlayerCard,{account,size:'md'})));
+  assert.equal(card!.root.findAllByProps({role:'button'}).length,0);
+  act(() => card!.unmount());
 });

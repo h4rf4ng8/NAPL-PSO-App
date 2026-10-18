@@ -8,7 +8,8 @@ import { auth } from '../../auth/session';
 import { useResource } from '../../hooks/use-resource';
 
 import { PlayerCard } from '../../components/PlayerCard';
-import { Dialog, EmptyState, useDialog } from '../../components/Ui';
+import { Dialog, useDialog } from '../../components/Dialog';
+import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
 
 import { isTeamCaptain } from '../../utils/league';

@@ -5,7 +5,7 @@ import type { Account } from '../accounts/models';
 import type { Team } from './models';
 import { CaptainStar } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
-import { Dialog } from '../../components/Ui';
+import { Dialog } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 
 import { DEFAULT_FORMATION, FORMATION_IDS, getFormation, isTeamCaptain, resolveLineup } from '../../utils/league';

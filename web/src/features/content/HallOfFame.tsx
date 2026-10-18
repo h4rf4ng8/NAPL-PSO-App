@@ -4,7 +4,7 @@ import type { Account, PlayerAward } from '../accounts/models';
 import type { Champions } from '../admin/models';
 import type { Team } from '../teams/models';
 import { AWARD_TYPES, AwardIcon, ChampionTrophy } from '../../components/Icons';
-import { EmptyState } from '../../components/Ui';
+import { EmptyState } from '../../components/Display';
 import { useResource } from '../../hooks/use-resource';
 import { C } from '../../theme/theme';
 

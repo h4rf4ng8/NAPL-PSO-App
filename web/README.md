@@ -33,7 +33,7 @@ The React application provides public league pages, member dashboards, and admin
 
 ### Opening the App
 
-The app first checks the current session. Visitors see the public league page; signed-in members see their dashboard. Choosing Discord sign-in redirects the browser through the API and Supabase Auth. After sign-in, session cookies accompany later requests. Signing out clears cached data and tells other tabs to reload their session.
+The app first checks the current session. Visitors start on Teams and can browse Stats, Schedule, News, Transfers, and Rules. Standings appears only in the signed-in dashboard. Choosing Discord sign-in redirects the browser through the API and Supabase Auth. After sign-in, session cookies accompany later requests. Signing out clears cached data and tells other tabs to reload their session.
 
 | Implementation | Used by | Responsibility |
 | --- | --- | --- |
@@ -48,16 +48,16 @@ GraphQL screens use `useQuery` and `useLazyQuery` through `ApolloProvider`. Apol
 
 | Query | Used by | Data returned |
 | --- | --- | --- |
-| `Standings` | [PublicLeague](src/features/dashboard/PublicLeague.tsx) | Public players, teams, and team records. |
+| `Standings` | Retained authenticated API operation and transport validation; no current screen | Players, teams, and team records; sign-in required. |
 | `MemberLeagueData` | [Dashboard](src/features/dashboard/Dashboard.tsx) | League data, season, news, voting periods, and the current account. |
 | `AccountMatches` | [MatchLog](src/features/dashboard/MatchLog.tsx) | Bounded match-history pages. |
 | `AccountOpponents` | Retained API operation and transport validation; no current screen | Opponent summaries; the unreachable `HeadToHead` component was removed. |
-| `TeamRecords` | Standings and schedule screens | Aggregated team records. |
+| `TeamRecords` | Signed-in standings and schedule screens | Aggregated team records; sign-in required. Public Schedule skips this query and shows its existing public fixtures without team records. |
 | `AccountCardPreviews` and `DefaultPositionWeights` | Player-card previews and ranking controls | Server-calculated samples and default weights. |
 
 The [transport](src/api/link.ts) sends only `{variables: ...}` to each operation's [named endpoint](../pkgs/contracts/src/index.ts), with `Apollo-Require-Preflight: true`. Apollo Server handles GraphQL CSRF protection; these reads no longer bootstrap or send signed CSRF tokens or write idempotency keys. The link validates response data before Apollo caches it and aborts requests when Apollo cancels them. The server rejects client query documents and operation overrides.
 
-The exported [Apollo client](src/api/client.ts) is one stable singleton. Apollo's default `cache-first` policy reuses complete cached data; explicit refresh requests fresh data. Its default error policy rejects partial failures. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks.
+The exported [Apollo client](src/api/client.ts) is one stable singleton. Apollo's default `cache-first` policy reuses complete cached data; explicit refresh requests fresh data. Its default error policy rejects partial failures. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks. [PublicLeague](src/features/dashboard/PublicLeague.tsx) loads public accounts and teams from their existing REST endpoints; it never requests Standings or TeamRecords.
 
 Player rankings and card statistics remain calculated by the API. The browser selects and renders those results; canonical ranking and name-validation rules stay on the server.
 
@@ -71,23 +71,24 @@ REST writes, including `/auth/refresh` and `/auth/logout`, retain signed CSRF pr
 
 ## REST Hook Audit
 
-**Keep both files.** [resource.ts](src/hooks/resource.ts) is the small async state machine; [use-resource.ts](src/hooks/use-resource.ts) connects it to React. All eleven original callsites fetched REST data. Ten remain after removing the unreachable manual stats screen. Apollo hooks cannot replace these REST calls without changing their data source.
+**Keep both files.** [resource.ts](src/hooks/resource.ts) is the small async state machine; [use-resource.ts](src/hooks/use-resource.ts) connects it to React. All eleven original callsites fetched REST data. Ten remain after removing the unreachable manual stats screen, and PublicLeague adds one public REST consumer, for eleven live callsites. Apollo hooks cannot replace these REST calls without changing their data source.
 
 | Caller | Actual data source | Verdict and reason |
 | --- | --- | --- |
+| `PublicLeague` | `GET /api/accounts` and `GET /api/teams` | Keep public REST reads: visitors need rosters and player statistics without requesting authenticated standings or team records. |
 | `WeightingsPublicView` | `GET /api/settings/position_weights` | Keep REST: saved weightings have a schema field but no named GraphQL operation. Its separate default-weight query already uses Apollo. |
 | `AdminsManager` | `GET /api/roles` | Keep REST: the authorized `admins` schema field has no named operation; retain save lockout during failed/pending reads. |
 | `ArticleDetailView` | `GET /api/articles/slug/:slug` | Keep REST: no GraphQL equivalent; preserve 404 handling and slug-change reset. |
 | `ArticlesListView` | `GET /api/articles` | Keep REST: no GraphQL equivalent. |
 | `HallOfFameView` | `GET /api/settings/season_champions` | Keep REST: champions are absent from the GraphQL schema. |
 | `NewsView` | `GET /api/news` | Keep REST: the existing news selection belongs to the member dashboard operation; this screen also serves visitors. |
-| `ScheduleView` | `GET /api/schedule` and `GET /api/teams` | Keep REST pair: GraphQL covers teams, not scheduled matches. Team records already use Apollo separately. |
+| `ScheduleView` | `GET /api/schedule` and `GET /api/teams` | Keep REST pair: GraphQL covers teams, not scheduled matches. Team records use Apollo separately only while signed in. |
 | `StatsManager` (removed) | `GET /api/submissions` | Delete frontend caller: no tab, route, or state transition could open it. Preserve the REST API. |
 | `TeamsView` | `GET /api/teams` and `GET /api/accounts` | Keep REST: existing league queries could supply these fields, but migration would change mount freshness and reload behavior without eliminating the shared hook. |
 | `TransfersView` | `GET /api/transfers` and `GET /api/teams` | Keep REST pair: GraphQL has teams but no transfers. |
 | `VotingTab` | `GET /api/voting/periods/:id/votes` | Keep REST: GraphQL exposes periods, not ballots; preserve period reset and server-side ballot visibility. |
 
-The hook loads on mount and dependency changes, discards data on dependency reset, and ignores outdated responses after replacement or cleanup. Explicit reload retains the previous data while loading and after failure. It exposes read errors in state and resolves `reload()`, so a failed refresh does not misreport a completed write. It does not provide caching, authentication, or network cancellation. The [resource tests](test/resource.test.ts) exercise the underlying state machine's reset, invalidation, race, and reload behavior; they do not mount React components or test hook cleanup through React. GraphQL cache/cancellation behavior is covered separately by [cache tests](test/cache.test.ts).
+The hook loads on mount and dependency changes, discards data on dependency reset, and ignores outdated responses after replacement or cleanup. Explicit reload retains the previous data while loading and after failure. It exposes read errors in state and resolves `reload()`, so a failed refresh does not misreport a completed write. It does not provide caching, authentication, or network cancellation. The [resource tests](test/resource.test.ts) exercise the underlying state machine's reset, invalidation, race, and reload behavior; [mounted hook tests](test/resource-hook.test.ts) cover dependency changes, pending reads at unmount, disabled reload after unmount, and reload failure/recovery through React. The [public-page tests](test/public-league.test.ts) mount real consumers and verify navigation, public REST reads, and skipped private queries. React Test Renderer is pinned to React 18 for these effect-running tests; server rendering alone cannot verify requests started by effects. GraphQL cache/cancellation behavior is covered separately by [cache tests](test/cache.test.ts).
 
 ## Retained Helpers
 

@@ -59,7 +59,7 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
     const query = print(document);
     const variables = z.strictObject(Object.fromEntries((operation.variableDefinitions ?? []).map(variable => [variable.variable.name.value, z.unknown().optional()])));
     const requestBody = z.strictObject({ variables });
-    app.post(url, { config: { public: true, csrf: 'apollo' } }, async (request: FastifyRequest, reply: FastifyReply) => {
+    app.post(url, { config: { public: !['Standings', 'TeamRecords'].includes(name), csrf: 'apollo' } }, async (request: FastifyRequest, reply: FastifyReply) => {
       const input = requestBody.safeParse(request.body);
       const headers = new HeaderMap();
       for (const [key, value] of Object.entries(request.headers)) {

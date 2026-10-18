@@ -131,7 +131,7 @@ When the Lambda API starts, it loads its settings and prepares database access a
 
 ### Sign-in and Permissions
 
-When someone opens the app, it checks whether they are signed in. Visitors see the public league page; signed-in members see their dashboard. The app checks again when another browser tab reports a session change. The [main screen](web/src/App.tsx#L8) controls this choice.
+When someone opens the app, it checks whether they are signed in. Visitors can browse the public pages; standings require sign-in and appear in the member dashboard. The app checks again when another browser tab reports a session change. The [main screen](web/src/App.tsx#L8) controls this choice.
 
 Choosing “Sign in with Discord” starts authentication through Supabase Auth. Once Discord confirms the user's identity, the API checks their guild membership, creates or loads their league account, and saves session cookies in the browser. Those cookies identify the user on later requests. The [sign-in implementation](api/plugins/auth/session.ts#L110) handles this exchange.
 
@@ -145,7 +145,7 @@ Choosing “Sign in with Discord” starts authentication through Supabase Auth.
 | [RateLimiter](api/plugins/limits/auth.ts#L23) | Created by `createSession` with the auth store. | Applies authentication request quotas by endpoint, IP, user, and session. |
 | [SessionRefresher](api/plugins/session/refresh.ts#L22) | Created by `createSession`; called by `/auth/refresh` and logout when needed. | Coordinates refreshes and renews provider credentials and membership eligibility. |
 
-The API checks permissions for each request using the verified session and the user's roles in the database. Public information is available without signing in. Member and administrator actions require the appropriate access. Signed-in GraphQL reads, changes to league data, and administrator reads also check that the session is still active. These rules are enforced by the [request checks](api/app.ts#L123) and [account field definitions](api/routes/accounts/schema.ts#L8).
+The API checks permissions for each request using the verified session and the user's roles in the database. Public pages retain their public reads. The standings and team-record endpoints require a verified identity, current guild membership, and an active session, including for direct API requests. Member and administrator actions require the appropriate access. Signed-in GraphQL reads, changes to league data, and administrator reads also check that the session is still active. These rules are enforced by the [request checks](api/app.ts#L123) and [account field definitions](api/routes/accounts/schema.ts#L8).
 
 If a request reports that the session needs renewal, the browser renews it and tries the original request once more. Signing out clears the browser's session and cached data, then tells other tabs to update. See [session renewal](web/src/api/http.ts#L57) and [sign-out handling](web/src/auth/session.ts#L20).
 
@@ -155,15 +155,15 @@ The browser selects a named endpoint and supplies its parameters. The Lambda API
 
 | Operation | POST endpoint | Used for |
 | --- | --- | --- |
-| `Standings` | `/api/standings` | Public players, visible teams, and team records. |
+| `Standings` | `/api/standings` | Signed-in player/team standings and team records. |
 | `MemberLeagueData` | `/api/dashboard` | Member dashboard, news, voting periods, season, and the current account. |
-| `TeamRecords` | `/api/team-records` | Standings and schedule records. |
+| `TeamRecords` | `/api/team-records` | Signed-in standings and schedule records. |
 | `AccountMatches` | `/api/account-matches` | Bounded match-history pages with account, cursor, season, and opponent parameters. |
 | `AccountOpponents` | `/api/account-opponents` | Opponent totals for one account. |
 | `AccountCardPreviews` | `/api/account-card-previews` | Sample player cards calculated by the API. |
 | `DefaultPositionWeights` | `/api/default-position-weights` | Default ranking weights. |
 
-For example, the initial request is `POST /api/standings` with this body:
+For example, a signed-in standings request is `POST /api/standings` with this body:
 
 ```json
 {"variables": {}}
@@ -266,6 +266,8 @@ Open **http://localhost:5173**. Compose starts the web app, the API in AWS's Nod
 
 `setup:env` creates [`api/.env`](api/.env.example) and [`web/.env`](web/.env.example) from their examples and generates missing cookie, origin, and Auth signing keys once. Existing settings and keys are preserved. The shared `ORIGIN_SECRET` must match in both files. Startup only reads these files; rerun setup explicitly when needed. Pass `-d` to start in the background: `./scripts/dev.sh -d`.
 
+The earlier browser-only app used `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in a root `.env` and configured Discord OAuth in Supabase Dashboard. This server-backed layout uses the two app files above; the browser calls the API and does not read those legacy `VITE_SUPABASE_*` settings. Compose runs its own local GoTrue service: `DISCORD_ENABLED` and `GOTRUE_JWT_*` configure that service, not a hosted Supabase project.
+
 | File | Responsibility |
 | --- | --- |
 | [`docker-compose.yml`](docker-compose.yml) | Connect services and start them in dependency order. |
@@ -281,17 +283,19 @@ Open **http://localhost:5173**. Compose starts the web app, the API in AWS's Nod
 | PostgreSQL | `localhost:54322` | Store local league data, users, and sessions. |
 | Lambda invocation | `http://localhost:9000/2015-03-31/functions/function/invocations` | Invoke the runtime with a Lambda event; browser requests go through the web app. |
 
-Use `localhost` for browser URLs so the OAuth redirects and cookies share the configured origin. All published ports bind only to your machine. The small `api` service translates HTTP requests into Lambda Function URL events; the Lambda container executes the packaged API. AWS's Runtime Interface Emulator exercises that runtime and event handling, but does not reproduce AWS IAM authorization or scaling.
+Open **`http://localhost:5173`** for Compose. `http://127.0.0.1:5173` is a different browser origin; sign-in and GraphQL POST requests from it fail the API's exact-Origin check. `PUBLIC_ORIGIN` must be the origin only, without a path or trailing slash; Compose sets it to `http://localhost:5173`. All published ports bind only to your machine. The small `api` service translates HTTP requests into Lambda Function URL events; the Lambda container executes the packaged API. AWS's Runtime Interface Emulator exercises that runtime and event handling, but does not reproduce AWS IAM authorization or scaling.
 
 Keys persist in the ignored app `.env` files. PostgreSQL data persists in `postgres-data`, including changes made through the app. Compose sets database and Auth addresses for its internal network; the app examples use localhost addresses for native development. Production CI receives its settings from GitHub secrets and variables.
 
 Use `SUPABASE_URL=https://PROJECT.supabase.co` for hosted Supabase and `SUPABASE_JWKS_URL=https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json` for its signing keys. The API appends `/auth/v1` to project roots; loopback URLs use standalone Auth directly, and an explicit Auth path is preserved. Locally these values are `http://localhost:54321` and `http://localhost:54321/.well-known/jwks.json`. Compose shares Auth's network namespace with Lambda so the same localhost URL works in the browser, native API, and Lambda container. Auth publishes both its own port and Lambda's invocation port; GoTrue has no reverse proxy.
 
+With hosted Supabase, continue configuring Discord OAuth in [Supabase Dashboard](https://supabase.com/docs/guides/auth/social-login/auth-discord). The API separately uses the same Discord application's client ID/secret to refresh provider tokens and `DISCORD_GUILD_ID` to verify guild membership. Supabase refreshes its own sessions but [does not refresh provider tokens](https://supabase.com/docs/guides/auth/social-login). Those server credentials are therefore still required by this API; they do not belong in the browser's environment. Compose supplies its local Auth/database URLs explicitly, so changing hosted URLs in `api/.env` alone does not switch the Compose stack to hosted services.
+
 Apply Compose changes with `./scripts/dev.sh -d`. If you force-recreate only Auth, rerun this full-stack command to reconnect Lambda to its network. A normal Auth restart also restarts Lambda.
 
 ### Discord sign-in with Compose
 
-Public pages work with the example configuration. To test real Discord sign-in:
+Compose starts with the example configuration. To test real Discord sign-in:
 
 1. Create or select an OAuth application in the Discord Developer Portal. Add **`http://localhost:54321/callback`** to its OAuth2 redirects.
 2. Edit `api/.env`: set `DISCORD_ENABLED=true`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_GUILD_ID` to your development application's credentials and Discord server ID.
@@ -303,7 +307,7 @@ The real Discord browser authorization flow requires your OAuth credentials and 
 
 ### Working with the containers
 
-Edits under `web/src` reload in the browser. API code is packaged into the Lambda image, so rebuild it after API changes:
+Edits under `web/src` reload in the browser. API code is packaged into the Lambda image; restarting an existing container does not update that code. Rebuild it after API changes:
 
 ```sh
 ./scripts/dev.sh -d lambda
@@ -388,13 +392,13 @@ Supply production values through a protected local file or the deployment enviro
 | `PUBLIC_ORIGIN` | Exact HTTPS address of the public frontend, without a path or trailing slash. Configure allowed sign-in redirects for this frontend origin. |
 | `COOKIE_KEYS` | Persistent JSON key ring shared by all API instances. Each key is a base64-encoded 32-byte value. |
 | `ORIGIN_SECRET` | Secret shared by Vercel and the API, at least 32 characters long. |
-| `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Exact team and project identifiers allowed to invoke the production API. |
+| `VERCEL_TEAM_SLUG`, `VERCEL_PROJECT_NAME` | Deployment-only inputs for the AWS trust policy: the exact Vercel team slug and project name allowed to invoke the production API. Supply them as GitHub Actions variables, not browser or Lambda runtime settings. |
 | `SUPABASE_SECRET_KEY` | Optional server secret key for forwarding the original client IP to Supabase. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional destination for roster notices. |
 | `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional existing AWS identity provider for the Vercel team, reused instead of creating another. |
 | `APPLICATION_ROLE_BOUNDARY_ARN` | Permissions boundary created by the deployment bootstrap, limiting the permissions of application roles. |
 
-The generated AWS trust policy accepts only the named project's production Vercel environment. Preview deployments need their own access; they do not inherit production permission.
+The generated AWS trust policy accepts only the named project's production Vercel environment. These team/project inputs need not already exist in a Vercel application's environment: the deployment uses their values to match Vercel's [OIDC identity claims](https://vercel.com/docs/oidc/aws). The proxy's runtime settings are listed under [Configure Vercel](#configure-vercel). Preview deployments need their own access; they do not inherit production permission.
 
 ### Database Capacity
 
@@ -500,7 +504,7 @@ Keep these values out of browser-exposed settings; the `VITE_` prefix would publ
 
 ### Optional Staging Load Check
 
-The [load runner](api/test/load/run-staging.mjs) measures public league reads against an explicitly selected staging environment. Use an isolated staging project and database with their own invocation permissions. A Vercel preview hostname alone does not establish that an environment is isolated from production.
+The [load runner](api/test/load/run-staging.mjs) measures signed-in standings reads against an explicitly selected staging environment. Use an isolated staging project and database with their own invocation permissions. A Vercel preview hostname alone does not establish that an environment is isolated from production.
 
 ```sh
 pnpm run test:load --help
@@ -513,12 +517,12 @@ pnpm run test:load --help
 | `LOAD_DB_CONNECTION_BUDGET` | Required positive database connection budget, recorded in the report. |
 | `LOAD_ROUNDS` | Optional; between 1 and 5 rounds. |
 | `LOAD_LAMBDA_RESERVED_CONCURRENCY` | Optional concurrency setting recorded in the report. |
-| `LOAD_COOKIE` | Optional staging session cookie. |
+| `LOAD_COOKIE` | Required authenticated staging session cookie; standings reads require sign-in. |
 | `LOAD_TIMEOUT_MS` | Optional request timeout, between 1,000 and 60,000 milliseconds. |
 | `LOAD_REPORT` | Optional report location; reports default to the temporary directory at `/tmp`. |
 | `LOAD_MEASUREMENTS_FILE` | Optional file containing independently collected Lambda and database measurements. |
 
-The runner first initializes request protection, then issues public GraphQL reads in successive groups of 20, 50, 100, and 200 simultaneous requests. One to five rounds produce 370–1,850 reads plus the initial setup request. Requests are not retried. The declared connection budget is recorded rather than enforced, and the runner does not change infrastructure. Measurements that were not supplied remain unknown.
+The runner first initializes request protection, then issues authenticated standings reads in successive groups of 20, 50, 100, and 200 simultaneous requests. One to five rounds produce 370–1,850 reads plus the initial setup request. Requests are not retried. The declared connection budget is recorded rather than enforced, and the runner does not change infrastructure. Measurements that were not supplied remain unknown.
 
 This check is optional, is separate from continuous integration, and must target staging. Historical container measurements do not establish Lambda capacity.
 
@@ -528,6 +532,6 @@ For the Apollo CSRF change, deploy the API first, then the frontend. The new API
 
 Release the API before switching the frontend. Coordinate the database cutover and access-control migrations with that switch: they remove the legacy browser's direct access to league tables, so applying them while the old frontend is still in use will break that frontend. Apply the [administrator history migration](supabase/migrations/202610140001_role_audit.sql) before enabling the corresponding API behavior. Local integration tests apply migrations only to disposable fixtures; production migrations are a separate deployment step.
 
-After rollout, check public league reads, sign-in, session renewal, sign-out, and an authorized change through the frontend's public address. Watch Lambda errors, throttling, request duration, and database connections. A direct unsigned request to the Lambda URL should be rejected by AWS, and a request without the shared origin secret should be rejected by the API.
+After rollout, check public pages, anonymous standings rejection, signed-in standings, sign-in, session renewal, sign-out, and an authorized change through the frontend's public address. Watch Lambda errors, throttling, request duration, and database connections. A direct unsigned request to the Lambda URL should be rejected by AWS, and a request without the shared origin secret should be rejected by the API.
 
 To roll back application code, redeploy the previous compatible revision with its configuration, keeping the active cookie keys available. A code rollback does not undo database migrations, so the older application must still work with the current database.

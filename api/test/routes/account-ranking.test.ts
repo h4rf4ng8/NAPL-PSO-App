@@ -39,6 +39,8 @@ function appFor() {
     query: async <T extends Row>(sql: Prisma.Sql) => {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       seen.set(key, (seen.get(key) ?? 0) + 1);
+      if (key.includes('FROM auth_gateway.memberships')) return [{ eligible: true, fresh: true }] as T[];
+      if (key.includes('auth_gateway.session_active')) return [{ active: true }] as T[];
       if (key.includes('public."settings"')) return [{ key: sql.values[0], value: JSON.stringify(positionWeights) }] as T[];
       if (key.startsWith('WITH match_rows AS')) return [] as T[];
       if (key.includes('public.accounts') || key.includes('public."accounts"')) {
@@ -134,7 +136,7 @@ test('REST and GraphQL account reads expose computed values without private colu
     assert.equal(restAlice.privateNote, undefined);
 
     const graph = await app.inject({
-      method: 'POST', url: '/api/standings',
+      method: 'POST', url: '/api/standings', headers: { authorization: `Bearer ${alice}` },
       payload: { variables: {} },
     });
     assert.equal(graph.statusCode, 200, graph.body);

@@ -44,6 +44,8 @@ Requests that use methods such as POST or PUT require the exact configured brows
 
 Each GraphQL operation has a named POST endpoint, such as `/api/standings` or `/api/dashboard`. The [shared endpoint list](../pkgs/contracts/src/index.ts) keeps browser routing and API registration aligned. The [handler](routes/graphql/index.ts) accepts a strict `{variables: ...}` body and selects the fixed server-owned document assigned to that URL. It rejects query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation and field authorization remain in force. `/api/graphql` is not registered; league changes use REST endpoints.
 
+`/api/standings` and `/api/team-records` require a signed-in member with a fresh membership check and an active session. Anonymous requests are rejected before database reads. Public account and team REST reads and the other public GraphQL operations remain available without sign-in; the dashboard retains its existing private-field authorization.
+
 Apollo Server executes these fixed documents and owns variable coercion and native CSRF prevention. JSON requests pass Apollo's CSRF check; simple browser requests need a nonempty `Apollo-Require-Preflight` or `X-Apollo-Operation-Name` header. Every GraphQL POST still requires the exact configured `Origin`. GraphQL does not require a signed CSRF cookie/token; REST commands and authentication routes retain that protection. The server receives the original HTTP headers and starts and stops with Fastify. It exposes no landing page, persisted queries, or Apollo reporting.
 
 | Component | What it does |

@@ -3,7 +3,7 @@ import { useEffect,useMemo,useState } from 'react';
 import { teams as teamApi } from '../teams/api';
 import { mapTeamRecords, matches as matchApi } from './api';
 import { useResource } from '../../hooks/use-resource';
-import { useQuery } from '@apollo/client/react';
+import { skipToken, useQuery } from '@apollo/client/react';
 import { TeamRecordsDocument } from '../../api/generated/graphql';
 
 import type { Account } from '../accounts/models';
@@ -22,8 +22,8 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   }, []);
   const matches = data?.matches ?? [];
   const teams = data?.teams ?? [];
-  const records = useQuery(TeamRecordsDocument);
-  const teamRecords = records.data ? mapTeamRecords(records.data) : [];
+  const records = useQuery(TeamRecordsDocument, account ? {} : skipToken);
+  const teamRecords = account && records.data ? mapTeamRecords(records.data) : [];
   const [season, setSeason] = useState('');
   const [editing, setEditing] = useState<ScheduledMatch | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -143,8 +143,8 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         </div>
       </div>
 
-      {(loadError || records.error) && <p role="alert">{loadError || records.error?.message}</p>}
-      {(loading || records.loading) ? (
+      {(loadError || (account && records.error)) && <p role="alert">{loadError || records.error?.message}</p>}
+      {(loading || (account && records.loading)) ? (
         <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading schedule...</div>
       ) : (filtered.length === 0 ? (
         <div className="text-center py-10 font-mono text-sm rounded" style={{ color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}44` }}>

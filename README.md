@@ -259,51 +259,60 @@ Use Docker, Node 24, and pnpm 10.15.1. Run from the repository root:
 ```sh
 pnpm install --frozen-lockfile
 pnpm run setup:env
+```
+
+`setup:env` creates [`api/.env`](api/.env.example) and [`web/.env`](web/.env.example) from their examples and generates missing `COOKIE_KEYS` and a shared `ORIGIN_SECRET`. Existing settings and keys are preserved. Fill in the hosted Supabase and Discord settings in `api/.env` before starting the app:
+
+| Setting | Local development value |
+| --- | --- |
+| `NODE_ENV`, `PUBLIC_ORIGIN` | `development` and `http://localhost:5173`, with no trailing slash or path. |
+| `DATABASE_URL` | The configured hosted PostgreSQL connection with the API's runtime permissions and `sslmode=verify-full&sslrootcert=prod-ca-2021.crt`. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Your hosted project's URL and publishable key. |
+| `SUPABASE_JWKS_URL` | `https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json` for that project. |
+| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_GUILD_ID` | The OAuth application's credentials configured in Supabase and the guild whose membership the API checks. |
+
+Download the project's server root certificate from Supabase **Database Settings → SSL Configuration** to `api/prod-ca-2021.crt`, following the [SSL connection guide](https://supabase.com/docs/guides/database/connecting-to-postgres#connecting-with-ssl). The relative `sslrootcert=prod-ca-2021.crt` path works from the native API's `api/` working directory; Compose mounts that file read-only at `/var/task/prod-ca-2021.crt`. Keep the downloaded certificate local.
+
+Keep `ORIGIN_SECRET` equal in both app files. The earlier browser-only app used root `VITE_SUPABASE_*` settings; this web app calls the API and uses the two app files above. Discord OAuth remains configured in Supabase Dashboard. Local startup reads the saved files without generating keys or changing them.
+
+```sh
 ./scripts/dev.sh
 ```
 
-Open **http://localhost:5173**. Compose starts the web app, the API in AWS's Node 24 Lambda container, PostgreSQL, and self-hosted Supabase Auth. It applies database migrations and adds sample league data for public browsing. AWS credentials and a hosted Supabase project are not required.
+Open **http://localhost:5173**. Compose starts only the web app, the local HTTP adapter, and the API in AWS's Node 24 Lambda container. The API uses the hosted Auth service and database configured in `api/.env`; Compose does not replace those settings. AWS credentials are not required for this local runtime. Pass `-d` to start in the background: `./scripts/dev.sh -d`.
 
-`setup:env` creates [`api/.env`](api/.env.example) and [`web/.env`](web/.env.example) from their examples and generates missing cookie, origin, and Auth signing keys once. Existing settings and keys are preserved. The shared `ORIGIN_SECRET` must match in both files. Startup only reads these files; rerun setup explicitly when needed. Pass `-d` to start in the background: `./scripts/dev.sh -d`.
-
-The earlier browser-only app used `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in a root `.env` and configured Discord OAuth in Supabase Dashboard. This server-backed layout uses the two app files above; the browser calls the API and does not read those legacy `VITE_SUPABASE_*` settings. Compose runs its own local GoTrue service: `DISCORD_ENABLED` and `GOTRUE_JWT_*` configure that service, not a hosted Supabase project.
+**Local application actions use the real configured database.** Sign-in can create an account and auth state; authorized league changes write to that database. Startup does not create a database, apply migrations, or seed sample data. The configured database must already have the application's schema and runtime grants. Use the [disposable integration checks](#checks) when testing changes that should not touch hosted data.
 
 | File | Responsibility |
 | --- | --- |
 | [`docker-compose.yml`](docker-compose.yml) | Connect services and start them in dependency order. |
 | [`api/Dockerfile`](api/Dockerfile) | Package the API and run it in AWS's Lambda runtime image. The deployment SAM template remains in `api/template.yaml`. |
 | [`web/Dockerfile`](web/Dockerfile) | Run the frontend with live reload. |
-| [`supabase/`](supabase/) | Keep database bootstrap, migrations, and sample data together. |
-| [`scripts/`](scripts/) | Start Compose and apply database setup. |
+| [`supabase/`](supabase/) | Keep database migrations and disposable test fixtures. |
+| [`scripts/dev.sh`](scripts/dev.sh) | Start and rebuild the local application containers. |
 
 | Service | Local address | Purpose |
 | --- | --- | --- |
 | Web | `http://localhost:5173` | Browse the app; its proxy forwards `/api` and `/auth` to the Lambda handler. |
-| Supabase Auth | `http://localhost:54321` | Complete the local authentication flow through GoTrue. |
-| PostgreSQL | `localhost:54322` | Store local league data, users, and sessions. |
 | Lambda invocation | `http://localhost:9000/2015-03-31/functions/function/invocations` | Invoke the runtime with a Lambda event; browser requests go through the web app. |
 
-Open **`http://localhost:5173`** for Compose. `http://127.0.0.1:5173` is a different browser origin; sign-in and GraphQL POST requests from it fail the API's exact-Origin check. `PUBLIC_ORIGIN` must be the origin only, without a path or trailing slash; Compose sets it to `http://localhost:5173`. All published ports bind only to your machine. The small `api` service translates HTTP requests into Lambda Function URL events; the Lambda container executes the packaged API. AWS's Runtime Interface Emulator exercises that runtime and event handling, but does not reproduce AWS IAM authorization or scaling.
+Open **`http://localhost:5173`** with the local `PUBLIC_ORIGIN` above. `http://127.0.0.1:5173` is a different browser origin; sign-in and GraphQL POST requests from it fail the API's exact-Origin check. Compose reads `PUBLIC_ORIGIN` from `api/.env`, so a production frontend origin must be changed explicitly for localhost development. All published ports bind only to your machine. The `api` service translates HTTP requests into Lambda Function URL events; the Lambda container executes the packaged API. AWS's Runtime Interface Emulator exercises that runtime and event handling, but does not reproduce AWS IAM authorization or scaling.
 
-Keys persist in the ignored app `.env` files. PostgreSQL data persists in `postgres-data`, including changes made through the app. Compose sets database and Auth addresses for its internal network; the app examples use localhost addresses for native development. Production CI receives its settings from GitHub secrets and variables.
+Keys persist in the ignored app `.env` files. Production CI receives its settings separately from GitHub secrets and variables.
 
-Use `SUPABASE_URL=https://PROJECT.supabase.co` for hosted Supabase and `SUPABASE_JWKS_URL=https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json` for its signing keys. The API appends `/auth/v1` to project roots; loopback URLs use standalone Auth directly, and an explicit Auth path is preserved. Locally these values are `http://localhost:54321` and `http://localhost:54321/.well-known/jwks.json`. Compose shares Auth's network namespace with Lambda so the same localhost URL works in the browser, native API, and Lambda container. Auth publishes both its own port and Lambda's invocation port; GoTrue has no reverse proxy.
-
-With hosted Supabase, continue configuring Discord OAuth in [Supabase Dashboard](https://supabase.com/docs/guides/auth/social-login/auth-discord). The API separately uses the same Discord application's client ID/secret to refresh provider tokens and `DISCORD_GUILD_ID` to verify guild membership. Supabase refreshes its own sessions but [does not refresh provider tokens](https://supabase.com/docs/guides/auth/social-login). Those server credentials are therefore still required by this API; they do not belong in the browser's environment. Compose supplies its local Auth/database URLs explicitly, so changing hosted URLs in `api/.env` alone does not switch the Compose stack to hosted services.
-
-Apply Compose changes with `./scripts/dev.sh -d`. If you force-recreate only Auth, rerun this full-stack command to reconnect Lambda to its network. A normal Auth restart also restarts Lambda.
+If upgrading from the old Compose stack, run `docker compose --env-file api/.env down --remove-orphans` before starting it again. This removes the old database/Auth containers and frees their ports without deleting their saved volume. The new stack does not use that volume.
 
 ### Discord sign-in with Compose
 
-Compose starts with the example configuration. To test real Discord sign-in:
+Use the hosted project's [Discord provider settings](https://supabase.com/docs/guides/auth/social-login/auth-discord):
 
-1. Create or select an OAuth application in the Discord Developer Portal. Add **`http://localhost:54321/callback`** to its OAuth2 redirects.
-2. Edit `api/.env`: set `DISCORD_ENABLED=true`, `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, and `DISCORD_GUILD_ID` to your development application's credentials and Discord server ID.
-3. Run `./scripts/dev.sh` again to apply the configuration. Open `http://localhost:5173` and choose **Sign in with Discord** with an account that belongs to the configured server.
+1. Keep the Discord application's redirect pointed at Supabase's hosted callback, normally `https://PROJECT.supabase.co/auth/v1/callback`. Enable Discord in Supabase Dashboard with that application's client ID and secret.
+2. In Supabase Auth URL Configuration, add `http://localhost:5173/auth/callback**` to the [redirect allowlist](https://supabase.com/docs/guides/auth/redirect-urls). The API includes a `transaction` query parameter in this callback. Keep existing production redirects and the production Site URL.
+3. Set the same Discord client ID/secret and the intended `DISCORD_GUILD_ID` in `api/.env`. Run `./scripts/dev.sh` to apply the configuration, open `http://localhost:5173`, and choose **Sign in with Discord** with an account in that guild.
 
-Discord returns to the local Supabase Auth callback on port 54321. GoTrue then returns to the app's `http://localhost:5173/auth/callback`, where the API completes the PKCE exchange, verifies server membership, and creates the local account and session. No Discord bot or AWS account is needed. GoTrue and the API store authentication and league data in the same local PostgreSQL instance.
+Discord returns to hosted Supabase Auth, which redirects to the local app's `/auth/callback`. The local API completes the PKCE exchange, verifies guild membership, and provisions the account in the configured database before setting local browser session cookies.
 
-The real Discord browser authorization flow requires your OAuth credentials and has not yet been verified end to end with them.
+The API still needs the Discord credentials: it refreshes provider tokens and checks guild membership. Supabase refreshes its own sessions but [does not refresh provider tokens](https://supabase.com/docs/guides/auth/social-login). These server credentials do not belong in the browser's environment.
 
 ### Working with the containers
 
@@ -317,21 +326,19 @@ Rebuild both images after shared-contract or dependency changes with `./scripts/
 
 | Command | Purpose |
 | --- | --- |
-| `docker compose --env-file api/.env logs -f web api lambda auth` | Follow application and authentication logs. |
-| `docker compose --env-file api/.env exec db psql -U postgres -d napl_local` | Inspect the local database. |
-| `docker compose --env-file api/.env down` | Stop the stack and preserve database data. |
-| `docker compose --env-file api/.env down --volumes` | **Delete all local database data.** Environment files and keys remain. |
+| `docker compose --env-file api/.env logs -f web api lambda` | Follow local application logs. Hosted Auth logs are in Supabase. |
+| `docker compose --env-file api/.env down` | Stop and remove the application containers; hosted data and local environment files remain. |
 
 ### Native pnpm alternative
 
-After the initial setup above, you can run the web and API on your machine while keeping Compose's database and Auth services running:
+After configuring the same hosted settings above, you can run the web and API directly on your machine. Stop Compose first if it is using port 5173, then generate the code:
 
 ```sh
-docker compose --env-file api/.env stop web api lambda
+docker compose --env-file api/.env down
 pnpm run generate
 ```
 
-Run `pnpm run dev:api` and `pnpm run dev` in separate terminals. The API reads `api/.env`; Vite reads `web/.env`. The defaults use PostgreSQL at `localhost:54322`, Supabase Auth at `http://localhost:54321`, and the native API at `http://127.0.0.1:3000`.
+Run `pnpm run dev:api` and `pnpm run dev` in separate terminals. The API reads `api/.env` and uses its hosted database/Auth settings; Vite reads `web/.env`. The native API listens at `http://127.0.0.1:3000` by default.
 
 Vite listens on `http://localhost:5173` and proxies `/api` and `/auth` using `LOCAL_API_URL`, then `API_URL`, then the default API address. Keep `ORIGIN_SECRET` equal in both app files and never prefix secrets with `VITE_`.
 
@@ -397,6 +404,8 @@ Supply production values through a protected local file or the deployment enviro
 | `DISCORD_TRANSFER_WEBHOOK` | Optional destination for roster notices. |
 | `EXISTING_VERCEL_OIDC_PROVIDER_ARN` | Optional existing AWS identity provider for the Vercel team, reused instead of creating another. |
 | `APPLICATION_ROLE_BOUNDARY_ARN` | Permissions boundary created by the deployment bootstrap, limiting the permissions of application roles. |
+
+If production `DATABASE_URL` specifies `sslrootcert`, that certificate must be available at the configured path in the deployed runtime. The local Compose certificate mount does not supply it to a production deployment.
 
 The generated AWS trust policy accepts only the named project's production Vercel environment. These team/project inputs need not already exist in a Vercel application's environment: the deployment uses their values to match Vercel's [OIDC identity claims](https://vercel.com/docs/oidc/aws). The proxy's runtime settings are listed under [Configure Vercel](#configure-vercel). Preview deployments need their own access; they do not inherit production permission.
 

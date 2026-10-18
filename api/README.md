@@ -75,7 +75,11 @@ Session renewal coordinates through PostgreSQL so API instances can share refres
 
 ## Running Locally
 
-Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [API Dockerfile](Dockerfile) runs the packaged API inside AWS's Node 24 Lambda container, alongside local PostgreSQL, Supabase Auth, and the web app. Open `http://localhost:5173`; the web proxy sends requests through the [local Lambda adapter](scripts/lambda-url.mjs). Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure the hosted Supabase/database and Discord settings in `api/.env`, then start `./scripts/dev.sh` from the repository root. The [API Dockerfile](Dockerfile) runs the packaged API inside AWS's Node 24 Lambda container. Compose reads the API environment without replacing its hosted service settings; it starts no database or Auth service and applies no migrations or seed data. Local application actions use the real configured database.
+
+Set `NODE_ENV=development` and `PUBLIC_ORIGIN=http://localhost:5173`, without a trailing slash, and open that exact browser origin. The web proxy sends requests through the [local Lambda adapter](scripts/lambda-url.mjs). Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. The API still requires the same Discord application's credentials for provider-token renewal and the guild ID for membership checks.
+
+Download the Supabase database CA to `api/prod-ca-2021.crt` and set `DATABASE_URL` to use `sslmode=verify-full&sslrootcert=prod-ca-2021.crt`, as described in [initial setup](../README.md#docker-compose). Native development resolves this path from `api/`; Compose mounts the same certificate in the Lambda working directory.
 
 After API changes, rebuild the Lambda container from the repository root:
 

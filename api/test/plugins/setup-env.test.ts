@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
 import { copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -29,13 +28,12 @@ test('sets up private app env files once and gives web only its origin secret', 
   const webValues = parseEnv(webText);
   assert.doesNotThrow(() => new CookieCrypto(values.COOKIE_KEYS));
   assert.match(values.ORIGIN_SECRET, /^[\da-f]{64}$/);
-  assert.match(values.GOTRUE_JWT_SECRET, /^[\da-f]{64}$/);
-  assert.notEqual(values.ORIGIN_SECRET, values.GOTRUE_JWT_SECRET);
-  const [jwk] = JSON.parse(values.GOTRUE_JWT_KEYS);
-  assert.equal(jwk.alg, 'ES256');
-  const key = createPrivateKey({ key: jwk, format: 'jwk' });
-  const message = Buffer.from('local auth');
-  assert.ok(verify('sha256', message, createPublicKey(key), sign('sha256', message, key)));
+  for (const name of ['DISCORD_ENABLED', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS']) assert.equal(values[name], undefined);
+  assert.equal(values.PUBLIC_ORIGIN, 'http://localhost:5173');
+  assert.equal(new URL(values.DATABASE_URL).searchParams.get('sslmode'), 'verify-full');
+  assert.equal(new URL(values.DATABASE_URL).searchParams.get('sslrootcert'), 'prod-ca-2021.crt');
+  assert.equal(values.SUPABASE_URL, 'https://PROJECT.supabase.co');
+  assert.equal(values.SUPABASE_JWKS_URL, `${values.SUPABASE_URL}/auth/v1/.well-known/jwks.json`);
   assert.deepEqual(webValues, { LOCAL_API_URL: 'http://127.0.0.1:3000', ORIGIN_SECRET: values.ORIGIN_SECRET });
   assert.equal((await stat(api)).mode & 0o777, 0o600);
   assert.equal((await stat(web)).mode & 0o777, 0o600);
@@ -70,9 +68,6 @@ test('rejects malformed keys before changing either env file without exposing va
     ['COOKIE_KEYS', '{not-json-secret}'],
     ['COOKIE_KEYS', JSON.stringify({ key: `${Buffer.alloc(32).toString('base64')}!` })],
     ['ORIGIN_SECRET', 'short-secret'],
-    ['GOTRUE_JWT_SECRET', 'short-secret'],
-    ['GOTRUE_JWT_KEYS', '{not-jwk-secret}'],
-    ['GOTRUE_JWT_KEYS', '[]'],
   ]) {
     const { root, api, web } = await fixture(t);
     const apiText = `${name}='${value}'\n`;
@@ -106,19 +101,29 @@ test('rejects duplicate assignments and conflicting origins before creating or m
   assert.equal(await readFile(web, 'utf8'), webText);
 });
 
-test('rejects Auth keys that cannot issue ES256 tokens before modifying either file', async t => {
+test('preserves hosted settings and ignores obsolete local Auth settings', async t => {
   const { root, api, web } = await fixture(t);
   await setupEnv(root);
-  const apiText = await readFile(api, 'utf8');
+  const hosted = [
+    'DATABASE_URL=postgresql://hosted.example/league?sslmode=verify-full',
+    'SUPABASE_URL=https://hosted.example',
+    'SUPABASE_PUBLISHABLE_KEY=existing-publishable-key',
+    'SUPABASE_SECRET_KEY=sb_secret_existing-key',
+    'SUPABASE_JWKS_URL=https://hosted.example/auth/v1/.well-known/jwks.json',
+    'DISCORD_CLIENT_ID=123',
+    'DISCORD_CLIENT_SECRET=existing-discord-secret',
+    'DISCORD_GUILD_ID=456',
+    'DISCORD_ENABLED=false',
+    'GOTRUE_JWT_SECRET=obsolete',
+    'GOTRUE_JWT_KEYS=obsolete',
+  ];
+  const generated = parseEnv(await readFile(api, 'utf8'));
+  const apiText = [...hosted, `COOKIE_KEYS='${generated.COOKIE_KEYS}'`, `ORIGIN_SECRET='${generated.ORIGIN_SECRET}'`, ''].join('\n');
   const webText = await readFile(web, 'utf8');
-  const [key] = JSON.parse(parseEnv(apiText).GOTRUE_JWT_KEYS);
-  for (const override of [{ d: undefined }, { alg: 'HS256' }, { key_ops: ['verify'] }, { key_ops: 'sign' }]) {
-    const invalid = apiText.replace(/^GOTRUE_JWT_KEYS=.*$/m, () => `GOTRUE_JWT_KEYS='${JSON.stringify([{ ...key, ...override }])}'`);
-    await writeFile(api, invalid);
-    await assert.rejects(setupEnv(root), /GOTRUE_JWT_KEYS is invalid/);
-    assert.equal(await readFile(api, 'utf8'), invalid);
-    assert.equal(await readFile(web, 'utf8'), webText);
-  }
+  await writeFile(api, apiText);
+  await setupEnv(root);
+  assert.equal(await readFile(api, 'utf8'), apiText);
+  assert.equal(await readFile(web, 'utf8'), webText);
 });
 
 test('fills absent and placeholder keys while preserving an existing web origin', async t => {
@@ -135,7 +140,7 @@ test('fills absent and placeholder keys while preserving an existing web origin'
 });
 
 test('rejects API or Auth keys in web env before writing either file', async t => {
-  for (const name of ['COOKIE_KEYS', 'GOTRUE_JWT_KEYS', 'GOTRUE_JWT_SECRET', 'DISCORD_CLIENT_SECRET']) {
+  for (const name of ['COOKIE_KEYS', 'GOTRUE_JWT_KEYS', 'GOTRUE_JWT_SECRET', 'DISCORD_CLIENT_SECRET', 'SUPABASE_SECRET_KEY', 'DATABASE_URL']) {
     const { root, api, web } = await fixture(t);
     const original = `${name}=not-for-web\n`;
     await writeFile(web, original);

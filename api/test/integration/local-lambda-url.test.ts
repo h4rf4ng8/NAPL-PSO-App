@@ -14,6 +14,24 @@ async function listen(t: TestContext, server: Server) {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
+test('local Function URL defaults to the Lambda service on the Compose network', async t => {
+  const previousEndpoint = process.env.LAMBDA_ENDPOINT;
+  delete process.env.LAMBDA_ENDPOINT;
+  t.after(() => {
+    if (previousEndpoint === undefined) delete process.env.LAMBDA_ENDPOINT;
+    else process.env.LAMBDA_ENDPOINT = previousEndpoint;
+  });
+  const request = fetch;
+  t.mock.method(globalThis, 'fetch', async (endpoint: string) => {
+    assert.equal(endpoint, 'http://lambda:8080/2015-03-31/functions/function/invocations');
+    return Response.json({ statusCode: 200, body: 'ready' });
+  });
+  const origin = await listen(t, createLambdaUrlServer());
+  const response = await request(origin);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), 'ready');
+});
+
 test('local Function URL preserves HTTP transport and separate auth cookies through RIE', async t => {
   let event: APIGatewayProxyEventV2 | undefined;
   const binary = Buffer.from([0, 255, 128, 42]);

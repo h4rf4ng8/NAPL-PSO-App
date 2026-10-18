@@ -113,7 +113,9 @@ GraphQL reads use Apollo hooks directly. Do not add custom fetch hooks for Graph
 
 ## Running Locally
 
-Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the Lambda API, PostgreSQL, and Supabase Auth. Open `http://localhost:5173`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure the hosted services in `api/.env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the local Lambda API and HTTP adapter. The API uses the configured hosted Supabase Auth and database, so local sign-in and authorized changes affect that database; Compose does not create or seed a local database.
+
+Open `http://localhost:5173` with the same `PUBLIC_ORIGIN` in `api/.env`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. The browser does not need `VITE_SUPABASE_*` settings or Discord credentials.
 
 Rebuild the web image with `./scripts/dev.sh -d web` after changing configuration or dependencies outside `web/src`.
 

@@ -4,6 +4,28 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { parse } from 'yaml';
+
+test('local Compose loads hosted API settings without local Auth or database overrides', async () => {
+  const compose = parse(await readFile(new URL('../../../docker-compose.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(compose.services).toSorted((a, b) => a.localeCompare(b)), ['api', 'lambda', 'web']);
+  const { lambda, api, web } = compose.services;
+  assert.equal(lambda.env_file, './api/.env');
+  assert.deepEqual(lambda.environment, { AWS_EC2_METADATA_DISABLED: 'true' });
+  assert.equal(lambda.network_mode, undefined);
+  assert.equal(lambda.depends_on, undefined);
+  assert.deepEqual(lambda.ports, ['127.0.0.1:9000:8080']);
+  assert.deepEqual(lambda.volumes, [{
+    type: 'bind', source: './api/prod-ca-2021.crt', target: '/var/task/prod-ca-2021.crt',
+    read_only: true, bind: { create_host_path: false },
+  }]);
+  assert.equal(api.environment?.LAMBDA_ENDPOINT, undefined);
+  assert.deepEqual(api.depends_on, { lambda: { condition: 'service_started' } });
+  assert.equal(web.env_file, './web/.env');
+  assert.deepEqual(web.environment, { LOCAL_API_URL: 'http://api:3000' });
+  assert.deepEqual(web.ports, ['127.0.0.1:5173:5173']);
+  assert.equal(compose.volumes, undefined);
+});
 
 test('local startup preserves app configs and forwards Compose arguments and failures', async () => {
   const directory = await mkdtemp(path.join(tmpdir(), 'napl-local-startup-'));

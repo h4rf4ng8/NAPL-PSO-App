@@ -77,6 +77,16 @@ const cookieResponseFetch: typeof fetch = async () => {
   return new Response(null, { status: 204, headers });
 };
 
+test('forwards the GraphQL preflight header in the signed Lambda request', async () => {
+  const { seen } = await invoke({
+    url: '/api/standings', method: 'POST', body: '{"variables":{}}',
+    headers: { 'apollo-require-preflight': 'true', 'content-type': 'application/json' },
+  });
+  const headers = new Headers(seen?.init?.headers);
+  assert.equal(headers.get('apollo-require-preflight'), 'true');
+  assert.match(headers.get('authorization') ?? '', /SignedHeaders=[^,]*apollo-require-preflight/);
+});
+
 test('forwards multiple Set-Cookie values only for auth responses', async () => {
   const fetcher = cookieResponseFetch;
   const auth = await invoke({ url: '/auth/callback', fetch: fetcher });

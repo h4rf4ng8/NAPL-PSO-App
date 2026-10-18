@@ -38,11 +38,15 @@ See the root README for the [system architecture](../README.md#system-architectu
 
 Both entry points load settings, prepare database and provider access, and build the Fastify application. The app checks the shared origin secret before handling a request. For API routes, it verifies the session cookie and checks the membership and role requirements of the requested action. Public routes can serve visitors without a session.
 
-Requests that use methods such as POST or PUT also need protection against forged browser requests, including GraphQL reads sent by POST. The app returns structured errors for invalid input, missing permissions, conflicting changes, and unavailable dependencies. These checks live in [app.ts](app.ts) and [session handling](plugins/auth/session.ts).
+Requests that use methods such as POST or PUT require the exact configured browser origin. REST commands and authentication requests also require signed CSRF tokens; fixed GraphQL reads use Apollo's native CSRF checks. The app returns structured errors for invalid input, missing permissions, conflicting changes, and unavailable dependencies. These checks live in [app.ts](app.ts) and [session handling](plugins/auth/session.ts).
 
 ### Reading League Data
 
 Each GraphQL operation has a named POST endpoint, such as `/api/standings` or `/api/dashboard`. The [shared endpoint list](../pkgs/contracts/src/index.ts) keeps browser routing and API registration aligned. The [handler](routes/graphql/index.ts) accepts a strict `{variables: ...}` body and selects the fixed server-owned document assigned to that URL. It rejects query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation and field authorization remain in force. `/api/graphql` is not registered; league changes use REST endpoints.
+
+`/api/standings` and `/api/team-records` require a signed-in member with a fresh membership check and an active session. Anonymous requests are rejected before database reads. Public account and team REST reads and the other public GraphQL operations remain available without sign-in; the dashboard retains its existing private-field authorization.
+
+Apollo Server executes these fixed documents and owns variable coercion and native CSRF prevention. JSON requests pass Apollo's CSRF check; simple browser requests need a nonempty `Apollo-Require-Preflight` or `X-Apollo-Operation-Name` header. Every GraphQL POST still requires the exact configured `Origin`. GraphQL does not require a signed CSRF cookie/token; REST commands and authentication routes retain that protection. The server receives the original HTTP headers and starts and stops with Fastify. It exposes no landing page, persisted queries, or Apollo reporting.
 
 | Component | What it does |
 | --- | --- |
@@ -71,7 +75,11 @@ Session renewal coordinates through PostgreSQL so API instances can share refres
 
 ## Running Locally
 
-Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [API Dockerfile](Dockerfile) runs the packaged API inside AWS's Node 24 Lambda container, alongside local PostgreSQL, Supabase Auth, and the web app. Open `http://localhost:5173`; the web proxy sends requests through the [local Lambda adapter](scripts/lambda-url.mjs). Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure the hosted Supabase/database and Discord settings in `api/.env`, then start `./scripts/dev.sh` from the repository root. The [API Dockerfile](Dockerfile) runs the packaged API inside AWS's Node 24 Lambda container. Compose reads the API environment without replacing its hosted service settings; it starts no database or Auth service and applies no migrations or seed data. Local application actions use the real configured database.
+
+Set `NODE_ENV=development` and `PUBLIC_ORIGIN=http://localhost:5173`, without a trailing slash, and open that exact browser origin. The web proxy sends requests through the [local Lambda adapter](scripts/lambda-url.mjs). Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. The API still requires the same Discord application's credentials for provider-token renewal and the guild ID for membership checks.
+
+Download the Supabase database CA to `api/prod-ca-2021.crt` and set `DATABASE_URL` to use `sslmode=verify-full&sslrootcert=prod-ca-2021.crt`, as described in [initial setup](../README.md#docker-compose). Native development resolves this path from `api/`; Compose mounts the same certificate in the Lambda working directory.
 
 After API changes, rebuild the Lambda container from the repository root:
 

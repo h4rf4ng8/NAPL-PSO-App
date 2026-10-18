@@ -9,6 +9,8 @@ The React application provides public league pages, member dashboards, and admin
   - [Opening the App](#opening-the-app)
   - [Reading League Data](#reading-league-data)
   - [Saving Changes](#saving-changes)
+- [REST Hook Audit](#rest-hook-audit)
+- [Retained Helpers](#retained-helpers)
 - [Running Locally](#running-locally)
 - [Checks](#checks)
 - [Related Documentation](#related-documentation)
@@ -31,12 +33,12 @@ The React application provides public league pages, member dashboards, and admin
 
 ### Opening the App
 
-The app first checks the current session. Visitors see the public league page; signed-in members see their dashboard. Choosing Discord sign-in redirects the browser through the API and Supabase Auth. After sign-in, session cookies accompany later requests. Signing out clears cached data and tells other tabs to reload their session.
+The app first checks the current session. Visitors start on Teams and can browse Stats, Schedule, News, Transfers, and Rules. Standings appears only in the signed-in dashboard. Choosing Discord sign-in redirects the browser through the API and Supabase Auth. After sign-in, session cookies accompany later requests. Signing out clears cached data and tells other tabs to reload their session.
 
 | Implementation | Used by | Responsibility |
 | --- | --- | --- |
 | [auth](src/auth/session.ts) | [App](src/App.tsx) | Loads the account and handles sign-in and sign-out actions. |
-| [request](src/api/http.ts) | Authentication, feature API calls, and the [GraphQL transport](src/api/link.ts) | Sends JSON with cookies and CSRF protection. When renewal is required, renews the session and retries the request once. |
+| [request](src/api/http.ts) | Authentication, feature API calls, and the [GraphQL transport](src/api/link.ts) | Sends JSON with cookies, adds Apollo's preflight header to named GraphQL reads, and retains signed CSRF tokens for REST writes. Shares one session-renewal request and retries each original request at most once. |
 
 Browser requests use relative `/api` and `/auth` URLs. The [Vite configuration](vite.config.ts) forwards them locally; the [Vercel routes](vercel.json) send them through the server forwarding code in production. Database access and permission checks belong to the API.
 
@@ -46,15 +48,16 @@ GraphQL screens use `useQuery` and `useLazyQuery` through `ApolloProvider`. Apol
 
 | Query | Used by | Data returned |
 | --- | --- | --- |
-| `Standings` | [PublicLeague](src/features/dashboard/PublicLeague.tsx) | Public players, teams, and team records. |
+| `Standings` | Retained authenticated API operation and transport validation; no current screen | Players, teams, and team records; sign-in required. |
 | `MemberLeagueData` | [Dashboard](src/features/dashboard/Dashboard.tsx) | League data, season, news, voting periods, and the current account. |
-| `AccountMatches` and `AccountOpponents` | [MatchLog](src/features/dashboard/MatchLog.tsx) and [HeadToHead](src/features/accounts/HeadToHead.tsx) | Match pages and opponent summaries. |
-| `TeamRecords` | Standings and schedule screens | Aggregated team records. |
+| `AccountMatches` | [MatchLog](src/features/dashboard/MatchLog.tsx) | Bounded match-history pages. |
+| `AccountOpponents` | Retained API operation and transport validation; no current screen | Opponent summaries; the unreachable `HeadToHead` component was removed. |
+| `TeamRecords` | Signed-in standings and schedule screens | Aggregated team records; sign-in required. Public Schedule skips this query and shows its existing public fixtures without team records. |
 | `AccountCardPreviews` and `DefaultPositionWeights` | Player-card previews and ranking controls | Server-calculated samples and default weights. |
 
-The [transport](src/api/link.ts) sends only `{variables: ...}` to each operation's [named endpoint](../pkgs/contracts/src/index.ts). It validates response data before Apollo caches it. The server rejects client query documents and operation overrides.
+The [transport](src/api/link.ts) sends only `{variables: ...}` to each operation's [named endpoint](../pkgs/contracts/src/index.ts), with `Apollo-Require-Preflight: true`. Apollo Server handles GraphQL CSRF protection; these reads no longer bootstrap or send signed CSRF tokens or write idempotency keys. The link validates response data before Apollo caches it and aborts requests when Apollo cancels them. The server rejects client query documents and operation overrides.
 
-Apollo uses `cache-first`, without a custom expiry timer. Repeat reads reuse complete cached data; explicit refresh requests fresh data. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks.
+The exported [Apollo client](src/api/client.ts) is one stable singleton. Apollo's default `cache-first` policy reuses complete cached data; explicit refresh requests fresh data. Its default error policy rejects partial failures. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks. [PublicLeague](src/features/dashboard/PublicLeague.tsx) loads public accounts and teams from their existing REST endpoints; it never requests Standings or TeamRecords.
 
 Player rankings and card statistics remain calculated by the API. The browser selects and renders those results; canonical ranking and name-validation rules stay on the server.
 
@@ -64,9 +67,55 @@ Feature API modules send changes as HTTP commands. For example, the [match impor
 
 Successful league changes clear cached reads and cancel older queries. Apollo refetches active GraphQL queries; REST screens retain their explicit reloads. Refetch failures do not make a successful command fail. See [request handling](src/api/http.ts), [cache reset](src/api/client.ts), and the [administrator refresh](src/features/admin/AdminPanel.tsx).
 
+REST writes, including `/auth/refresh` and `/auth/logout`, retain signed CSRF protection. A logical write keeps its original URL, method, serialized body, and idempotency key across the single permitted retry. The API does not consume `Idempotency-Key`; this header does not deduplicate arbitrary repeated writes or guarantee exactly-once execution. Session renewal is shared by GraphQL and REST; cancellation of one GraphQL waiter cannot cancel renewal needed by another request. Ordinary conflicts, server failures, and network failures are not replayed. The import workflow remains available; the unreachable manual submission/review frontend was removed, while its API endpoints remain supported.
+
+## REST Hook Audit
+
+**Keep both files.** [resource.ts](src/hooks/resource.ts) is the small async state machine; [use-resource.ts](src/hooks/use-resource.ts) connects it to React. All eleven original callsites fetched REST data. Ten remain after removing the unreachable manual stats screen, and PublicLeague adds one public REST consumer, for eleven live callsites. Apollo hooks cannot replace these REST calls without changing their data source.
+
+| Caller | Actual data source | Verdict and reason |
+| --- | --- | --- |
+| `PublicLeague` | `GET /api/accounts` and `GET /api/teams` | Keep public REST reads: visitors need rosters and player statistics without requesting authenticated standings or team records. |
+| `WeightingsPublicView` | `GET /api/settings/position_weights` | Keep REST: saved weightings have a schema field but no named GraphQL operation. Its separate default-weight query already uses Apollo. |
+| `AdminsManager` | `GET /api/roles` | Keep REST: the authorized `admins` schema field has no named operation; retain save lockout during failed/pending reads. |
+| `ArticleDetailView` | `GET /api/articles/slug/:slug` | Keep REST: no GraphQL equivalent; preserve 404 handling and slug-change reset. |
+| `ArticlesListView` | `GET /api/articles` | Keep REST: no GraphQL equivalent. |
+| `HallOfFameView` | `GET /api/settings/season_champions` | Keep REST: champions are absent from the GraphQL schema. |
+| `NewsView` | `GET /api/news` | Keep REST: the existing news selection belongs to the member dashboard operation; this screen also serves visitors. |
+| `ScheduleView` | `GET /api/schedule` and `GET /api/teams` | Keep REST pair: GraphQL covers teams, not scheduled matches. Team records use Apollo separately only while signed in. |
+| `StatsManager` (removed) | `GET /api/submissions` | Delete frontend caller: no tab, route, or state transition could open it. Preserve the REST API. |
+| `TeamsView` | `GET /api/teams` and `GET /api/accounts` | Keep REST: existing league queries could supply these fields, but migration would change mount freshness and reload behavior without eliminating the shared hook. |
+| `TransfersView` | `GET /api/transfers` and `GET /api/teams` | Keep REST pair: GraphQL has teams but no transfers. |
+| `VotingTab` | `GET /api/voting/periods/:id/votes` | Keep REST: GraphQL exposes periods, not ballots; preserve period reset and server-side ballot visibility. |
+
+The hook loads on mount and dependency changes, discards data on dependency reset, and ignores outdated responses after replacement or cleanup. Explicit reload retains the previous data while loading and after failure. It exposes read errors in state and resolves `reload()`, so a failed refresh does not misreport a completed write. It does not provide caching, authentication, or network cancellation. The [resource tests](test/resource.test.ts) exercise the underlying state machine's reset, invalidation, race, and reload behavior; [mounted hook tests](test/resource-hook.test.ts) cover dependency changes, pending reads at unmount, disabled reload after unmount, and reload failure/recovery through React. The [public-page tests](test/public-league.test.ts) mount real consumers and verify navigation, public REST reads, and skipped private queries. React Test Renderer is pinned to React 18 for these effect-running tests; server rendering alone cannot verify requests started by effects. GraphQL cache/cancellation behavior is covered separately by [cache tests](test/cache.test.ts).
+
+## Retained Helpers
+
+Custom helpers remain only where they supply application behavior beyond React or Apollo:
+
+| Helper or family | Reason to exist |
+| --- | --- |
+| `request`, CSRF/error decoders, `ApiError` | One cookie-aware HTTP path, bounded shared renewal, REST CSRF rotation, stable write retries, and consistent errors from REST/GraphQL responses. |
+| `optional`, `segment` | Preserve REST 404-to-null behavior and encode individual URL path/query values. |
+| `gatewayLink` | Route the fixed operation allowlist, send variables only, validate opaque response data before caching, and propagate cancellation. A standard `HttpLink` would send query documents rejected by this API. |
+| `resetClient`, `resetQueries` | Separate identity clearing (stop departing observers without refetch) from successful-write invalidation (refetch active reads; expose read failures separately). |
+| `auth` | Coordinate current-account loading, Discord redirects, sign-out cache clearing, and cross-tab notification. |
+| `createResource`, `useResource` | Share the REST loading/race/error lifecycle described above. |
+| `useDialog`, dialog components | Maintain focus trapping/restoration, Escape handling, scroll locking, and accessible dialog semantics. |
+| `useTheme`, theme functions | Apply the selected palette, persist the preference, and expose the theme toggle to screens. |
+| `useView` | Keep dashboard navigation, article URLs, and browser back/forward history in sync. |
+| Feature API methods and GraphQL mappers | Keep command payload contracts explicit; validate JSON scalars and map server results to display models without calculating rankings in the browser. |
+| League, ranking-display, voting, and review helpers | Select existing server results, resolve displayed lineups, generate schedule previews, and organize UI state; API authorization and canonical validation remain authoritative. |
+| Content, input, upload parsers, and presentation helpers | Render shared content and safe links consistently, prepare images/match uploads for preview, format display values, and reuse accessible UI. |
+
+GraphQL reads use Apollo hooks directly. Do not add custom fetch hooks for GraphQL or wrap React/Apollo APIs solely to rename them.
+
 ## Running Locally
 
-Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the Lambda API, PostgreSQL, and Supabase Auth. Open `http://localhost:5173`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [Discord setup](../README.md#discord-sign-in-with-compose) to test real sign-in.
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure the hosted services in `api/.env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the local Lambda API and HTTP adapter. The API uses the configured hosted Supabase Auth and database, so local sign-in and authorized changes affect that database; Compose does not create or seed a local database.
+
+Open `http://localhost:5173` with the same `PUBLIC_ORIGIN` in `api/.env`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. The browser does not need `VITE_SUPABASE_*` settings or Discord credentials.
 
 Rebuild the web image with `./scripts/dev.sh -d web` after changing configuration or dependencies outside `web/src`.
 

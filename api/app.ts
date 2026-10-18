@@ -26,6 +26,7 @@ declare module 'fastify' {
         public?: boolean;
         role?: 'admin' | 'super_admin';
         membership?: boolean;
+        csrf?: 'apollo';
     }
 }
 export interface Dependencies {
@@ -146,7 +147,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         registerVoting(scope, dependencies);
         registerAdmin(scope, dependencies);
         registerSettings(scope, dependencies);
-        registerGraphQL(scope, dependencies.db);
+        await registerGraphQL(scope, dependencies.db);
     }, { name: 'api-routes' }));
     if (dependencies.close) app.addHook('onClose', dependencies.close);
     return app;

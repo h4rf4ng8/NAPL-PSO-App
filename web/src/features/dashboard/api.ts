@@ -5,7 +5,8 @@ import {
 import { isRole } from '../admin/models';
 import { mapAccount } from '../accounts/api';
 import type { Account } from '../accounts/models';
-import { teamRecordsSchema, type TeamRecord } from '@napl/contracts/matches';
+import type { TeamRecord } from '@napl/contracts/matches';
+import { mapTeamRecords } from '../matches/api';
 import { mapNews } from '../content/api';
 import type { News } from '../content/models';
 import { mapTeam } from '../teams/api';
@@ -14,9 +15,8 @@ import { mapVotingPeriod } from '../voting/api';
 import type { VotingPeriod } from '../voting/models';
 
 export function mapPublicLeague(data: StandingsQuery): { players: Account[]; teams: Team[]; teamRecords: TeamRecord[] } {
-  const records = teamRecordsSchema.safeParse(data.teamRecords);
-  if (!records.success) throw new Error('Invalid GraphQL team records data.');
-  return { players: data.accounts.map(mapAccount), teams: data.teams.map(mapTeam), teamRecords: records.data };
+  const records = mapTeamRecords(data);
+  return { players: data.accounts.map(mapAccount), teams: data.teams.map(mapTeam), teamRecords: records };
 }
 
 export function mapMemberLeague(data: MemberLeagueDataQuery): {

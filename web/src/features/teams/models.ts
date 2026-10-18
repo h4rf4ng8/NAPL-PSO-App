@@ -1,4 +1,4 @@
-export interface Invitation { username: string; status: string; respondedAt: number | null; }
+interface Invitation { username: string; status: string; respondedAt: number | null; }
 export interface Team {
   id: string; name: string; tag: string; color: string; description: string; ownerUsername: string; members: string[];
   invitations: Invitation[]; pendingMembers: string[]; totw: boolean; totwSetAt: number | null; seasons: string[];

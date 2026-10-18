@@ -1,8 +1,6 @@
 import type { Account, Stats } from '../api/models';
 
-export const getPlayerAwards = (account: Account) => account?.awards || [];
-
-export const emptyStats = (): Stats => ({
+const emptyStats = (): Stats => ({
   games: 0, goals: 0, assists: 0, tackles: 0,
   passes: 0, cleanSheets: 0, deflects: 0, catches: 0,
   motm: 0, wins: 0, losses: 0, draws: 0,

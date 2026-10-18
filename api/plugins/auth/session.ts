@@ -59,7 +59,9 @@ export function createSession(config: Config, deps: SessionDependencies) {
     return token;
   };
   const checkCsrf = (request: FastifyRequest, sessionId: string): void => {
-    if (header(request, 'origin') !== config.PUBLIC_ORIGIN || !crypto.verifyCsrf(header(request, 'x-csrf-token'), request.cookies[names.csrf], sessionId)) {
+    if (header(request, 'origin') !== config.PUBLIC_ORIGIN || (
+      request.routeOptions.config.csrf !== 'apollo' && !crypto.verifyCsrf(header(request, 'x-csrf-token'), request.cookies[names.csrf], sessionId)
+    )) {
       throw new GatewayError(403, 'csrf_invalid');
     }
   };

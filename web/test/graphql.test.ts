@@ -2,8 +2,8 @@ import { afterEach, mock, test } from 'node:test';
 import { gql, type OperationVariables, type TypedDocumentNode } from '@apollo/client';
 import { firstValueFrom, filter } from 'rxjs';
 import assert from 'node:assert/strict';
-import { ApiError, resetCsrf } from '../src/api/http';
-import { getClient, resetClient } from '../src/api/client';
+import { ApiError, request, resetCsrf } from '../src/api/http';
+import { client, resetClient } from '../src/api/client';
 import { StandingsDocument, MemberLeagueDataDocument, TeamRecordsDocument, AccountMatchesDocument, AccountOpponentsDocument, AccountCardPreviewsDocument, DefaultPositionWeightsDocument } from '../src/api/generated/graphql';
 import { mapMemberLeague, mapPublicLeague } from '../src/features/dashboard/api';
 import { mapAccountCardPreviews, mapAccountMatchPage, mapAccountOpponents, mapDefaultPositionWeights, mapAccount } from '../src/features/accounts/api';
@@ -13,7 +13,7 @@ import { mapVotingPeriod } from '../src/features/voting/api';
 import { matchSchema } from '@napl/contracts/accounts';
 
 async function graphql<T, V extends OperationVariables>(query: TypedDocumentNode<T, V>, variables: V) {
-  const { data } = await getClient().query({ query, variables });
+  const { data } = await client.query({ query, variables });
   assert.ok(data);
   return data as T;
 }
@@ -97,7 +97,6 @@ test('unknown operations fail before any network request', async () => {
 });
 
 test('standings uses its named endpoint in one read and requests only public account fields', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const calls: { url: string; init: RequestInit }[] = [];
   mock.method(globalThis, 'fetch', async (url, init) => {
     calls.push({ url: String(url), init: init ?? {} });
@@ -110,7 +109,10 @@ test('standings uses its named endpoint in one read and requests only public acc
   assert.equal(calls[0]!.init.method, 'POST');
   assert.deepEqual(result.players, [account]);
   const headers = new Headers(calls[0]!.init.headers);
-  assert.equal(headers.get('X-CSRF-Token'), 'csrf-value');
+  assert.equal(headers.get('Apollo-Require-Preflight'), 'true');
+  assert.equal(headers.get('X-CSRF-Token'), null);
+  assert.equal(headers.get('Idempotency-Key'), null);
+  assert.equal(headers.get('Content-Type'), 'application/json');
   assert.equal(calls[0]!.init.credentials, 'same-origin');
   assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), { variables: {} });
 });
@@ -197,8 +199,82 @@ test('GraphQL uses same-origin authenticated transport and does not retry failed
   await assert.rejects(loadPublicLeague(), error => error instanceof ApiError && error.status === 503);
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.credentials, 'same-origin');
-  assert.equal(new Headers(calls[0]!.headers).get('X-CSRF-Token'), 'csrf-value');
+  assert.equal(new Headers(calls[0]!.headers).get('Apollo-Require-Preflight'), 'true');
+  assert.equal(new Headers(calls[0]!.headers).get('X-CSRF-Token'), null);
 });
+
+test('Apollo and REST reads share one session renewal and retry each request once', async () => {
+  cookie.value = 'napl-csrf=before';
+  const renewal = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  const calls: { path: string; headers: Headers }[] = [];
+  mock.method(globalThis, 'fetch', async (url, init) => {
+    const path = String(url);
+    calls.push({ path, headers: new Headers(init?.headers) });
+    if (path === '/auth/refresh') { started.resolve(); return renewal.promise; }
+    const attempts = calls.filter(call => call.path === path).length;
+    if (attempts === 1) return json({ errors: [{ extensions: { code: 'session_expired' } }] }, 401);
+    return json(path === '/api/team-records' ? { data: { teamRecords: [] } } : []);
+  });
+  const pending = Promise.all([client.query({ query: TeamRecordsDocument }), request('/api/accounts')]);
+  await started.promise;
+  await new Promise<void>(resolve => setImmediate(resolve));
+  cookie.value = 'napl-csrf=after';
+  renewal.resolve(json({ ok: true }));
+  const [result, accounts] = await pending;
+  assert.deepEqual(result.data, { teamRecords: [] });
+  assert.deepEqual(accounts, []);
+  assert.equal(calls.filter(call => call.path === '/auth/refresh').length, 1);
+  for (const path of ['/api/team-records', '/api/accounts']) assert.equal(calls.filter(call => call.path === path).length, 2);
+  assert.equal(calls.find(call => call.path === '/auth/refresh')!.headers.get('X-CSRF-Token'), 'before');
+  for (const call of calls) {
+    if (call.path !== '/api/team-records') continue;
+    assert.equal(call.headers.get('Apollo-Require-Preflight'), 'true');
+    assert.equal(call.headers.get('X-CSRF-Token'), null);
+  }
+});
+
+test('cancelling an Apollo read during shared renewal prevents its retry without cancelling REST', async () => {
+  cookie.value = 'napl-csrf=present';
+  const renewal = Promise.withResolvers<Response>();
+  const started = Promise.withResolvers<void>();
+  const calls: string[] = [];
+  let graphSignal: AbortSignal | null | undefined;
+  mock.method(globalThis, 'fetch', async (url, init) => {
+    const path = String(url);
+    calls.push(path);
+    if (path === '/auth/refresh') { assert.equal(init?.signal, undefined); started.resolve(); return renewal.promise; }
+    if (path === '/api/team-records') graphSignal = init?.signal;
+    return calls.filter(value => value === path).length === 1 ? json({ error: 'access_expired' }, 401) : json([]);
+  });
+  const graph = Promise.allSettled([client.query({ query: TeamRecordsDocument })]);
+  const rest = request('/api/accounts');
+  await started.promise;
+  await new Promise<void>(resolve => setImmediate(resolve));
+  await resetClient();
+  assert.equal(graphSignal?.aborted, true);
+  renewal.resolve(json({ ok: true }));
+  await graph;
+  assert.deepEqual(await rest, []);
+  assert.equal(calls.filter(path => path === '/api/team-records').length, 1);
+  assert.equal(calls.filter(path => path === '/api/accounts').length, 2);
+  assert.equal(calls.filter(path => path === '/auth/refresh').length, 1);
+  assert.deepEqual(client.cache.extract(), {});
+});
+
+for (const refreshFails of [false, true]) {
+  test(`Apollo session renewal terminates when ${refreshFails ? 'refresh fails' : 'the retry is still expired'}`, async () => {
+    cookie.value = 'napl-csrf=present';
+    const calls: string[] = [];
+    mock.method(globalThis, 'fetch', async url => {
+      const path = String(url);
+      calls.push(path);
+      return path === '/auth/refresh' && !refreshFails ? json({ ok: true }) : json({ error: 'membership_refresh_required' }, 401);
+    });
+    await assert.rejects(client.query({ query: TeamRecordsDocument }), error => error instanceof ApiError && error.code === 'membership_refresh_required');
+    assert.deepEqual(calls, refreshFails ? ['/api/team-records', '/auth/refresh'] : ['/api/team-records', '/auth/refresh', '/api/team-records']);
+  });
+}
 
 test('schema-null fields and new role names have safe UI defaults', async () => {
   cookie.value = 'napl-csrf=csrf-value';
@@ -218,14 +294,14 @@ test('malformed opaque JSON fails before cache writes or subscriber delivery', a
   mock.method(globalThis, 'fetch', async () => json({ data: {
     accounts: [{ ...wireAccount(), awards: [{ arbitrary: true }] }], teams: [], teamRecords: [],
   } }));
-  const observable = getClient().watchQuery({ query: StandingsDocument });
+  const observable = client.watchQuery({ query: StandingsDocument });
   const delivered: unknown[] = [];
   const subscription = observable.subscribe(result => { if (result.data) delivered.push(result.data); });
   const result = await firstValueFrom(observable.pipe(filter(value => !value.loading)));
   subscription.unsubscribe();
   assert.match(result.error?.message ?? '', /Invalid GraphQL account JSON/);
   assert.deepEqual(delivered, []);
-  assert.deepEqual(getClient().cache.extract(), {});
+  assert.deepEqual(client.cache.extract(), {});
 });
 
 test('legacy numeric Strikers IDs normalize only when finite', () => {

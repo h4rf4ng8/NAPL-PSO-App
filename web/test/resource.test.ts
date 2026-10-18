@@ -33,3 +33,18 @@ test('dependency resets clear data and disposal suppresses pending results', asy
   await pending;
   assert.equal(states.length, count);
 });
+
+test('reload preserves data, reports failures without rejecting, and clears the error on recovery', async () => {
+  const states: ResourceState<string>[] = [];
+  const resource = createResource<string>(state => { states.push(state); });
+  await resource.load(async () => 'saved');
+  const refresh = Promise.withResolvers<string>();
+  const pending = resource.load(() => refresh.promise);
+  assert.deepEqual(states.at(-1), { data: 'saved', loading: true, error: '' });
+  refresh.reject(new Error('read failed'));
+  await pending;
+  assert.deepEqual(states.at(-1), { data: 'saved', loading: false, error: 'read failed' });
+  await resource.load(async () => 'recovered');
+  assert.deepEqual(states.at(-2), { data: 'saved', loading: true, error: '' });
+  assert.deepEqual(states.at(-1), { data: 'recovered', loading: false, error: '' });
+});

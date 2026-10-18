@@ -121,6 +121,23 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
       assert.equal(response.headers['retry-after'], '1');
     }
 
+    const graphql = {
+      ...event({
+        'x-real-ip': '203.0.113.8', 'x-origin-secret': values.ORIGIN_SECRET,
+        origin: values.PUBLIC_ORIGIN, 'content-type': 'text/plain',
+      }),
+      rawPath: '/api/default-position-weights', body: JSON.stringify({ variables: {} }),
+      requestContext: {
+        ...event().requestContext,
+        http: { ...event().requestContext.http, method: 'POST', path: '/api/default-position-weights' },
+      },
+    };
+    for (let call = 0; call < 2; call++) {
+      const response = await handler(graphql, context);
+      assert.equal(response.statusCode, 400);
+      assert.equal(JSON.parse(response.body).errors[0].extensions.code, 'BAD_REQUEST');
+    }
+
     const integration = Boolean(process.env.API_TEST_DATABASE_URL);
     if (integration) {
       const moduleUrl = pathToFileURL(path.join(scratch, 'lambda.js')).href;
@@ -153,6 +170,17 @@ test('Lambda ZIP loads outside the repository and rejects direct calls before up
         assert.equal(auth.statusCode, 200);
         assert.equal(typeof JSON.parse(auth.body).csrfToken, 'string');
         assert.ok(auth.cookies.some(cookie => cookie.startsWith('napl-csrf=')));
+        const graphql = {
+          ...request, rawPath: '/api/default-position-weights', body: JSON.stringify({ variables: {} }),
+          headers: { ...request.headers, origin: process.env.PUBLIC_ORIGIN, 'content-type': 'application/json' },
+          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, method: 'POST', path: '/api/default-position-weights' } },
+        };
+        for (let call = 0; call < 2; call++) {
+          const result = await handler(graphql, context);
+          assert.equal(result.statusCode, 200);
+          assert.ok(JSON.parse(result.body).data.defaultPositionWeights);
+          assert.equal(result.cookies, undefined);
+        }
         process.exit(0);
       `;
       const env = {

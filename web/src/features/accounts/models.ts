@@ -2,7 +2,7 @@ import type { Role } from '../admin/models';
 import type { Team } from '../teams/models';
 import type { AccountCardStats, AccountRanking, AccountStats, Championship, Match, PlayerAward, SeasonStats } from '@napl/contracts/accounts';
 
-export type { Championship, Match, PlayerAward } from '@napl/contracts/accounts';
+export type { PlayerAward } from '@napl/contracts/accounts';
 
 export type Stats = AccountStats;
 export interface Account {

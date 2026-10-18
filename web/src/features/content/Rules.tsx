@@ -273,7 +273,7 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
 };
 
 // Inline editor for a single rules section (used by RulesManager)
-export const RulesEditor = ({ title, setTitle, body, setBody, onSave, onCancel, busy, msg, isNew }: { title: string; setTitle: (title:string) => void; body: string; setBody: (body:string) => void; onSave?: () => void; onCancel: () => void; busy: boolean; msg: string; isNew?: boolean }) => (
+const RulesEditor = ({ title, setTitle, body, setBody, onSave, onCancel, busy, msg, isNew }: { title: string; setTitle: (title:string) => void; body: string; setBody: (body:string) => void; onSave?: () => void; onCancel: () => void; busy: boolean; msg: string; isNew?: boolean }) => (
   <div className="p-3 rounded space-y-2" style={{ background: `${C.goldLight}0a`, border: `1px solid ${C.goldLight}55` }}>
     <div className="flex items-center gap-2">
       <div className="font-mono text-[10px] tracking-widest" style={{ color: C.goldLight }}>{isNew ? 'NEW SECTION' : 'EDITING'}</div>

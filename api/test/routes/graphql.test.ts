@@ -120,10 +120,10 @@ test('fixed endpoints reject document overrides and unknown variables before dom
         { variables: { unexpected: true } },
         [{ variables: {} }],
       ]) {
-        const response = await app.inject({ method: 'POST', url, payload });
+        const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload });
         assert.equal(response.statusCode, 400, `${url}: ${response.body}`);
         assert.equal(response.json().errors[0].extensions.code, 'invalid_request');
-        assert.equal(seen.size, 0, 'invalid input must not reach the database');
+        assert.ok(seen.keys().every(key => key.includes('auth_gateway')), 'invalid input must not trigger domain reads');
       }
     }
   } finally { await app.close(); }
@@ -145,10 +145,10 @@ test('history endpoints preserve required variables, defaults, nulls and bounds'
   } finally { await app.close(); }
 });
 
-test('standings stays public and dashboard preserves private fields and authentication', async () => {
+test('standings requires sign-in and dashboard preserves private fields and authentication', async () => {
   const { app } = appFor();
   try {
-    const standings = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    const standings = await app.inject({ method: 'POST', url: '/api/standings', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
     assert.equal(standings.statusCode, 200, standings.body);
     assert.equal(standings.json().data.accounts[0].email, undefined);
     assert.equal(standings.json().data.accounts[0].pendingImageUrl, undefined);
@@ -211,22 +211,37 @@ test('GraphQL and REST share pending-team visibility rules', async () => {
       const headers = token ? { authorization: `Bearer ${token}` } : {};
       const rest = await app.inject({ method: 'GET', url: '/api/teams', headers });
       const gql = await app.inject({ method: 'POST', url: '/api/standings', headers, payload: { variables: {} } });
-      assert.equal(gql.statusCode, 200, gql.body);
       const expected = token ? ['team-1', 'pending'] : ['team-1'];
       assert.deepEqual(rest.json<Array<{ id: string }>>().map(row => row.id), expected);
-      assert.deepEqual(gql.json().data.teams.map((row: { id: string }) => row.id), expected);
+      assert.equal(gql.statusCode, token ? 200 : 401, gql.body);
+      if (token) assert.deepEqual(gql.json().data.teams.map((row: { id: string }) => row.id), expected);
     }
   } finally { await app.close(); }
 });
 
-test('fixed reads preserve expired-session errors', async () => {
-  for (const options of [{ activeSession: false }]) {
-    const { app } = appFor([], false, options);
+test('standings aggregates preserve membership admission errors', async () => {
+  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
+    const { app, seen } = appFor([], false, { membership });
     try {
-      const response = await app.inject({ method: 'POST', url: '/api/dashboard', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
-      assert.equal(response.statusCode, 401, response.body);
+      for (const url of ['/api/standings', '/api/team-records']) {
+        const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+        assert.equal(response.statusCode, membership.fresh ? 403 : 401, response.body);
+        assert.equal(response.json().error, membership.fresh ? 'membership_required' : 'membership_refresh_required');
+        assert.ok(seen.keys().every(key => key.includes('auth_gateway')), 'denied membership must not trigger domain reads');
+      }
     } finally { await app.close(); }
   }
+});
+
+test('fixed reads preserve expired-session errors', async () => {
+  const { app } = appFor([], false, { activeSession: false });
+  try {
+    for (const url of ['/api/dashboard', '/api/standings', '/api/team-records']) {
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+      assert.equal(response.statusCode, 401, response.body);
+      assert.equal(response.json().error, 'session_expired');
+    }
+  } finally { await app.close(); }
 });
 
 test('fixed reads retain safe downstream errors and Retry-After', async () => {
@@ -242,7 +257,7 @@ test('fixed reads retain safe downstream errors and Retry-After', async () => {
   }
   const { app } = appFor([], true);
   try {
-    const response = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    const response = await app.inject({ method: 'POST', url: '/api/standings', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
     assert.equal(response.statusCode, 503);
     assert.doesNotMatch(response.body, /database detail/);
   } finally { await app.close(); }
@@ -251,7 +266,7 @@ test('fixed reads retain safe downstream errors and Retry-After', async () => {
 test('unexpected resolver serialization errors fail closed', async () => {
   const { app } = appFor([], false, { account: { ...account, created_at: new Date(NaN) } });
   try {
-    const response = await app.inject({ method: 'POST', url: '/api/standings', payload: { variables: {} } });
+    const response = await app.inject({ method: 'POST', url: '/api/standings', headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
     assert.equal(response.statusCode, 503);
     assert.equal(response.json().errors[0].extensions.code, 'internal_error');
     assert.equal(response.json().errors[0].message, 'Request failed');

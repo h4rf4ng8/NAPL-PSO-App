@@ -1,12 +1,10 @@
-import { optional,request,segment } from '../../api/http';
+import { request,segment } from '../../api/http';
 import type { AccountCardPreviewsQuery, AccountMatchesQuery, AccountOpponentsQuery, DefaultPositionWeightsQuery, PublicAccountFieldsFragment, CurrentAccountFieldsFragment } from '../../api/generated/graphql';
 import { AWARD_IDS, accountCardStatsSchema, accountMatchPageSchema, accountOpponentsSchema, accountRankingSchema, accountStatsSchema, awardSchema, championshipSchema, matchSchema, seasonStatsSchema } from '@napl/contracts/accounts';
 import type { Account, PositionRequest, Stats } from './models';
 import { z } from 'zod';
 type AwardId = (typeof AWARD_IDS)[number];
 export const accounts={
- getAccount:(username:string)=>optional<Account>(`/api/accounts/${segment(username)}`),
- getAccountById:(id:string)=>optional<Account>(`/api/accounts/id/${segment(id)}`),
  listAccounts:()=>request<Account[]>('/api/accounts'),
  patchAccount:(id:string,fields:Partial<Omit<Account,'awards'>>)=>request<Account>(`/api/accounts/${segment(id)}`,'PATCH',fields),
  assignAward:(id:string,awardId:AwardId,season:string)=>request<void>(`/api/accounts/${segment(id)}/awards/${segment(awardId)}/${segment(season)}`,'PUT'),

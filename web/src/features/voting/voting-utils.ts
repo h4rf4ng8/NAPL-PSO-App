@@ -1,6 +1,6 @@
 import { VOTE_FIELDS, VOTE_POSITIONS, type VoteKey, type VotePosition } from '@napl/contracts/league';
 import type { Vote } from './models';
-export type VoteChoices = Record<VoteKey, string>;
+type VoteChoices = Record<VoteKey, string>;
 export type VoteTally = Record<VotePosition, [string, number][]>;
 
 export function emptyVoteChoices(): VoteChoices {

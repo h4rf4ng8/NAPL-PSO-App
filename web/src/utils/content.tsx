@@ -94,9 +94,9 @@ export const renderArticleBody = (body: string) => renderMarkdownBody(body, true
 
 type InlinePart={kind:'text';value:string}|{kind:'link';href:string;text:string};
 
-export type MarkdownBlock = {kind:'p'|'h2'|'h3';text:string}|{kind:'ul'|'ol';items:string[]};
+type MarkdownBlock = {kind:'p'|'h2'|'h3';text:string}|{kind:'ul'|'ol';items:string[]};
 
-export const safeHttpUrl=(value:string):string|undefined=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:undefined;}catch{return undefined;}};
+const safeHttpUrl=(value:string):string|undefined=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:undefined;}catch{return undefined;}};
 
 
 const renderInline = (text: string, article: boolean) => {

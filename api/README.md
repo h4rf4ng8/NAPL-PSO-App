@@ -38,11 +38,13 @@ See the root README for the [system architecture](../README.md#system-architectu
 
 Both entry points load settings, prepare database and provider access, and build the Fastify application. The app checks the shared origin secret before handling a request. For API routes, it verifies the session cookie and checks the membership and role requirements of the requested action. Public routes can serve visitors without a session.
 
-Requests that use methods such as POST or PUT also need protection against forged browser requests, including GraphQL reads sent by POST. The app returns structured errors for invalid input, missing permissions, conflicting changes, and unavailable dependencies. These checks live in [app.ts](app.ts) and [session handling](plugins/auth/session.ts).
+Requests that use methods such as POST or PUT require the exact configured browser origin. REST commands and authentication requests also require signed CSRF tokens; fixed GraphQL reads use Apollo's native CSRF checks. The app returns structured errors for invalid input, missing permissions, conflicting changes, and unavailable dependencies. These checks live in [app.ts](app.ts) and [session handling](plugins/auth/session.ts).
 
 ### Reading League Data
 
 Each GraphQL operation has a named POST endpoint, such as `/api/standings` or `/api/dashboard`. The [shared endpoint list](../pkgs/contracts/src/index.ts) keeps browser routing and API registration aligned. The [handler](routes/graphql/index.ts) accepts a strict `{variables: ...}` body and selects the fixed server-owned document assigned to that URL. It rejects query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation and field authorization remain in force. `/api/graphql` is not registered; league changes use REST endpoints.
+
+Apollo Server executes these fixed documents and owns variable coercion and native CSRF prevention. JSON requests pass Apollo's CSRF check; simple browser requests need a nonempty `Apollo-Require-Preflight` or `X-Apollo-Operation-Name` header. Every GraphQL POST still requires the exact configured `Origin`. GraphQL does not require a signed CSRF cookie/token; REST commands and authentication routes retain that protection. The server receives the original HTTP headers and starts and stops with Fastify. It exposes no landing page, persisted queries, or Apollo reporting.
 
 | Component | What it does |
 | --- | --- |

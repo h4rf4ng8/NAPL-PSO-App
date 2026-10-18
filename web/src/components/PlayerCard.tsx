@@ -11,7 +11,7 @@ import type { Account,Team } from '../api/models';
 import type { Weightings } from '../features/admin/models';
 import { C } from '../theme/theme';
 import { flagUrl } from '../utils/league';
-import { cardTier,getCardStatsForSeason,getPlayerAwards } from '../utils/rankings';
+import { cardTier,getCardStatsForSeason } from '../utils/rankings';
 import { mapAccountCardPreviews, mapDefaultPositionWeights } from '../features/accounts/api';
 import { useResource } from '../hooks/use-resource';
 import { skipToken, useQuery } from '@apollo/client/react';
@@ -32,7 +32,7 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
     ? { w: 175, h: 280, fontScale: 0.55 }
     : { w: 240, h: 384, fontScale: 0.75 });
 
-  const awards = getPlayerAwards(account);
+  const awards = account?.awards || [];
   const hasAwards = awards.length > 0;
   const canFlip = size === 'lg'; // only the large card flips
   const [flipped, setFlipped] = useState(false);
@@ -704,7 +704,7 @@ export const TierPreview = () => {
 // Public, read-only view of how each position's OVR is weighted. Pulls the
 // current DB values (so admin changes show up here immediately for everyone).
 // Admins still edit via ADMIN → WEIGHTINGS; this is the players' view.
-export const WeightingsPublicView = () => {
+const WeightingsPublicView = () => {
   const POSITION_NAMES: Record<string,string> = {
     [POS.ST]: POS_LABELS[POS.ST].toUpperCase(), [POS.WG]: POS_LABELS[POS.WG].toUpperCase(),
     [POS.CM]: POS_LABELS[POS.CM].toUpperCase(), [POS.DEF]: POS_LABELS[POS.DEF].toUpperCase(),

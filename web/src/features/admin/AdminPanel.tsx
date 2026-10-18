@@ -10,7 +10,7 @@ import { C } from '../../theme/theme';
 import { isSuperAdmin } from '../../utils/league';
 
 import { RulesManager } from '../content';
-import { ImportMatchManager, StatsManager } from '../matches';
+import { ImportMatchManager } from '../matches';
 import { EditTeamModal } from '../teams';
 import { TotwManager } from '../voting';
 import { SeasonManager } from './SeasonManager';
@@ -30,7 +30,6 @@ export const AdminPanel = ({ account }: { account: Account }) => {
   const requestId = useRef(0);
   const [allPlayers, setAllPlayers] = useState<Account[]>([]);
   const [tab, setTab] = useState('pending');
-  const [_seasonInput, setSeasonInput] = useState('');
   const [currentSeason, setCurrentSeason] = useState('S1');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const allTeams = teams; // alias for clarity
@@ -47,7 +46,6 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       setTeams(teamRows.sort((a, b) => b.createdAt - a.createdAt));
       setAllPlayers(playerRows);
       setCurrentSeason(season);
-      setSeasonInput(season);
       setLoadError('');
     } catch {
       if (currentRequest === requestId.current) setLoadError('Could not load admin data.');
@@ -100,9 +98,6 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       {/* TOP-LEVEL ADMIN SECTION TABS */}
       <div className="flex gap-1 mb-5 p-1 rounded flex-wrap" style={{ background: `${C.navyDeep}88` }}>
         {[
-          // STATS tab hidden — JSON import handles match stats now.
-          // The StatsManager component is kept in the code in case admins need
-          // to manually enter a match that wasn't exported (rare edge case).
           { id: 'teams',   label: 'TEAMS',   icon: Users },
           { id: 'totw',    label: 'TOTW',    icon: Trophy },
           { id: 'players', label: 'PLAYERS', icon: User },
@@ -143,10 +138,6 @@ export const AdminPanel = ({ account }: { account: Account }) => {
 
       {section === 'integrations' && isSuperAdmin(account) && (
         <IntegrationsManager />
-      )}
-
-      {section === 'stats' && (
-        <StatsManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
       )}
 
       {section === 'import' && (

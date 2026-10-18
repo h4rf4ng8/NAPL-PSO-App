@@ -7,7 +7,7 @@ const idSchema = z.union([z.string(), z.number(), z.literal(Infinity), z.literal
 const stringSchema = z.string();
 const importedPlayerSchema = z.object({ player_id: z.string(), username: z.string(), team: z.enum(['home', 'away']), stats: z.record(z.string(), z.number()) });
 const identitySchema = z.object({ id: idSchema, username: z.string() });
-export type ImportedPlayer = z.infer<typeof importedPlayerSchema>;
+type ImportedPlayer = z.infer<typeof importedPlayerSchema>;
 
 function object(value: unknown): Record<string, unknown> {
   const parsed = objectSchema.safeParse(value);

@@ -151,6 +151,64 @@ test('anonymous public requests pass; protected requests ignore bearer and ident
   }
 });
 
+test('fixed GraphQL reads use native Apollo CSRF with the original HTTP headers', async () => {
+  const h = harness();
+  try {
+    for (const extra of [{}, { 'apollo-require-preflight': 'true' }]) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights',
+        headers: headers({ origin: config.PUBLIC_ORIGIN, ...extra }), payload: { variables: {} },
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.ok(response.json().data.defaultPositionWeights);
+      assert.equal(response.headers['set-cookie'], undefined);
+      assert.equal(response.headers['cache-control'], 'no-store');
+    }
+    const reads = h.counts().databaseReads;
+    for (const preflight of [undefined, '', 'true']) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights',
+        headers: headers({
+          origin: config.PUBLIC_ORIGIN, 'content-type': 'text/plain',
+          ...(preflight !== undefined && { 'apollo-require-preflight': preflight }),
+        }),
+        payload: JSON.stringify({ variables: {} }),
+      });
+      assert.equal(response.statusCode, 400, response.body);
+      // A nonempty header passes native CSRF, then the strict JSON envelope rejects text.
+      assert.equal(response.json().errors[0].extensions.code, preflight ? 'invalid_request' : 'BAD_REQUEST');
+      assert.equal(h.counts().databaseReads, reads);
+    }
+  } finally {
+    await h.app.close();
+  }
+});
+
+test('GraphQL still requires exact Origin and REST/auth still require signed CSRF', async () => {
+  const h = harness();
+  try {
+    for (const origin of [undefined, 'https://attacker.example', `${config.PUBLIC_ORIGIN}/`]) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights', payload: { variables: {} },
+        headers: headers({ ...(origin && { origin }), 'apollo-require-preflight': 'true' }),
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.json().error.code, 'csrf_invalid');
+    }
+    for (const url of ['/api/test/transport', '/auth/refresh', '/auth/logout']) {
+      const response = await h.app.inject({
+        method: 'POST', url, payload: {},
+        headers: headers({ origin: config.PUBLIC_ORIGIN, 'apollo-require-preflight': 'true', cookie: await accessCookies() }),
+      });
+      assert.equal(response.statusCode, 403, `${url}: ${response.body}`);
+      assert.equal(response.json().error.code, 'csrf_invalid');
+    }
+    assert.equal(h.counts().databaseReads, 0);
+  } finally {
+    await h.app.close();
+  }
+});
+
 test('verified access cookies grant only their database roles and API responses set no cookies', async () => {
   for (const [id, role, roleStatus] of [[adminId, 'admin', 403], [superId, 'super_admin', 200]] as const) {
     const h = harness({ [id]: [role] });

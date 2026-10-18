@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { gql } from '@apollo/client';
-import { getClient, resetClient } from '../src/api/client';
+import { client, resetClient } from '../src/api/client';
 import { TeamRecordsDocument } from '../src/api/generated/graphql';
+import { auth } from '../src/auth/session';
 
 const restoreGlobal = (key: 'document' | 'localStorage', value: unknown) => {
   if (value === undefined) Reflect.deleteProperty(globalThis, key);
@@ -38,7 +39,6 @@ afterEach(async () => {
 });
 
 test('public and current account records with the same id remain separate cache entities', () => {
-  const client = getClient();
   const query = gql`query AccountCacheCheck {
     accounts { __typename id username }
     me { __typename id username }
@@ -56,7 +56,7 @@ test('public and current account records with the same id remain separate cache 
 
 test('identity reset keeps a stable client, aborts old requests and ignores late old responses', async () => {
   const browser = installBrowserStorage();
-  const oldClient = getClient();
+  const oldClient = client;
   const fetchResponse = Promise.withResolvers<Response>();
   let requestSignal: AbortSignal | undefined;
   mock.method(globalThis, 'fetch', (_url: string | URL | Request, init?: RequestInit) => {
@@ -76,7 +76,7 @@ test('identity reset keeps a stable client, aborts old requests and ignores late
   assert.ok(requestSignal, 'request should have started');
 
   await resetClient();
-  const newClient = getClient();
+  const newClient = client;
   assert.equal(newClient, oldClient);
   assert.equal(requestSignal?.aborted, true);
   assert.deepEqual(oldClient.cache.extract(), {});
@@ -86,4 +86,23 @@ test('identity reset keeps a stable client, aborts old requests and ignores late
   await pending;
   assert.deepEqual(newClient.cache.extract(), {});
   browser.restore();
+});
+
+test('sign-out clears cached identity data and notifies other tabs after the protected logout', async () => {
+  const browser = installBrowserStorage();
+  try {
+    client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: [] } });
+    const calls: string[] = [];
+    mock.method(globalThis, 'fetch', async (url, init) => {
+      calls.push(String(url));
+      assert.equal(init?.method, 'POST');
+      assert.equal(new Headers(init?.headers).get('X-CSRF-Token'), 'csrf');
+      assert.equal(new Headers(init?.headers).get('Apollo-Require-Preflight'), null);
+      return Response.json({ ok: true });
+    });
+    await auth.signOut();
+    assert.deepEqual(calls, ['/auth/logout']);
+    assert.deepEqual(client.cache.extract(), {});
+    assert.match(browser.values.get('napl-session-change') ?? '', /^\d+$/);
+  } finally { browser.restore(); }
 });

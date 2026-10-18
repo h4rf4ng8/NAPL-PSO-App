@@ -109,13 +109,6 @@ export const RecordBox = ({ value, label, color }: { value: React.ReactNode; lab
   </div>
 );
 
-export const SmallStat = ({ value, label }: { value: React.ReactNode; label: string }) => (
-  <div className="rounded p-2 text-center" style={{ background: `${C.navyLight}33` }}>
-    <div className="font-display text-2xl" style={{ color: C.cream }}>{value}</div>
-    <div className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}66` }}>{label}</div>
-  </div>
-);
-
 export const ResultBadge = ({ result, small }: { result: string; small?: boolean }) => {
   const color = result === 'W' ? C.greenLight : (result === 'L' ? C.redLight : C.goldLight);
   return (
@@ -129,69 +122,6 @@ export const EmptyState = ({ icon, text }: { icon?: React.ReactNode; text: strin
   <div className="text-center py-16 font-mono text-sm" style={{ color: `${C.cream}55` }}>
     <div className="flex justify-center mb-3" style={{ color: `${C.cream}33` }}>{icon}</div>
     {text}
-  </div>
-);
-
-// Big +/- number input - much easier than typing on mobile
-export const BigNumberInput = ({ value, onChange, min = 0, max = 999 }: { value: number; onChange: (value:number) => void; min?: number; max?: number }) => (
-  <div className="flex items-center gap-2">
-    <button
-      type="button"
-      onClick={() => onChange(Math.max(min, (Number(value) || 0) - 1))}
-      className="w-12 h-12 rounded font-display text-2xl flex items-center justify-center"
-      style={{ background: `${C.brandNavy}cc`, color: C.cream, border: `1px solid ${C.navyLight}66` }}
-    >−</button>
-    <input
-      type="number"
-      value={value}
-      min={min} max={max}
-      onChange={(e) => {
-        const v = Math.trunc(Number(e.target.value));
-        onChange(Number.isNaN(v) ? 0 : Math.max(min, Math.min(max, v)));
-      }}
-      className="flex-1 rounded text-center font-display text-2xl py-2"
-      style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-    />
-    <button
-      type="button"
-      onClick={() => onChange(Math.min(max, (Number(value) || 0) + 1))}
-      className="w-12 h-12 rounded font-display text-2xl flex items-center justify-center"
-      style={{ background: `${C.green}cc`, color: C.onColor, border: `1px solid ${C.greenLight}88` }}
-    >+</button>
-  </div>
-);
-
-export const StatField = ({ label, value, onChange, hint }: { label: string; value: number; onChange: (value:number) => void; hint?: string }) => (
-  <div>
-    <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}aa` }}>
-      {label}{hint && <span className="opacity-60 normal-case ml-1">{hint}</span>}
-    </label>
-    <BigNumberInput value={value} onChange={onChange} />
-  </div>
-);
-
-export const ToggleField = ({ label, value, onChange }: { label: string; value: boolean; onChange: (value:boolean) => void }) => (
-  <div>
-    <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}aa` }}>{label}</label>
-    <button
-      type="button"
-      onClick={() => onChange(!value)}
-      className="w-full py-3 rounded font-heading tracking-wider text-sm"
-      style={{
-        background: value ? C.greenLight : `${C.navyDeep}`,
-        color: value ? C.onColor : `${C.cream}77`,
-        border: `1px solid ${value ? C.greenLight : C.navyLight}66`,
-      }}
-    >{value ? '✓ YES' : 'NO'}</button>
-  </div>
-);
-
-export const StatLine = ({ label, value }: { label: string; value: React.ReactNode }) => (
-  <div className="flex justify-between items-baseline px-2 py-1.5 rounded" style={{
-    background: `${C.brandNavy}66`,
-  }}>
-    <span style={{ color: `${C.cream}77` }}>{label}</span>
-    <span className="font-display text-sm" style={{ color: C.cream }}>{value}</span>
   </div>
 );
 

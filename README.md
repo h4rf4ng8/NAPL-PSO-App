@@ -1,6 +1,6 @@
 # NAPL
 
-NAPL is a league application built with React and a Fastify API running on AWS Lambda. The API reads and writes Supabase PostgreSQL data and uses Supabase Auth with Discord OAuth for sign-in.
+NAPL is a league application built with React and a Fastify API running on AWS Lambda. Apollo Server executes the API's fixed GraphQL reads; REST routes handle commands and other reads. The API reads and writes Supabase PostgreSQL data and uses Supabase Auth with Discord OAuth for sign-in.
 
 ## Table of Contents
 
@@ -75,7 +75,7 @@ An administrator imports a new match with every player mapped to an account. The
 
 ![Successful approval of a pending match sequence](docs/match-review.png)
 
-An administrator approves an existing pending submission. Player statistics, result news, and approval status are saved together. [Implementation](api/routes/matches/index.ts#L39).
+The retained submission API lets an administrator approve an existing pending submission. Player statistics, result news, and approval status are saved together. The browser's Import tab saves imported matches directly. [Implementation](api/routes/matches/routes.ts).
 
 ### Roster Membership
 
@@ -169,11 +169,13 @@ For example, the initial request is `POST /api/standings` with this body:
 {"variables": {}}
 ```
 
-The [query handler](api/routes/graphql/index.ts) binds each endpoint to its fixed document. It rejects client-supplied query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation, authorization, history bounds, and cursor checks still apply. `/api/graphql` is not registered.
+The [query handler](api/routes/graphql/index.ts) binds each endpoint to its fixed document and executes it through Apollo Server 5 with native CSRF prevention enabled. It rejects client-supplied query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation, authorization, history bounds, and cursor checks still apply. `/api/graphql` is not registered.
 
 Canonical selections and fragments live in [API operations](api/routes/graphql/operations/). The [existing generation script](web/scripts/codegen.ts) validates them against the API schema and creates both server execution documents and browser typed documents. The browser uses its documents for Apollo's types and normalized cache; the [transport](web/src/api/link.ts) sends only variables. Generated server documents include the `__typename` fields needed by that cache.
 
-The browser sends these reads and REST commands through the same [request handling](web/src/api/http.ts). Both carry session cookies and retain protection against forged requests and expired sessions. Database access remains in the API:
+The browser sends these reads and REST commands through the same [request handling](web/src/api/http.ts), retaining cookies and one shared session-renewal attempt. GraphQL reads send JSON and `Apollo-Require-Preflight: true` without fetching a CSRF token. Apollo accepts a non-simple content type such as `application/json` or a nonempty supported preflight header; a simple request without either is rejected. The API also requires the exact configured Origin. REST and `/auth` writes still require the signed CSRF cookie/token and exact Origin. Apollo's header does not authorize those writes.
+
+Database access remains in the API:
 
 - [Account fields](api/routes/accounts/schema.ts) return public profiles, rankings, and card statistics. Private current-account fields require an authenticated caller.
 - [Team reads](api/routes/teams/queries.ts) filter teams by the caller's visibility.
@@ -196,12 +198,11 @@ Other league changes follow the same pattern of checking permissions, validating
 
 | Action and caller | Feature API → endpoint | Server implementation |
 | --- | --- | --- |
-| [ReviewMatchStats.approve](web/src/features/matches/stats-submission.tsx#L44) | [matches.approveSubmission](web/src/features/matches/api.ts#L11) → `POST /api/submissions/:id/approve` | [registerMatches](api/routes/matches/index.ts#L103) validates the shared `approveSubmission` schema, updates account statistics, writes result news, and marks the submission approved together. |
 | [TeamsView.respondInvitation](web/src/features/teams/teams-view.tsx#L78) | [teams.respondInvitation](web/src/features/teams/api.ts#L13) → `POST /api/teams/:id/invitation` | [registerTeams](api/routes/teams/index.ts#L205) records acceptance; for an approved team, [moveMember](api/routes/teams/index.ts#L17) updates the roster, account assignment, and transfer history. |
 | [GenerateScheduleModal.handleGenerate](web/src/features/matches/schedule-setup.tsx#L70) | [matches.replaceScheduledSeason](web/src/features/matches/api.ts#L15) → `PUT /api/schedule/season/:season` | [registerContent](api/routes/content/index.ts#L157) validates `scheduleInput` rows and replaces the season's scheduled matches. Schedule generation itself happens in the browser. |
 | [VotingTab.handleSubmit](web/src/features/voting/VotingTab.tsx#L63) | [voting.submitTotwVotes](web/src/features/voting/api.ts#L10) → `PUT /api/voting/periods/:id/votes` | [registerVoting](api/routes/voting/index.ts#L57) validates `voteInput`, checks the voting window and candidates, and replaces the member's ballot. |
 
-The [shared validation rules](pkgs/contracts/src/index.ts) define the accepted data for these commands. Manual match review remains implemented, but its [Stats tab is currently hidden](web/src/features/admin/AdminPanel.tsx#L104). Imported matches are saved directly; they do not pass through manual approval.
+The [shared validation rules](pkgs/contracts/src/index.ts) define the accepted data for these commands. Manual submission and approval endpoints remain implemented and tested in the [API](api/routes/matches/routes.ts), including `POST /api/submissions/:id/approve`. Their unreachable browser forms have been removed. Imported matches are saved directly; they do not pass through manual approval.
 
 After a successful change, the browser [clears cached query results and stops older queries still in progress](web/src/api/client.ts#L20). Apollo refetches active GraphQL queries; REST screens keep their explicit reloads. Late responses cannot refill the cache with old data.
 
@@ -224,6 +225,8 @@ pnpm --filter @napl/web test
 ```
 
 The relevant checks are in the [cache tests](web/test/cache.test.ts), [client lifecycle tests](web/test/client.test.ts), and [GraphQL tests](web/test/graphql.test.ts).
+
+See the [frontend hook/helper inventory](web/README.md) for the retained REST lifecycle and helper responsibilities.
 
 ## Administrator Assignment History
 
@@ -520,6 +523,8 @@ The runner first initializes request protection, then issues public GraphQL read
 This check is optional, is separate from continuous integration, and must target staging. Historical container measurements do not establish Lambda capacity.
 
 ## Rollout and Rollback
+
+For the Apollo CSRF change, deploy the API first, then the frontend. The new API accepts the previous JSON GraphQL requests; the new frontend omits the legacy GraphQL CSRF token, so it must not run against the previous API. Roll back the frontend first if both need reverting. This refactor requires no database migration or cloud configuration change.
 
 Release the API before switching the frontend. Coordinate the database cutover and access-control migrations with that switch: they remove the legacy browser's direct access to league tables, so applying them while the old frontend is still in use will break that frontend. Apply the [administrator history migration](supabase/migrations/202610140001_role_audit.sql) before enabling the corresponding API behavior. Local integration tests apply migrations only to disposable fixtures; production migrations are a separate deployment step.
 

@@ -94,7 +94,7 @@ export const NewsHub = ({ account, allTeams }: { account: Account | null; allTea
   );
 };
 
-export const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Team[]; }) => {
+const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Team[]; }) => {
   const [subtab, setSubtab] = useState('matchups');
   const { data: news = [], loading, error, reload: refresh } = useResource(() => contentApi.listNews(), []);
   const [showCompose, setShowCompose] = useState(false);
@@ -310,7 +310,7 @@ export const NewsView = ({ account, allTeams }: { account: Account | null; allTe
   );
 };
 
-export const NewsComposeModal = ({ existing, defaultType, allTeams, onClose, onSave }: { existing?: News | null; defaultType: string; allTeams: Team[]; onClose: () => void; onSave?: () => void }) => {
+const NewsComposeModal = ({ existing, defaultType, allTeams, onClose, onSave }: { existing?: News | null; defaultType: string; allTeams: Team[]; onClose: () => void; onSave?: () => void }) => {
   const isEdit = !!existing;
   const [type, setType] = useState(existing?.type || defaultType);
   const [title, setTitle] = useState(existing?.title || '');

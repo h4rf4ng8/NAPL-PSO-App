@@ -14,7 +14,7 @@ const validate = {
   DefaultPositionWeights: mapDefaultPositionWeights,
 };
 
-// Keep cookie, CSRF and single-refresh handling shared with REST commands.
+// Named reads use Apollo preflight protection and share session renewal with REST.
 export const gatewayLink = new ApolloLink(operation => new Observable(subscriber => {
   const path = endpoints.get(operation.operationName ?? '');
   if (!path) {
@@ -24,7 +24,7 @@ export const gatewayLink = new ApolloLink(operation => new Observable(subscriber
   const controller = new AbortController();
   void request<ApolloLink.Result>(path, 'POST', {
     variables: operation.variables,
-  }, true, undefined, controller.signal).then(result => {
+  }, controller.signal).then(result => {
     // Decode opaque JSON before Apollo can notify subscribers or write the cache.
     if (!result.errors?.length) {
       if (!result.data) throw new Error('GraphQL response did not include data.');

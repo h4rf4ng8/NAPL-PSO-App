@@ -48,19 +48,24 @@ async function csrfToken(force=false):Promise<string> {
   return pending.csrf;
 }
 export function resetCsrf():void { pending.csrf=undefined; }
-export async function request<T>(path:string, method='GET', body?:unknown, retry=true, commandId?:string, signal?:AbortSignal):Promise<T> {
+export async function request<T>(path:string, method='GET', body?:unknown, signal?:AbortSignal):Promise<T> {
   if(!path.startsWith('/api/')&&!path.startsWith('/auth/'))throw new Error('Invalid API path');
-  const mutates=!['GET','HEAD'].includes(method);
-  const idempotencyKey=mutates?commandId??crypto.randomUUID():undefined;
+  const payload=JSON.stringify(body);
+  const graphql=readEndpoints.has(path);
+  const mutates=!graphql&&!['GET','HEAD'].includes(method);
+  const retry=path!=='/auth/refresh';
+  const idempotencyKey=mutates?crypto.randomUUID():undefined;
   for(let attempt=0;attempt<2;attempt++) {
     signal?.throwIfAborted();
     const headers:Record<string,string>={'Accept':'application/json'};
+    if(graphql)headers['Apollo-Require-Preflight']='true';
     if(mutates){headers['X-CSRF-Token']=await csrfToken();headers['Idempotency-Key']=idempotencyKey!;}
     if(body!==undefined)headers['Content-Type']='application/json';
     signal?.throwIfAborted();
-    const response=await fetch(path,{method,headers,signal,credentials:'same-origin',...(body!==undefined&&{body:JSON.stringify(body)})});
+    const response=await fetch(path,{method,headers,signal,credentials:'same-origin',...(body!==undefined&&{body:payload})});
+    signal?.throwIfAborted();
     if(response.ok) {
-      if(mutates && !readEndpoints.has(path) && path.startsWith('/api/')) {
+      if(mutates && path.startsWith('/api/')) {
         const { resetQueries } = await import('./client');
         await resetQueries();
       }
@@ -77,7 +82,7 @@ export async function request<T>(path:string, method='GET', body?:unknown, retry
     else if (typeof fields?.error==='object'&&typeof fields.error.code==='string') code=fields.error.code;
     else if (graphError?.extensions?.code!==undefined) code=graphError.extensions.code;
     if(retry&&attempt===0&&path.startsWith('/api/')&&['access_expired','session_expired','membership_refresh_required'].includes(code)) {
-      pending.refresh ??= (async()=>{try{await request<void>('/auth/refresh','POST',{},false);}finally{pending.refresh=undefined;}})();
+      pending.refresh ??= (async()=>{try{await request<void>('/auth/refresh','POST',{});}finally{pending.refresh=undefined;}})();
       await pending.refresh;
       continue;
     }

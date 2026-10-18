@@ -10,7 +10,7 @@ import { isAdmin } from '../../utils/league';
 import { useResource } from '../../hooks/use-resource';
 
 // Article compose/edit modal — admin only
-export const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article | null; onClose: () => void; onSaved: () => void }) => {
+const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article | null; onClose: () => void; onSaved: () => void }) => {
   const isNew = !article;
   const [title, setTitle] = useState(article?.title || '');
   const [slug, setSlug] = useState(article?.slug || '');

@@ -1,10 +1,9 @@
-import { optional,request,segment } from '../../api/http';
+import { request,segment } from '../../api/http';
 import type { TeamFieldsFragment } from '../../api/generated/graphql';
 import type { Account } from '../accounts/models';
 import type { Team, Transfer } from './models';
 import { z } from 'zod';
 export const teams={
- getTeam:(id:string)=>optional<Team>(`/api/teams/${segment(id)}`),
  listTeams:()=>request<Team[]>('/api/teams'),
  createTeam:(team:Partial<Pick<Team,'id'|'name'|'tag'|'color'|'description'|'logoUrl'|'pendingMembers'|'seasons'|'formation'|'lineup'>>)=>request<Team>('/api/teams','POST',{id:team.id,name:team.name,tag:team.tag,color:team.color,description:team.description,logoUrl:team.logoUrl,pendingMembers:team.pendingMembers,seasons:team.seasons,formation:team.formation,lineup:team.lineup}),
  saveTeam:(team:Pick<Team,'id'|'name'|'tag'|'color'|'description'|'logoUrl'|'seasons'> & Partial<Pick<Team,'formation'|'lineup'>>)=>request<Team>(`/api/teams/${segment(team.id)}`,'PATCH',{name:team.name,tag:team.tag,color:team.color,description:team.description,logoUrl:team.logoUrl,seasons:team.seasons,formation:team.formation,lineup:team.lineup}),

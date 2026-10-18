@@ -21,11 +21,16 @@ function harness(roleByUser: Record<string, string[]> = {}) {
   let authStateCalls = 0;
   let verifications = 0;
   let currentUsername = 'Before';
+  let activeSession = true;
   const database: Database = {
-    client: { setting: { findUnique: async () => { databaseReads++; return null; } }, account: { findMany: async () => [] } } as unknown as Prisma.TransactionClient,
+    client: {
+      setting: { findUnique: async () => { databaseReads++; return null; } },
+      account: { findMany: async () => [], findUnique: async () => ({ username: currentUsername }) },
+      team: { findMany: async () => [] },
+    } as unknown as Prisma.TransactionClient,
     query: async <T extends Row>(sql: Prisma.Sql) => {
       databaseReads++;
-      if (sql.sql.includes('auth_gateway.session_active')) return [{ active: true }] as T[];
+      if (sql.sql.includes('auth_gateway.session_active')) return [{ active: activeSession }] as T[];
       if (sql.sql.includes('FROM auth_gateway.memberships')) return [{ eligible: true, fresh: true }] as T[];
       if (sql.sql.includes('FROM auth_gateway.user_roles WHERE user_id')) {
         const id = String(sql.values[0]);
@@ -50,6 +55,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
     supabase: {
       verify: async token => {
         verifications++;
+        if (token === 'access-expired') throw new GatewayError(401, 'access_expired');
         if (!['access-good', 'admin-token', 'super-token'].includes(token)) throw new GatewayError(401, 'session_invalid');
         const verifiedUserId = token === 'super-token' ? superId : userId;
         return { userId: verifiedUserId, sessionId, expiresAt: Math.floor(Date.now() / 1000) + 3600, claims: { sub: userId, session_id: sessionId } };
@@ -80,6 +86,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
     app,
     counts: () => ({ databaseReads, authStateCalls, verifications }),
     setUsername: (value: string) => { currentUsername = value; },
+    setSessionActive: (value: boolean) => { activeSession = value; },
   };
 }
 
@@ -146,6 +153,113 @@ test('anonymous public requests pass; protected requests ignore bearer and ident
     }) });
     assert.equal(protectedResult.statusCode, 401);
     assert.equal(h.counts().verifications, 0);
+  } finally {
+    await h.app.close();
+  }
+});
+
+test('fixed GraphQL reads use native Apollo CSRF with the original HTTP headers', async () => {
+  const h = harness();
+  try {
+    for (const extra of [{}, { 'apollo-require-preflight': 'true' }]) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights',
+        headers: headers({ origin: config.PUBLIC_ORIGIN, ...extra }), payload: { variables: {} },
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.ok(response.json().data.defaultPositionWeights);
+      assert.equal(response.headers['set-cookie'], undefined);
+      assert.equal(response.headers['cache-control'], 'no-store');
+    }
+    const reads = h.counts().databaseReads;
+    for (const preflight of [undefined, '', 'true']) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights',
+        headers: headers({
+          origin: config.PUBLIC_ORIGIN, 'content-type': 'text/plain',
+          ...(preflight !== undefined && { 'apollo-require-preflight': preflight }),
+        }),
+        payload: JSON.stringify({ variables: {} }),
+      });
+      assert.equal(response.statusCode, 400, response.body);
+      // A nonempty header passes native CSRF, then the strict JSON envelope rejects text.
+      assert.equal(response.json().errors[0].extensions.code, preflight ? 'invalid_request' : 'BAD_REQUEST');
+      assert.equal(h.counts().databaseReads, reads);
+    }
+  } finally {
+    await h.app.close();
+  }
+});
+
+test('standings aggregates require an active member session while public reads remain anonymous', async () => {
+  const h = harness();
+  try {
+    for (const url of ['/api/standings', '/api/team-records']) {
+      for (const cookie of [undefined, 'napl-access=access-expired']) {
+        const response = await h.app.inject({
+          method: 'POST', url, payload: { variables: {} },
+          headers: headers({ origin: config.PUBLIC_ORIGIN, 'apollo-require-preflight': 'true', ...(cookie && { cookie }) }),
+        });
+        assert.equal(response.statusCode, 401, response.body);
+        assert.equal(cookie ? response.json().error.code : response.json().error, cookie ? 'access_expired' : 'authentication_required');
+        assert.equal(h.counts().databaseReads, 0);
+      }
+    }
+    const cookie = await accessCookies();
+    for (const url of ['/api/standings', '/api/team-records']) {
+      const response = await h.app.inject({
+        method: 'POST', url, payload: { variables: {} },
+        headers: headers({ origin: config.PUBLIC_ORIGIN, cookie }),
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.ok(Array.isArray(response.json().data.teamRecords));
+      assert.equal(response.headers['set-cookie'], undefined);
+
+      const simple = await h.app.inject({
+        method: 'POST', url, payload: JSON.stringify({ variables: {} }),
+        headers: headers({ origin: config.PUBLIC_ORIGIN, cookie, 'content-type': 'text/plain' }),
+      });
+      assert.equal(simple.statusCode, 400, simple.body);
+      assert.equal(simple.json().errors[0].extensions.code, 'BAD_REQUEST');
+    }
+    h.setSessionActive(false);
+    for (const url of ['/api/standings', '/api/team-records']) {
+      const response = await h.app.inject({
+        method: 'POST', url, payload: { variables: {} }, headers: headers({ origin: config.PUBLIC_ORIGIN, cookie }),
+      });
+      assert.equal(response.statusCode, 401, response.body);
+      assert.equal(response.json().error, 'session_expired');
+    }
+    for (const url of ['/api/accounts', '/api/teams']) {
+      const response = await h.app.inject({ url, headers: headers() });
+      assert.equal(response.statusCode, 200, response.body);
+      assert.ok(Array.isArray(response.json()));
+    }
+  } finally {
+    await h.app.close();
+  }
+});
+
+test('GraphQL still requires exact Origin and REST/auth still require signed CSRF', async () => {
+  const h = harness();
+  try {
+    for (const origin of [undefined, 'https://attacker.example', `${config.PUBLIC_ORIGIN}/`]) {
+      const response = await h.app.inject({
+        method: 'POST', url: '/api/default-position-weights', payload: { variables: {} },
+        headers: headers({ ...(origin && { origin }), 'apollo-require-preflight': 'true' }),
+      });
+      assert.equal(response.statusCode, 403);
+      assert.equal(response.json().error.code, 'csrf_invalid');
+    }
+    for (const url of ['/api/test/transport', '/auth/refresh', '/auth/logout']) {
+      const response = await h.app.inject({
+        method: 'POST', url, payload: {},
+        headers: headers({ origin: config.PUBLIC_ORIGIN, 'apollo-require-preflight': 'true', cookie: await accessCookies() }),
+      });
+      assert.equal(response.statusCode, 403, `${url}: ${response.body}`);
+      assert.equal(response.json().error.code, 'csrf_invalid');
+    }
+    assert.equal(h.counts().databaseReads, 0);
   } finally {
     await h.app.close();
   }

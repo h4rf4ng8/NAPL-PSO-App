@@ -1,4 +1,4 @@
-import { createPrivateKey, generateKeyPairSync, randomBytes, randomUUID, sign, verify } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { parseEnv } from 'node:util';
@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { CookieCrypto } from '../plugins/session/crypto.ts';
 
 const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
-const apiKeys = ['COOKIE_KEYS', 'ORIGIN_SECRET', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS'];
+const apiKeys = ['COOKIE_KEYS', 'ORIGIN_SECRET'];
 const missing = value => !value?.trim() || value.startsWith('REPLACE_');
 
 async function readEnv(file) {
@@ -41,15 +41,6 @@ function validate(name, value) {
   try {
     if (name === 'COOKIE_KEYS') {
       new CookieCrypto(value);
-    } else if (name === 'GOTRUE_JWT_KEYS') {
-      const keys = JSON.parse(value);
-      if (!Array.isArray(keys) || keys.length !== 1) throw new Error('Expected one signing key');
-      const [key] = keys;
-      if (key.kty !== 'EC' || key.crv !== 'P-256' || key.alg !== 'ES256' || key.use !== 'sig'
-          || typeof key.kid !== 'string' || !key.kid || !Array.isArray(key.key_ops) || !key.key_ops.includes('sign')) throw new Error('Expected an ES256 signing key');
-      const privateKey = createPrivateKey({ key, format: 'jwk' });
-      const probe = Buffer.from('local signing key check');
-      if (!verify('sha256', probe, privateKey, sign('sha256', probe, privateKey))) throw new Error('Invalid signing key pair');
     } else if (value.length < 32) {
       throw new Error('Secret must have at least 32 characters');
     }
@@ -76,7 +67,7 @@ export async function setupEnv(root = repoRoot) {
   try {
     const api = await readEnv(path.resolve(root, 'api/.env'));
     const web = await readEnv(path.resolve(root, 'web/.env'));
-    if (['COOKIE_KEYS', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS', 'DISCORD_CLIENT_SECRET'].some(name => Object.hasOwn(web.values, name))) {
+    if (['COOKIE_KEYS', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS', 'DISCORD_CLIENT_SECRET', 'SUPABASE_SECRET_KEY', 'DATABASE_URL'].some(name => Object.hasOwn(web.values, name))) {
       throw new Error('API and Auth secrets belong in api/.env, not web/.env');
     }
     for (const name of apiKeys) if (!missing(api.values[name])) validate(name, api.values[name]);
@@ -91,12 +82,9 @@ export async function setupEnv(root = repoRoot) {
       let value;
       if (name === 'COOKIE_KEYS') {
         value = JSON.stringify({ local: randomBytes(32).toString('base64') });
-      } else if (name === 'GOTRUE_JWT_KEYS') {
-        const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-        value = JSON.stringify([{ ...privateKey.export({ format: 'jwk' }), kid: randomUUID(), alg: 'ES256', use: 'sig', key_ops: ['sign', 'verify'] }]);
       } else {
-        value = name === 'ORIGIN_SECRET' && !missing(web.values.ORIGIN_SECRET)
-          ? web.values.ORIGIN_SECRET : randomBytes(32).toString('hex');
+        value = missing(web.values.ORIGIN_SECRET)
+          ? randomBytes(32).toString('hex') : web.values.ORIGIN_SECRET;
       }
       setValue(api, name, value);
     }

@@ -17,9 +17,9 @@ function cookieHeader(cookiePairs) {
 async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`Bounded staging burst check (no retries; max 1,850 requests).\n\n` +
-      `Set LOAD_STAGE=staging, LOAD_BASE_URL=https://<isolated-staging-project-host>, and LOAD_DB_CONNECTION_BUDGET=<integer>.\n` +
+      `Set LOAD_STAGE=staging, LOAD_BASE_URL=https://<isolated-staging-project-host>, LOAD_DB_CONNECTION_BUDGET=<integer>, and LOAD_COOKIE=<authenticated session cookie>.\n` +
       `Optional: LOAD_ROUNDS=1..5 (default 1), LOAD_TIMEOUT_MS=1000..60000 (default 35000),\n` +
-      `LOAD_COOKIE=<session cookie>, LOAD_LAMBDA_RESERVED_CONCURRENCY=<integer>,\n` +
+      `LOAD_LAMBDA_RESERVED_CONCURRENCY=<integer>,\n` +
       `LOAD_MEASUREMENTS_FILE=<JSON>, LOAD_REPORT=<path>.\n` +
       `Runs sequential bursts at 20, 50, 100 and 200 simultaneous requests.`);
     return;
@@ -45,6 +45,7 @@ async function main() {
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 60_000, 'LOAD_TIMEOUT_MS must be from 1000 to 60000');
   const origin = target.origin;
   const suppliedCookie = process.env.LOAD_COOKIE;
+  if (!suppliedCookie) throw new Error('LOAD_COOKIE must contain an authenticated staging session; standings reads require sign-in.');
   const reports = [];
 
   async function csrfHeaders() {

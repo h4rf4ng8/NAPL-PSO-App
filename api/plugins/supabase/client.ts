@@ -33,7 +33,7 @@ export class SupabaseClient implements SupabaseAuth {
 
   constructor(private readonly config: Config) {
     const url = new URL(config.SUPABASE_URL);
-    // Local Compose exposes GoTrue directly; hosted project roots use /auth/v1.
+    // Standalone/test Auth uses loopback roots; hosted project roots use /auth/v1.
     if (url.pathname === '/' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) url.pathname = '/auth/v1';
     this.authUrl = url.href.replace(/\/$/, '');
     this.jwks = createRemoteJWKSet(new URL(config.SUPABASE_JWKS_URL), { timeoutDuration: 3000 });

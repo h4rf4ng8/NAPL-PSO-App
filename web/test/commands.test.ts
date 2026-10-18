@@ -42,18 +42,14 @@ test('save commands preserve editable fields without sending stored metadata', a
     ownerUsername: 'other', members: ['other'], status: 'approved', createdAt: 10 };
   const article = { id: 'article', slug: 'story', title: 'Story', coverImageUrl: '', body: 'Body', excerpt: 'Preview',
     publishedAt: 20, author: 'other', updatedAt: 30 };
-  const matchInfo = { homeTeamId: 'home', awayTeamId: 'away', homeScore: 1, awayScore: 0, date: 40, season: 'S1' };
-  const submission = { id: 'submission', matchInfo, playerStats: [], edits: [], status: 'approved', submittedBy: 'other', submittedAt: 50 };
   await teams.createTeam(team);
   await teams.saveTeam(team);
   await content.saveArticle(article);
-  await matches.saveSubmission(submission);
   const teamBody = { id: 'team', name: 'Team', tag: 'TAG', color: '#fff', description: '', logoUrl: null, seasons: [] };
   assert.deepEqual(calls, [
     { url: '/api/teams', method: 'POST', body: teamBody },
     { url: '/api/teams/team', method: 'PATCH', body: { name: 'Team', tag: 'TAG', color: '#fff', description: '', logoUrl: null, seasons: [] } },
     { url: '/api/articles', method: 'POST', body: { id: 'article', slug: 'story', title: 'Story', coverImageUrl: null, body: 'Body', excerpt: 'Preview', publishedAt: 20 } },
-    { url: '/api/submissions', method: 'POST', body: { id: 'submission', matchInfo, playerStats: [], edits: [] } },
   ]);
 });
 

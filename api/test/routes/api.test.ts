@@ -149,7 +149,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             const otherSeasonMatch = { ...match, id: 'legacy_match_other_season', season: 'S1', date: 3, strikersMatchId: 125 };
             const championship = { season: 'S0', placement: '1st', teamId: 'legacy_team', awardedAt: 1, historicalField: 'kept' };
             await ok('PATCH', `/api/accounts/${bob}`, admin, { matches: [match, secondMatch, otherSeasonMatch], championships: [championship] });
-            const response = await call('POST', '/api/standings', undefined, { variables: {} });
+            const response = await call('POST', '/api/standings', alice, { variables: {} });
             const result = response.json<{ errors?: unknown; data: { accounts: PublicAccountFieldsFragment[] } }>();
             assert.equal(result.errors, undefined);
             const decoded = mapAccount(result.data.accounts.find(account => account.id === bob)!);
@@ -334,7 +334,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal(saved.length, 20);
             assert.ok(versions.some((matches, index) => responses[index]?.statusCode === 200 && JSON.stringify(matches.map(match => match.id).toSorted((a, b) => a.localeCompare(b))) === JSON.stringify(savedIds)), JSON.stringify(savedIds));
         });
-        const publicLeague = await call('POST', '/api/standings', undefined, { variables: {} });
+        const publicLeague = await call('POST', '/api/standings', alice, { variables: {} });
         assert.equal(publicLeague.statusCode, 200, publicLeague.body);
         const publicData = publicLeague.json<{ data: { accounts: Array<Record<string, unknown>>; teams: Array<Record<string, unknown>> } }>().data;
         assert.ok(publicData.accounts.some(account => account.username === 'Alice'));

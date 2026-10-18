@@ -32,7 +32,7 @@ async function server(evalScript: Eval) {
       refresh: async () => { refreshes++; throw new Error('unexpected refresh'); },
       logout: async () => { revokes++; },
     },
-    discord: { identity: async () => '', membership: async () => false, refresh: async () => { throw new Error('unexpected refresh'); } },
+    discord: { identity: async () => ({ id: '', username: 'discord_player' }), membership: async () => false, refresh: async () => { throw new Error('unexpected refresh'); } },
     membership: { fresh: async () => null, save: async () => {} },
     provision: async () => {},
   };

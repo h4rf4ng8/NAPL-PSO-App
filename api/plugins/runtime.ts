@@ -30,12 +30,12 @@ export function createRuntime(config: Config): Dependencies {
     supabase,
     discord,
     membership,
-    provision: async accessToken => {
+    provision: async (accessToken, discordUsername) => {
       const verified = await supabase.verify(accessToken);
       const identity: ApiIdentity = { id: verified.userId, sessionId: verified.sessionId, claims: verified.claims ?? {} };
       await requireMember(db, identity.id);
       await requireActiveSession(db, identity.sessionId);
-      await provisionAccount(db, identity);
+      await provisionAccount(db, identity, discordUsername);
     },
   };
 

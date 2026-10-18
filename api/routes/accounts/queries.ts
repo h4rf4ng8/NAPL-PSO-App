@@ -1,7 +1,5 @@
 import { POS } from '@napl/contracts';
 import type { Identity } from '../../plugins/auth/identity.js';
-import { object, string } from '../../plugins/db/records.js';
-import { checkBlockedName } from '../name-validation.js';
 import type { Account, PositionChangeRequest, Team } from '../../generated/prisma/client.js';
 import { HttpError } from '../../plugins/auth/identity.js';
 import { Prisma, type Database, type Row } from '../../plugins/db/client.js';
@@ -47,7 +45,7 @@ export async function findAccount(database: Database, id: string): Promise<Accou
 
 export async function requireAccount(database: Database, id: string, lock = false): Promise<Account> {
   // Prisma has no row-lock API; authorization and mutation must share this lock.
-  const rows = lock ? await database.query<Account>(Prisma.sql`SELECT * FROM public.accounts WHERE id::text=${id} FOR UPDATE`) : [];
+  const rows = lock ? await database.query<Account>(Prisma.sql`SELECT * FROM asl.accounts WHERE id::text=${id} FOR UPDATE`) : [];
   const row = lock ? rows[0] : await findAccount(database, id);
   if (!row) throw new HttpError(404, 'not_found');
   return row;
@@ -63,7 +61,7 @@ export async function updateAccount(database: Database, id: string, data: Prisma
 
 export function listPositionRequests(database: Database, filter: { accountId?: string; status?: string }) {
   // COALESCE preserves the former JS sort, where Number(null) equals epoch zero.
-  return database.query<PositionChangeRequest>(Prisma.sql`SELECT * FROM public.position_change_requests
+  return database.query<PositionChangeRequest>(Prisma.sql`SELECT * FROM asl.position_change_requests
     WHERE (${filter.accountId ?? null}::text IS NULL OR account_id::text=${filter.accountId ?? null})
       AND (${filter.status || null}::text IS NULL OR status=${filter.status || null})
     ORDER BY COALESCE(created_at, to_timestamp(0)) DESC`);
@@ -73,13 +71,13 @@ export function hasPendingPositionRequest(database: Database, accountId: string)
   return database.client.positionChangeRequest.findFirst({ where: { account_id: accountId, status: 'pending' }, select: { id: true } });
 }
 
-export function createPositionRequest(database: Database, data: Prisma.PositionChangeRequestCreateInput) {
+export function createPositionRequest(database: Database, data: Prisma.PositionChangeRequestUncheckedCreateInput) {
   return database.client.positionChangeRequest.create({ data });
 }
 
 export async function lockPositionRequest(database: Database, id: string): Promise<PositionChangeRequest> {
   // Serialize review against competing approvals before changing the account.
-  const [row] = await database.query<PositionChangeRequest>(Prisma.sql`SELECT * FROM public.position_change_requests WHERE id::text=${id} FOR UPDATE`);
+  const [row] = await database.query<PositionChangeRequest>(Prisma.sql`SELECT * FROM asl.position_change_requests WHERE id::text=${id} FOR UPDATE`);
   if (!row) throw new HttpError(404, 'not_found');
   return row;
 }
@@ -94,70 +92,48 @@ export async function deletePositionRequest(database: Database, id: string): Pro
   if (isCanonicalUuid(id)) await database.client.positionChangeRequest.deleteMany({ where: { id } });
 }
 
-export async function renameAccount(database: Database, id: string, name: string): Promise<void> {
-  const current = await requireAccount(database, id, true), old = current.username.toLowerCase();
-  const replace = (value: Prisma.JsonValue): Prisma.JsonValue => typeof value === 'string' && value.toLowerCase() === old ? name : value;
-  const renameEntry = (value: Prisma.JsonValue): Prisma.InputJsonObject => {
-    const entry = typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
-    return { ...entry, username: entry.username === undefined ? undefined : replace(entry.username) };
-  };
-  await updateAccount(database, id, { username: name, username_lower: name.toLowerCase() });
-  // Lock every affected team while renaming references stored inside JSON documents.
-  const teams = await database.query<Team>(Prisma.sql`SELECT * FROM public.teams FOR UPDATE`);
+// Discord is the only source of current usernames; JSON snapshots used for display retain history.
+export async function syncVerifiedDiscordUsername(database: Database, id: string, name: string): Promise<Account> {
+  if (!/^[a-z0-9_.]{2,32}$/.test(name)) throw new HttpError(400, 'invalid_discord_username');
+  const current = await requireAccount(database, id, true);
+  if (current.username === name) return current;
+  const existing = await findAccountByUsername(database, name);
+  if (existing && existing.id !== id) throw new HttpError(409, 'discord_username_conflict');
+  const replace = (value: Prisma.JsonValue): Prisma.JsonValue => typeof value === 'string' && value.toLowerCase() === current.username.toLowerCase() ? name : value;
+  const teams = await database.query<Team>(Prisma.sql`SELECT * FROM asl.teams FOR UPDATE`);
   for (const team of teams) {
-    await database.client.team.update({ where: { id: team.id }, data: {
-      owner_username: team.owner_username.toLowerCase() === old ? name : team.owner_username,
-      members: Array.isArray(team.members) ? team.members.map(value => replace(value)) : [],
-      pending_members: Array.isArray(team.pending_members) ? team.pending_members.map(value => typeof value === 'string' ? replace(value) : renameEntry(value)) : [],
-      lineup: Object.fromEntries(Object.entries(team.lineup && typeof team.lineup === 'object' && !Array.isArray(team.lineup) ? team.lineup : {}).map(([slot, value]) => [slot, value === undefined ? undefined : replace(value)])),
-    } });
+    const lineup = team.lineup && typeof team.lineup === 'object' && !Array.isArray(team.lineup) ? team.lineup : {};
+    if (Object.values(lineup).some(value => typeof value === 'string' && value.toLowerCase() === current.username.toLowerCase()))
+      await database.client.team.update({ where: { id: team.id }, data: { lineup: Object.fromEntries(Object.entries(lineup).map(([slot, value]) => [slot, value === undefined ? undefined : replace(value)])) } });
   }
-  // These literal identifiers are the complete allowlist; values stay bound.
-  // SQL lower/equality preserves literal '%' and '_' rather than ILIKE patterns.
-  for (const [table, column] of [
-    [Prisma.sql`public.transfers`, Prisma.sql`player_username`], [Prisma.sql`public.transfers`, Prisma.sql`created_by`],
-    [Prisma.sql`public.totw_votes`, Prisma.sql`voter_username`], [Prisma.sql`public.totw_votes`, Prisma.sql`voted_for_username`],
-    [Prisma.sql`public.position_change_requests`, Prisma.sql`username`], [Prisma.sql`public.submissions`, Prisma.sql`submitted_by`],
-    [Prisma.sql`public.submissions`, Prisma.sql`reviewed_by`], [Prisma.sql`public.articles`, Prisma.sql`author`], [Prisma.sql`public.news`, Prisma.sql`author`],
-  ]) {
-    await database.execute(Prisma.sql`UPDATE ${table} SET ${column}=${name} WHERE lower(${column})=${old}`);
-  }
-  const periods = await database.client.totwVotingPeriod.findMany();
-  for (const period of periods) {
-    await database.client.totwVotingPeriod.update({ where: { id: period.id }, data: {
-      eligible_players: Array.isArray(period.eligible_players) ? period.eligible_players.map(value => replace(value)) : [],
-      winners: period.winners === null ? Prisma.JsonNull : Object.fromEntries(Object.entries(typeof period.winners === 'object' && !Array.isArray(period.winners) ? period.winners : {}).map(([slot, value]) => [slot, value === undefined ? undefined : replace(value)])),
-    } });
-  }
-  const submissions = await database.client.submission.findMany();
+  // Pending match submissions still resolve player stats by username at approval time.
+  const submissions = await database.client.submission.findMany({ where: { status: 'pending' } });
   for (const submission of submissions) {
-    await database.client.submission.update({ where: { id: submission.id }, data: {
-      player_stats: Array.isArray(submission.player_stats) ? submission.player_stats.map(value => renameEntry(value)) : [],
-      edits: Array.isArray(submission.edits) ? submission.edits.map(value => renameEntry(value)) : [],
-    } });
+    const stats = Array.isArray(submission.player_stats) ? submission.player_stats : [];
+    const renamed = stats.map(value => value && typeof value === 'object' && !Array.isArray(value)
+      ? { ...value, username: value.username === undefined ? undefined : replace(value.username) } : value);
+    if (JSON.stringify(renamed) !== JSON.stringify(stats))
+      await database.client.submission.update({ where: { id: submission.id }, data: { player_stats: renamed } });
   }
+  return updateAccount(database, id, { username: name });
 }
 
-export async function provisionAccount(database: Database, identity: Identity) {
-    return database.transaction(async (tx) => {
-        // Advisory locks serialize provisioning and name selection without a row to lock.
-        await tx.execute(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity.id},0))`);
-        const existing = await findAccount(tx, identity.id);
-        if (existing) return existing;
-        const metadata = object(identity.claims.user_metadata);
-        const candidate = string(metadata.preferred_username || metadata.user_name || metadata.name || metadata.username)
-            .replaceAll(/[^\p{L}\p{N}_. -]/gu, '').trim().slice(0, 20);
-        const base = candidate.length >= 2 && !checkBlockedName(candidate) ? candidate : 'Player';
-        await tx.execute(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${'username:' + base.toLowerCase()},0))`);
-        let name = base;
-        if (await findAccountByUsername(tx, name))
-            name = `${base}_${identity.id.replaceAll('-', '')}`;
-        if (await findAccountByUsername(tx, name))
-            name = `${base}_${crypto.randomUUID().replaceAll('-', '')}`;
-        return tx.client.account.create({ data: {
-            id: identity.id, username: name, username_lower: name.toLowerCase(), position: POS.CM,
-            email: typeof identity.claims.email === 'string' ? identity.claims.email : null,
-            stats: {}, matches: [], awards: [], championships: [],
-        } });
-    });
+export async function provisionAccount(database: Database, identity: Identity, discordUsername?: string) {
+  return database.transaction(async tx => {
+    await tx.execute(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${identity.id},0))`);
+    const existing = await findAccount(tx, identity.id);
+    if (!discordUsername) {
+      if (existing) return existing;
+      throw new HttpError(409, 'discord_profile_required');
+    }
+    if (!/^[a-z0-9_.]{2,32}$/.test(discordUsername)) throw new HttpError(400, 'invalid_discord_username');
+    await tx.execute(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${'username:' + discordUsername},0))`);
+    if (existing) return syncVerifiedDiscordUsername(tx, identity.id, discordUsername);
+    if (await findAccountByUsername(tx, discordUsername)) throw new HttpError(409, 'discord_username_conflict');
+    return tx.client.account.create({ data: {
+      id: identity.id, username: discordUsername, position: POS.CM,
+      email: typeof identity.claims.email === 'string' ? identity.claims.email : null,
+      stats: {}, matches: [], awards: [], championships: [],
+    } });
+  });
 }

@@ -50,6 +50,6 @@ export async function loadAccountSummaries(database: Database, accountId?: strin
   // JSON aggregation keeps full match histories in PostgreSQL while returning one summary per account.
   const rows = await database.query<AccountSummaryRow>(Prisma.sql`SELECT ${accountColumns},
     ${seasonStats(Prisma.sql`a.matches`, Prisma.sql`a.stats`)} AS season_stats
-    FROM public.accounts a${accountFilter} ORDER BY a.created_at, a.id`);
+    FROM asl.accounts a${accountFilter} ORDER BY a.created_at, a.id`);
   return rows.map(row => summaryDto(row));
 }

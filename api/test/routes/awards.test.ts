@@ -17,13 +17,13 @@ test('award commands validate, authorize, preserve history, and serialize concur
     method, url, headers: user ? { authorization: `Bearer ${user}` } : {}, ...(payload && { payload }),
   });
   const readAwards = async () => {
-    const [row] = await database.query(Prisma.sql`SELECT awards FROM public.accounts WHERE id=${target}::uuid`);
+    const [row] = await database.query(Prisma.sql`SELECT awards FROM asl.accounts WHERE id=${target}::uuid`);
     return row?.awards as Array<Record<string, unknown>>;
   };
-  const [original] = await database.query(Prisma.sql`SELECT awards FROM public.accounts WHERE id=${target}::uuid`);
+  const [original] = await database.query(Prisma.sql`SELECT awards FROM asl.accounts WHERE id=${target}::uuid`);
   const historical = [{ awardId: 'retired-award', season: 'S0', source: 'legacy-import' }];
   try {
-    await database.execute(Prisma.sql`UPDATE public.accounts SET awards=${JSON.stringify(historical)}::jsonb WHERE id=${target}::uuid`);
+    await database.execute(Prisma.sql`UPDATE asl.accounts SET awards=${JSON.stringify(historical)}::jsonb WHERE id=${target}::uuid`);
 
     assert.equal((await call('PUT', `/api/accounts/${target}/awards/striker/S8`)).statusCode, 401);
     assert.equal((await call('PUT', `/api/accounts/${target}/awards/striker/S8`, member)).statusCode, 403);
@@ -31,9 +31,9 @@ test('award commands validate, authorize, preserve history, and serialize concur
     assert.equal((await call('PUT', `/api/accounts/${target}/awards/striker/%20%20`, admin)).statusCode, 400);
     assert.equal((await call('PATCH', `/api/accounts/${target}`, admin, { awards: [] })).statusCode, 400);
 
-    await database.execute(Prisma.sql`UPDATE public.accounts SET awards=${JSON.stringify(Array.from({ length: 1000 }, (_, index) => ({ awardId: `legacy-${index}`, season: 'S0' })))}::jsonb WHERE id=${target}::uuid`);
+    await database.execute(Prisma.sql`UPDATE asl.accounts SET awards=${JSON.stringify(Array.from({ length: 1000 }, (_, index) => ({ awardId: `legacy-${index}`, season: 'S0' })))}::jsonb WHERE id=${target}::uuid`);
     assert.equal((await call('PUT', `/api/accounts/${target}/awards/striker/S8`, admin)).statusCode, 400);
-    await database.execute(Prisma.sql`UPDATE public.accounts SET awards=${JSON.stringify(historical)}::jsonb WHERE id=${target}::uuid`);
+    await database.execute(Prisma.sql`UPDATE asl.accounts SET awards=${JSON.stringify(historical)}::jsonb WHERE id=${target}::uuid`);
 
     assert.equal((await call('PUT', `/api/accounts/${target}/awards/striker/S8`, admin, { assignedBy: 'Forged', assignedAt: 0 })).statusCode, 400);
     const assignedBetween = Date.now();
@@ -68,7 +68,7 @@ test('award commands validate, authorize, preserve history, and serialize concur
       if (independent[index]?.statusCode === 409)
         assert.equal((await call('PUT', `/api/accounts/${target}/awards/${awardId}/S9`, admin)).statusCode, 204);
     }
-    const [withIndependent] = await database.query(Prisma.sql`SELECT awards FROM public.accounts WHERE id=${target}::uuid`);
+    const [withIndependent] = await database.query(Prisma.sql`SELECT awards FROM asl.accounts WHERE id=${target}::uuid`);
     const independentAwards = withIndependent?.awards as Array<Record<string, unknown>>;
     assert.ok(independentAwards.some(award => award.awardId === 'glove' && award.season === 'S9'));
     assert.ok(independentAwards.some(award => award.awardId === 'defender' && award.season === 'S9'));
@@ -115,14 +115,14 @@ test('award commands validate, authorize, preserve history, and serialize concur
     assert.equal((await call('DELETE', `/api/accounts/${target}/awards/striker/S8`, admin)).statusCode, 204);
     assert.equal((await call('DELETE', `/api/accounts/${target}/awards/retired-award/S0`, admin)).statusCode, 204);
     assert.equal((await call('DELETE', `/api/accounts/${target}/awards/retired-award/S0`, admin)).statusCode, 204);
-    const [afterDelete] = await database.query(Prisma.sql`SELECT awards FROM public.accounts WHERE id=${target}::uuid`);
+    const [afterDelete] = await database.query(Prisma.sql`SELECT awards FROM asl.accounts WHERE id=${target}::uuid`);
     const finalAwards = afterDelete?.awards as Array<Record<string, unknown>>;
     assert.ok(finalAwards.every(award => !(award.awardId === 'striker' && award.season === 'S8')));
     assert.ok(finalAwards.every(award => award.awardId !== 'retired-award'));
     assert.ok(finalAwards.every(award => award.season !== 'S9'));
   }
   finally {
-    await database.execute(Prisma.sql`UPDATE public.accounts SET awards=${JSON.stringify(original?.awards ?? [])}::jsonb WHERE id=${target}::uuid`);
+    await database.execute(Prisma.sql`UPDATE asl.accounts SET awards=${JSON.stringify(original?.awards ?? [])}::jsonb WHERE id=${target}::uuid`);
     await app.close();
     await database.close();
   }

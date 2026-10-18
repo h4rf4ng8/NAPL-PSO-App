@@ -9,7 +9,6 @@ export const accounts={
  patchAccount:(id:string,fields:Partial<Omit<Account,'awards'>>)=>request<Account>(`/api/accounts/${segment(id)}`,'PATCH',fields),
  assignAward:(id:string,awardId:AwardId,season:string)=>request<void>(`/api/accounts/${segment(id)}/awards/${segment(awardId)}/${segment(season)}`,'PUT'),
  removeAward:(id:string,awardId:string,season:string)=>request<void>(`/api/accounts/${segment(id)}/awards/${segment(awardId)}/${segment(season)}`,'DELETE'),
- renameAccount:(id:string,username:string)=>request<void>(`/api/accounts/${segment(id)}/rename`,'POST',{username}),
  listPositionRequests:(status:string|null=null)=>request<PositionRequest[]>(`/api/position-requests${status?`?status=${segment(status)}`:''}`),
  createPositionRequest:({toPos,reason=''}:{toPos:string;reason?:string})=>request<PositionRequest>('/api/position-requests','POST',{toPos,reason}),
  approvePositionRequest:(id:string,reviewNote='')=>request<PositionRequest>(`/api/position-requests/${segment(id)}/review`,'POST',{status:'approved',reviewNote}),

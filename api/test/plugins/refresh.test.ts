@@ -17,7 +17,7 @@ function harness(store: AuthStore, refresh?: SupabaseAuth['refresh']) {
     verify: async () => { verifications++; return { userId, sessionId, expiresAt: Math.floor(Date.now() / 1000) + 600 }; },
     exchange: async () => { throw new Error('unused'); }, loginUrl: () => '', logout: async () => {},
   }, {
-    refresh: async () => { throw new Error('unused'); }, identity: async () => '', membership: async () => true,
+    refresh: async () => { throw new Error('unused'); }, identity: async () => ({ id: '', username: 'discord_player' }), membership: async () => true,
   }, { fresh: async () => true, save: async () => {} });
   return { refresher, rotations: () => rotations, verifications: () => verifications };
 }

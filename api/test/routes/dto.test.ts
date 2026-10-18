@@ -21,11 +21,11 @@ const cases = [
     expected: { id: 'articles', slug: 'article', title: 'Article', body: '', coverImageUrl: null, author: null, excerpt: null, publishedAt: now, updatedAt: null },
     input: { id: 'articles', slug: 'article', title: 'Article', body: '' }, patch: { title: 'New title' } },
   { path: 'schedule', table: 'scheduled_matches', format: scheduleDto,
-    row: { id: 'schedule', season: 'S1', week: 1, home_team_id: 'home', away_team_id: 'away', scheduled_date: new Date(now), stream_url: null, match_type: 'regular', playoff_round: null, status: 'scheduled', home_score: null, away_score: null, linked_match_id: null, notes: null, created_at: new Date(now), updated_at: null },
+    row: { id: 'schedule', season_id: 'S1', week: 1, home_team_id: 'home', away_team_id: 'away', scheduled_date: new Date(now), stream_url: null, match_type: 'regular', playoff_round: null, status: 'scheduled', home_score: null, away_score: null, linked_match_id: null, notes: null, created_at: new Date(now), updated_at: null },
     expected: { id: 'schedule', season: 'S1', week: 1, homeTeamId: 'home', awayTeamId: 'away', scheduledDate: now, streamUrl: null, matchType: 'regular', playoffRound: null, status: 'scheduled', homeScore: null, awayScore: null, linkedMatchId: null, notes: null, createdAt: now, updatedAt: null },
     input: { id: 'schedule', season: 'S1', week: 1, homeTeamId: 'home', awayTeamId: 'away' }, patch: { week: 2 } },
   { path: 'transfers', table: 'transfers', format: transferDto,
-    row: { id: 'transfers', season: 'S1', player_username: 'Player', from_team_id: null, to_team_id: 'home', kind: 'signing', window_type: null, created_at: new Date(now), created_by: null },
+    row: { id: 'transfers', season_id: 'S1', player_username: 'Player', from_team_id: null, to_team_id: 'home', kind: 'signing', window_type: null, created_at: new Date(now), created_by: null },
     expected: { id: 'transfers', season: 'S1', playerUsername: 'Player', fromTeamId: null, toTeamId: 'home', kind: 'signing', windowType: null, createdAt: now, createdBy: null },
     input: { id: 'transfers', season: 'S1', playerUsername: 'Player', kind: 'signing' }, patch: { windowType: null } },
   { path: 'voting/periods', table: 'totw_voting_periods', format: periodDto,
@@ -46,14 +46,17 @@ for (const fixture of cases) test(`${fixture.path} exposes only documented field
     client: {
       news: delegate, ruleSection: delegate, article: delegate, scheduledMatch: delegate,
       transfer: delegate, totwVotingPeriod: delegate,
-      account: { findUnique: async () => ({ username: 'Admin' }) },
+      account: { findUnique: async () => ({ id: '11111111-1111-4111-8111-111111111111', username: 'Admin' }), findMany: async () => [{ id: '11111111-1111-4111-8111-111111111111', username: 'Player', position: 'ST' }] },
+      season: { findUnique: async () => ({ id: 'S1' }) },
     } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       let rows: Row[] = [];
       if (sql.sql.includes('FROM auth_gateway.memberships')) rows = [{ eligible: true, fresh: true }];
       else if (sql.sql.includes('FROM auth_gateway.user_roles')) rows = [{ role: 'super_admin' }];
       else if (sql.sql.includes('session_active')) rows = [{ active: true }];
-      else if (sql.sql.includes('SELECT username FROM public.accounts')) rows = [{ username: 'Admin' }];
+      else if (sql.sql.includes('SELECT username FROM asl.accounts')) rows = [{ username: 'Admin' }];
+      else if (sql.sql.includes('SELECT a.username FROM asl.totw_candidates')) rows = [{ username: 'Player' }];
+      else if (sql.sql.includes('FROM asl.transfers') || sql.sql.includes('SELECT * FROM asl.totw_voting_periods')) rows = [row];
       else if (sql.sql.includes('clock_timestamp()')) rows = [{ now: new Date(now) }];
       else if (sql.sql.includes(`"${fixture.table}"`)) rows = [row];
       return rows as T[];

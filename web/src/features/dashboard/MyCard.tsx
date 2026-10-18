@@ -7,7 +7,7 @@ import { Metric, RecordBox } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { getStatsForSeason } from '../../utils/rankings';
 
-export type CardAction = 'share' | 'image' | 'pos' | 'name';
+export type CardAction = 'share' | 'image' | 'pos';
 interface Props {
   account: Account; season: string; currentSeason: string; allSeasons: string[];
   setSeason: (season: string) => void; myTeam: Team | undefined;
@@ -86,14 +86,8 @@ export function MyCard({ account, season, currentSeason, allSeasons, setSeason, 
                       background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
                     }}
                   ><Edit3 size={12} /> POSITION</button>
-                  <button
-                    onClick={() => onEdit('name')}
-                    className="px-4 py-2 font-heading tracking-wider text-xs flex items-center gap-2 rounded transition-all"
-                    style={{
-                      background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
-                    }}
-                  ><Edit3 size={12} /> NAME</button>
                 </div>
+                <p className="text-xs" style={{ color: `${C.cream}aa` }}>Your Discord username updates when you sign in.</p>
                 {myTeam && (
                   <div className="text-center mt-1">
                     <div className="font-mono text-[9px] tracking-[0.3em]" style={{ color: `${C.cream}66` }}>PLAYS FOR</div>

@@ -18,7 +18,7 @@ export interface SessionDependencies {
   supabase: SupabaseAuth;
   discord: DiscordAuth;
   membership: MembershipStore;
-  provision(accessToken: string): Promise<void>;
+  provision(accessToken: string, discordUsername: string): Promise<void>;
 }
 export function cookieNames(secure: boolean) {
   return {
@@ -131,7 +131,8 @@ export function createSession(config: Config, deps: SessionDependencies) {
       const identity = await deps.supabase.verify(tokens.access_token);
       await limiter.admit([{ key: `callback:user:${identity.userId}`, count: 10, windowMs: 600_000 }]);
       if (!tokens.provider_token || !tokens.provider_refresh_token) throw new GatewayError(401, 'discord_consent_required');
-      const discordId = await deps.discord.identity(tokens.provider_token);
+      const discordProfile = await deps.discord.identity(tokens.provider_token);
+      const discordId = discordProfile.id;
       const provider = tokens.user?.identities?.find(item => item.provider === 'discord')?.identity_data;
       const providerId = provider?.sub ?? provider?.provider_id;
       if (providerId !== discordId || tokens.user?.id !== identity.userId) throw new GatewayError(401, 'discord_identity_mismatch');
@@ -149,7 +150,7 @@ export function createSession(config: Config, deps: SessionDependencies) {
         accessExpiresAt: identity.expiresAt,
         expiresAt: Math.floor(Date.now() / 1000) + 30 * 86_400,
       };
-      await deps.provision(tokens.access_token);
+      await deps.provision(tokens.access_token, discordProfile.username);
       await sessionCookies(reply, session, tokens.access_token);
       return reply.redirect(`${config.PUBLIC_ORIGIN}/`);
     });

@@ -35,7 +35,7 @@ export async function accountMatches(database: Database, args: {
 
   // JSON ordinality and xmin bind each page to the same stored history snapshot.
   const rows = await database.query<Row>(Prisma.sql`WITH target AS (
-    SELECT id::text AS id, xmin::text AS version, matches FROM public.accounts WHERE id=${id}::uuid
+    SELECT id::text AS id, xmin::text AS version, matches FROM asl.accounts WHERE id=${id}::uuid
   ), page AS (
     SELECT CASE WHEN jsonb_typeof(m.value)='object'
       THEN m.value || jsonb_build_object('opponent', COALESCE(NULLIF(m.value->>'opponent',''),'Unknown'),
@@ -75,7 +75,7 @@ export async function accountOpponents(database: Database, idValue: string): Pro
     COALESCE(sum(CASE WHEN jsonb_typeof(m.value->'goals')='number' THEN (m.value->>'goals')::numeric ELSE 0 END),0) AS goals,
     COALESCE(sum(CASE WHEN jsonb_typeof(m.value->'assists')='number' THEN (m.value->>'assists')::numeric ELSE 0 END),0) AS assists,
     count(*) FILTER (WHERE CASE jsonb_typeof(m.value->'motm') WHEN 'boolean' THEN (m.value->>'motm')::boolean WHEN 'number' THEN (m.value->>'motm')::numeric<>0 WHEN 'string' THEN (m.value->>'motm')<>'' ELSE false END)::int AS motm
-    FROM public.accounts a CROSS JOIN LATERAL jsonb_array_elements(
+    FROM asl.accounts a CROSS JOIN LATERAL jsonb_array_elements(
       CASE WHEN jsonb_typeof(a.matches)='array' THEN a.matches ELSE '[]'::jsonb END
     ) AS m(value)
     WHERE a.id=${id}::uuid

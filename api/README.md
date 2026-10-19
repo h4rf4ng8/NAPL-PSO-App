@@ -35,7 +35,7 @@ See the root README for the [system architecture](../README.md#system-architectu
 
 ### Handling Requests
 
-Both entry points load settings, prepare one database connection pool and bearer verification, and build the Fastify app. Public reads remain anonymous. Protected routes require a verified Supabase access token, current database roles and an active session. Browser cookies and role metadata are not authorization sources.
+Both entry points load settings, prepare one database connection pool and bearer verification, and build the Fastify app. Public reads remain anonymous. Protected routes require native Supabase JWT signature, expiry, issuer, audience and session_id validation; authorization uses current database roles. Browser cookies and role metadata are not authorization sources.
 
 Fastify alone supplies exact-origin CORS, including errors and preflight. Requests use `Authorization: Bearer ...`, omit browser credentials and retain Apollo's native GraphQL CSRF prevention. There are no API `/auth/*` routes or signed CSRF tokens.
 
@@ -68,7 +68,7 @@ Related writes [run in transactions](plugins/db/client.ts) that protect against 
 
 ### Sign-in and Sessions
 
-The browser Supabase SDK owns Discord OAuth, callback PKCE exchange, persistence, refresh, logout and cross-tab synchronization. `POST /api/users/me` receives the access token and optional provider token, verifies the authoritative Discord identity, and provisions a missing league account. Existing accounts do not need a provider token for loading. Database role/session checks remain authoritative, and provider identity mismatch is rejected. Guild membership and Discord-token refresh are not API access requirements.
+The browser Supabase SDK owns Discord OAuth, callback PKCE exchange, persistence, refresh, logout and cross-tab synchronization. `POST /api/users/me` receives the access token and optional provider token, verifies the authoritative Discord identity, and provisions a missing league account. Existing accounts do not need a provider token for loading. Native JWT validation and current database roles remain authoritative, and provider identity mismatch is rejected. Guild membership and Discord-token refresh are not API access requirements.
 
 Provisioning admission uses database quotas by trusted IP, user, session and global limit. Repeated failures cannot bypass those limits by changing forwarded IP headers. See [account routes](routes/accounts/routes.ts), [runtime](plugins/runtime.ts), and [request checks](app.ts).
 

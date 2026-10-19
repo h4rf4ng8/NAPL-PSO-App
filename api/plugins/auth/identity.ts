@@ -29,8 +29,3 @@ export async function roles(database: Database, userId: string): Promise<('admin
     const rows = await database.query(Prisma.sql `SELECT role FROM auth_gateway.user_roles WHERE user_id=${userId}::uuid`);
     return rows.map(r => z.enum(['admin', 'super_admin']).parse(r.role));
 }
-export async function requireActiveSession(database: Database, sessionId: string): Promise<void> {
-    const [row] = await database.query(Prisma.sql `SELECT auth_gateway.session_active(${sessionId}::uuid) AS active`);
-    if (!row?.active)
-        throw new HttpError(401, 'session_expired');
-}

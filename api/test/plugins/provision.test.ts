@@ -8,7 +8,7 @@ import { config, userId, sessionId } from './fixtures.js';
 
 const otherId = '11111111-1111-4111-8111-111111111111';
 const baseAccount = { id: userId, username: 'old_handle', position: 'CM', team_id: null, stats: {}, matches: [], awards: [], championships: [], created_at: new Date(0), season_stats: {} };
-function harness(options: { existing?: boolean; active?: boolean; providerUser?: SupabaseUser; limited?: boolean; conflict?: boolean } = {}) {
+function harness(options: { existing?: boolean; providerUser?: SupabaseUser; limited?: boolean; conflict?: boolean } = {}) {
   let account: Row | null = options.existing ? { ...baseAccount } : null;
   const counts = { profile: 0, user: 0, created: 0, updated: 0, transactions: 0, admissions: 0 };
   const limits: unknown[] = [];
@@ -26,7 +26,6 @@ function harness(options: { existing?: boolean; active?: boolean; providerUser?:
       setting: { findUnique: async () => null }, submission: { findMany: async () => [] },
     } as unknown as Prisma.TransactionClient,
     query: async <T extends Row>(sql: Prisma.Sql) => {
-      if (sql.sql.includes('session_active')) return [{ active: options.active ?? true }] as T[];
       if (sql.sql.includes('SELECT * FROM asl.accounts')) return (account ? [account] : []) as T[];
       if (sql.sql.includes('AS season_stats')) return (account ? [account] : []) as T[];
       if (sql.sql.includes('memberships')) throw new Error('Guild membership must not be consulted');
@@ -115,16 +114,14 @@ test('provision rejects submitted usernames and mismatched authoritative provide
   } finally { await h.app.close(); }
 });
 
-test('revoked session and admission failures stop before upstream calls or business effects', async () => {
-  for (const options of [{ active: false }, { limited: true }]) {
-    const h = harness(options);
-    try {
-      const response = await h.call({ providerToken: 'provider' });
-      assert.equal(response.statusCode, options.active === false ? 401 : 429, response.body);
-      if (options.limited) assert.equal(response.headers['retry-after'], '9');
-      assert.equal(h.counts.profile, 0); assert.equal(h.counts.user, 0); assert.equal(h.counts.transactions, 0);
-    } finally { await h.app.close(); }
-  }
+test('admission failures stop before upstream calls or business effects', async () => {
+  const h = harness({ limited: true });
+  try {
+    const response = await h.call({ providerToken: 'provider' });
+    assert.equal(response.statusCode, 429, response.body);
+    assert.equal(response.headers['retry-after'], '9');
+    assert.equal(h.counts.profile, 0); assert.equal(h.counts.user, 0); assert.equal(h.counts.transactions, 0);
+  } finally { await h.app.close(); }
 });
 
 test('expired bearer causes no effects and provision commits once after caller renews access', async () => {

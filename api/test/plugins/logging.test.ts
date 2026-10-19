@@ -19,7 +19,7 @@ test('actual API logs retain method/status while credentials and upstream errors
       config: { ...config, NODE_ENV: 'development' },
       db: {
         client: {},
-        query: async sql => sql.sql.includes('session_active') ? [{ active: true }] : [],
+        query: async () => [],
         execute: async () => { throw new Error('Unexpected business write'); },
         transaction: async () => { throw new Error('Unexpected business transaction'); },
         close: async () => {},

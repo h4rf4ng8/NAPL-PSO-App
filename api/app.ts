@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { Database, Row } from './plugins/db/client.js';
 import { object, string } from './plugins/db/records.js';
-import { HttpError, type Identity, actor, isAdmin, requireActiveSession, roles } from './plugins/auth/identity.js';
+import { HttpError, type Identity, actor, isAdmin, roles } from './plugins/auth/identity.js';
 import { registerAccounts } from './routes/accounts/routes.js';
 import { registerTeams } from './routes/teams/routes.js';
 import { registerContent } from './routes/content/routes.js';
@@ -137,9 +137,6 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
             if (request.identity) request.userRoles = await roles(dependencies.db, request.identity.id);
             if (policy.role && (policy.role === 'super_admin' ? !request.userRoles.includes('super_admin') : !isAdmin(request))) {
                 throw new HttpError(403, 'admin_required');
-            }
-            if (request.identity && (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) || isAdmin(request))) {
-                await requireActiveSession(dependencies.db, request.identity.sessionId);
             }
         });
         registerAccounts(scope, dependencies);

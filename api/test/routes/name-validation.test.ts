@@ -62,7 +62,6 @@ test('API rejects blocked team names and exposes no manual rename endpoint', asy
       const rows: Row[] = [];
       if (sql.sql.includes('auth_gateway.memberships')) rows.push({ eligible: true, fresh: true });
       if (adminMode && sql.sql.includes('auth_gateway.user_roles')) rows.push({ role: 'admin' });
-      if (sql.sql.includes('session_active')) rows.push({ active: true });
       return rows as T[];
     },
     execute: async () => 0,

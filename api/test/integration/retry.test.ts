@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import type { HTTPMethods } from 'fastify';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { createApp } from '../../app.js';
-import { connectDatabase, Prisma } from '../../plugins/db/client.js';
+import { connectDatabase } from '../../plugins/db/client.js';
 import { SupabaseClient } from '../../plugins/supabase/client.js';
 import { authStore } from '../auth-store.js';
 import { config } from '../plugins/fixtures.js';
@@ -15,12 +15,10 @@ const id = '11111111-1111-4111-8111-111111111111';
 const otherId = '22222222-2222-4222-8222-222222222222';
 
 test('real SDK and bearer routes retry concurrent GraphQL/PATCH expiry once with one DB commit', {
-  skip: !process.env.API_TEST_DATABASE_URL || !process.env.API_TEST_ADMIN_DATABASE_URL,
+  skip: !process.env.API_TEST_DATABASE_URL,
 }, async () => {
   const database = connectDatabase(process.env.API_TEST_DATABASE_URL!);
-  const admin = connectDatabase(process.env.API_TEST_ADMIN_DATABASE_URL!);
   const original = await database.client.account.findUniqueOrThrow({ where: { id }, select: { country: true } });
-  const [originalSession] = await admin.query<{ not_after: Date | null }>(Prisma.sql`SELECT not_after FROM auth.sessions WHERE id=${id}::uuid`);
   const { publicKey, privateKey } = await generateKeyPair('ES256');
   const jwk = { ...await exportJWK(publicKey), kid: 'retry', alg: 'ES256', use: 'sig' };
   const issue = (expires: number) => new SignJWT({ sub: id, session_id: id, iss: 'https://auth.example.test/auth/v1', aud: 'authenticated', exp: expires })
@@ -88,16 +86,10 @@ test('real SDK and bearer routes retry concurrent GraphQL/PATCH expiry once with
     attempts.clear();
     await assert.rejects(request(`/api/accounts/${otherId}`, 'PATCH', { country: 'forbidden' }), error => error instanceof ApiError && error.code === 'forbidden');
     assert.equal(attempts.get(`/api/accounts/${otherId}`)?.length, 1); assert.equal(refreshes, 1); assert.equal(commits, 1);
-    attempts.clear();
-    await admin.execute(Prisma.sql`UPDATE auth.sessions SET not_after=now()-interval '1 second' WHERE id=${id}::uuid`);
-    await assert.rejects(request(`/api/accounts/${id}`, 'PATCH', { country: 'revoked' }), error => error instanceof ApiError && error.code === 'session_expired');
-    assert.equal(attempts.get(`/api/accounts/${id}`)?.length, 1); assert.equal(refreshes, 1); assert.equal(commits, 1);
-    assert.deepEqual(await database.client.account.findUniqueOrThrow({ where: { id }, select: { country: true } }), { country });
   } finally {
     try {
       await database.client.account.update({ where: { id }, data: original });
-      await admin.execute(Prisma.sql`UPDATE auth.sessions SET not_after=${originalSession.not_after} WHERE id=${id}::uuid`);
       await clearSession(); await resetClient();
-    } finally { await app.close(); await database.close(); await admin.close(); }
+    } finally { await app.close(); await database.close(); }
   }
 });

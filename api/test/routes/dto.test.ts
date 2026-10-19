@@ -53,7 +53,6 @@ for (const fixture of cases) test(`${fixture.path} exposes only documented field
       let rows: Row[] = [];
       if (sql.sql.includes('FROM auth_gateway.memberships')) rows = [{ eligible: true, fresh: true }];
       else if (sql.sql.includes('FROM auth_gateway.user_roles')) rows = [{ role: 'super_admin' }];
-      else if (sql.sql.includes('session_active')) rows = [{ active: true }];
       else if (sql.sql.includes('SELECT username FROM asl.accounts')) rows = [{ username: 'Admin' }];
       else if (sql.sql.includes('SELECT a.username FROM asl.totw_candidates')) rows = [{ username: 'Player' }];
       else if (sql.sql.includes('FROM asl.transfers') || sql.sql.includes('SELECT * FROM asl.totw_voting_periods')) rows = [row];

@@ -43,7 +43,6 @@ function appFor() {
       const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
       seen.set(key, (seen.get(key) ?? 0) + 1);
       if (key.includes('FROM auth_gateway.memberships')) return [{ eligible: true, fresh: true }] as T[];
-      if (key.includes('auth_gateway.session_active')) return [{ active: true }] as T[];
       if (key.includes('public."settings"')) return [{ key: sql.values[0], value: JSON.stringify(positionWeights) }] as T[];
       if (key.startsWith('WITH match_rows AS')) return [] as T[];
       if (key.includes('asl.accounts') || key.includes('public."accounts"')) {

@@ -15,7 +15,7 @@ const superId = '14fb22c6-a09a-4657-9213-ef95c99c46e6';
 function harness(roleByUser: Record<string, string[]> = {}) {
   let databaseReads = 0, authStateCalls = 0, verifications = 0;
   let domainReads = 0;
-  let currentUsername = 'Before', activeSession = true;
+  let currentUsername = 'Before';
   const database: Database = {
     client: {
       setting: { findUnique: async () => { databaseReads++; return null; } },
@@ -25,7 +25,6 @@ function harness(roleByUser: Record<string, string[]> = {}) {
     } as unknown as Prisma.TransactionClient,
     query: async <T extends Row>(sql: Prisma.Sql) => {
       databaseReads++;
-      if (sql.sql.includes('session_active')) return [{ active: activeSession }] as T[];
       if (sql.sql.includes('FROM auth_gateway.user_roles WHERE user_id')) return (roleByUser[String(sql.values[0])] ?? []).map(role => ({ role })) as T[];
       if (sql.sql.includes('AS season_stats')) { domainReads++; return [{
         id: userId, username: currentUsername, position: 'CM', team_id: null, image_url: null, country: null,
@@ -58,7 +57,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
     }));
   });
   return { app, domainReads: () => domainReads, counts: () => ({ databaseReads, authStateCalls, verifications }),
-    setUsername: (value: string) => { currentUsername = value; }, setSessionActive: (value: boolean) => { activeSession = value; } };
+    setUsername: (value: string) => { currentUsername = value; } };
 }
 function urlEvent(path: string, overrides: Partial<APIGatewayProxyEventV2> = {}): APIGatewayProxyEventV2 {
   return {
@@ -136,7 +135,7 @@ test('fixed GraphQL HTTP uses Apollo native CSRF, strict envelopes and safe cach
   } finally { await h.app.close(); }
 });
 
-test('authenticated fixed reads enforce active sessions; public reads remain anonymous', async () => {
+test('authenticated fixed reads require a valid bearer; public reads remain anonymous', async () => {
   const h = harness();
   try {
     for (const url of ['/api/standings', '/api/team-records']) {
@@ -144,26 +143,24 @@ test('authenticated fixed reads enforce active sessions; public reads remain ano
       const accepted = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer good' }, payload: { variables: {} } });
       assert.equal(accepted.statusCode, 200, accepted.body);
     }
-    h.setSessionActive(false);
     for (const url of ['/api/standings', '/api/team-records']) {
-      const denied = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer good' }, payload: { variables: {} } });
+      const denied = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer expired' }, payload: { variables: {} } });
       assert.equal(denied.statusCode, 401);
-      assert.equal(denied.json().error, 'session_expired');
+      assert.equal(denied.json().error.code, 'access_expired');
     }
     assert.equal((await h.app.inject('/api/accounts')).statusCode, 200);
   } finally { await h.app.close(); }
 });
 
-test('bearer grants only DB roles and admin reads require active sessions', async () => {
+test('bearer grants only database roles and admin reads reject expired tokens', async () => {
   for (const [token, id, role, status] of [['admin', userId, 'admin', 403], ['super', superId, 'super_admin', 200]] as const) {
     const h = harness({ [id]: [role] });
     try {
       const result = await h.app.inject({ url: '/api/roles', headers: { authorization: `Bearer ${token}` } });
       assert.equal(result.statusCode, status, result.body);
-      h.setSessionActive(false);
-      const revoked = await h.app.inject({ url: '/api/accounts', headers: { authorization: `Bearer ${token}` } });
-      assert.equal(revoked.statusCode, 401);
-      assert.equal(revoked.json().error, 'session_expired');
+      const expired = await h.app.inject({ url: '/api/accounts', headers: { authorization: 'Bearer expired' } });
+      assert.equal(expired.statusCode, 401);
+      assert.equal(expired.json().error.code, 'access_expired');
     } finally { await h.app.close(); }
   }
 });

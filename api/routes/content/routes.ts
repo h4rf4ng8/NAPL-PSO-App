@@ -84,7 +84,7 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl, storage 
                 input.coverImageUrl = await prepareImage(storage, input.coverImageUrl, previous?.cover_image_url ?? null, { kind: 'article-cover', entityId: input.id, actorId: actor(request).id, public: input.publishedAt !== null && (input.publishedAt !== undefined || !previous || Boolean(previous.published_at)) });
                 images.push(input.coverImageUrl);
             }
-            return articleDto(await queries.upsertArticle(tx, input, author));
+            return articleDto(await queries.upsertArticle(tx, input, author, previous));
         }); } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.patch('/api/articles/:id', { config: { role: 'admin' } }, async (request) => {

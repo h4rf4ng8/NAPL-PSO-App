@@ -64,7 +64,7 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
       <main className="relative max-w-6xl mx-auto px-4 py-6 fade-in">
         {loading && !data && <p role="status">Loading league…</p>}
         {error && <p role="alert">{error.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
-        {data && view === 'home' && <HomeView account={data.me} allTeams={teams} currentSeason={currentSeason} onJump={setView} onUpdate={savedAccount} />}
+        {view === 'home' && <HomeView account={data?.me ?? account} allTeams={teams} currentSeason={data?.currentSeason} onJump={setView} onUpdate={savedAccount} />}
         {data && view === 'me' && <MyCard account={data.me} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} onEdit={setModal} />}
         {view === 'matches' && <MatchLog account={account} season={season} />}
         {data && view === 'teams' && <TeamsView account={data.me} onUpdate={savedAccount} currentSeason={currentSeason} />}

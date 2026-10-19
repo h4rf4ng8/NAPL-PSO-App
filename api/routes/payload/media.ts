@@ -4,7 +4,6 @@ import { id as resourceId } from '@napl/contracts';
 import type { Database } from '../../plugins/db/client.js';
 import { HttpError, actor, isAdmin } from '../../plugins/auth/identity.js';
 import { object } from '../../plugins/db/records.js';
-import { needTeam } from '../teams/queries.js';
 import { pageInput, textPage } from './page.js';
 
 function sendImage(reply: FastifyReply, value: unknown, descriptor = false) {
@@ -27,8 +26,8 @@ export function registerMedia(app: FastifyInstance, db: Database): void {
   });
   app.get('/api/teams/:id/media-source', async request => {
     const { id } = z.object({ id: resourceId }).parse(request.params);
-    const row = await needTeam(db, id);
-    if (row.owner_account_id !== actor(request).id && !isAdmin(request)) throw new HttpError(404, 'not_found');
+    const row = await db.client.team.findUnique({ where: { id }, select: { logo_url: true, owner_account_id: true } });
+    if (!row || (row.owner_account_id !== actor(request).id && !isAdmin(request))) throw new HttpError(404, 'not_found');
     const storedImage = Boolean(row.logo_url?.startsWith('data:image/'));
     return { ...textPage(storedImage ? '' : row.logo_url ?? '', `team-logo:${id}`, pageInput(request).after), storedImage };
   });
@@ -69,8 +68,12 @@ export function registerMedia(app: FastifyInstance, db: Database): void {
   });
   app.get('/api/media/teams/:id/logo', { config: { public: true } }, async (request, reply) => {
     const { id } = z.object({ id: resourceId }).parse(request.params);
-    const row = await needTeam(db, id);
-    if (row.status !== 'approved' && !isAdmin(request) && row.owner_account_id !== request.identity?.id && row.pending_members.every(member => member.accountId !== request.identity?.id)) throw new HttpError(404, 'not_found');
+    const row = await db.client.team.findUnique({ where: { id }, select: { logo_url: true, status: true, owner_account_id: true } });
+    if (!row) throw new HttpError(404, 'not_found');
+    if (row.status !== 'approved' && !isAdmin(request) && row.owner_account_id !== request.identity?.id) {
+      const invitation = request.identity && await db.client.teamJoinRequest.findFirst({ where: { team_id: id, account_id: request.identity.id }, select: { id: true } });
+      if (!invitation) throw new HttpError(404, 'not_found');
+    }
     return sendImage(reply, row.logo_url, object(request.query).descriptor === '1');
   });
   app.get('/api/media/articles/:id/cover', { config: { public: true } }, async (request, reply) => {

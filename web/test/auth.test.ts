@@ -75,6 +75,22 @@ test('local sign-out clears SDK persistence after revocation errors and expired-
  }
 });
 
+test('home reads start while league overview is pending and overview failures remain visible',async()=>{
+ const overview=Promise.withResolvers<Response>();const reads:string[]=[];
+ await login(async url=>{const path=apiPath(url);reads.push(path);return path==='/api/users/me'?json(account()):(path==='/api/league-overview'?overview.promise:new Promise<Response>(()=>{}));});
+ await mount();await act(tick);
+ assert.equal(reads.filter(path=>path==='/api/home-summary').length,1);
+ assert.equal(reads.filter(path=>path==='/api/home-news').length,3);
+ const {HomeView}=await import('../src/features/content/Home');
+ assert.equal(renderer!.root.findByType(HomeView).props.account.id,'user-a');
+ assert.equal(renderer!.root.findByType(HomeView).props.currentSeason,undefined);
+ assert.match(JSON.stringify(renderer!.toJSON()),/Loading league/);
+ assert.doesNotMatch(JSON.stringify(renderer!.toJSON()),/SEASON S1/);
+ await act(async()=>{overview.resolve(json({message:'Overview unavailable'},503));await tick();});
+ assert.match(JSON.stringify(renderer!.toJSON()),/Overview unavailable/);
+ assert.equal(renderer!.root.findAllByType(HomeView).length,1);
+});
+
 test('real SDK cross-tab sign-out clears the mounted private screen and ignores late old updates',async()=>{
  await login(async url=>apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{}));await mount();
  const old=renderer!.root.findByType(Dashboard).props;assert.equal(old.account.id,'user-a');
@@ -98,13 +114,15 @@ test('account switches guard old modal callbacks, token refreshes retain account
 });
 
 test('logout immediately hides private state while SDK refresh and revocation are pending',async()=>{
- const refresh=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>(),revoke=Promise.withResolvers<Response>();
- await login(async url=>{if(url.includes('grant_type=refresh_token')){started.resolve();return refresh.promise;}if(url.includes('/logout'))return revoke.promise;return apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{});});await mount();const old=renderer!.root.findByType(Dashboard).props;
+ const refresh=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>(),revoke=Promise.withResolvers<Response>();const publicReads:(string|null)[]=[];
+ await login(async(url,init)=>{if(apiPath(url)==='/api/team-summaries')publicReads.push(new Headers(init?.headers).get('Authorization'));if(url.includes('grant_type=refresh_token')){started.resolve();return refresh.promise;}if(url.includes('/logout'))return revoke.promise;return apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{});});await mount();const old=renderer!.root.findByType(Dashboard).props;
  const refreshing=supabase.auth.refreshSession();await started.promise;let logout:Promise<void>;
  await act(async()=>{logout=old.onLogout();await tick();});assert.equal(renderer!.root.findAllByType(Dashboard).length,0);
+ assert.equal(renderer!.root.findAllByType(PublicLeague).length,0);assert.match(JSON.stringify(renderer!.toJSON()),/Loading league/);assert.deepEqual(client.cache.extract(),{});assert.equal(publicReads.length,0);
  await act(async()=>{refresh.resolve(json(session('user-a',2)));await refreshing;await tick();});assert.equal(renderer!.root.findAllByType(Dashboard).length,0);
+ assert.equal(renderer!.root.findAllByType(PublicLeague).length,0);assert.equal(publicReads.length,0);
  await act(async()=>{revoke.resolve(json({message:'Unavailable'},503));await logout!;await tick();});
- assert.equal(renderer!.root.findAllByType(Dashboard).length,0);assert.equal(localStorage.getItem(storageKey),null);assert.equal(renderer!.root.findAllByProps({role:'alert'}).length,1);
+ assert.equal(renderer!.root.findAllByType(Dashboard).length,0);assert.equal(renderer!.root.findAllByType(PublicLeague).length,1);assert.equal(localStorage.getItem(storageKey),null);assert.equal(renderer!.root.findAllByProps({role:'alert'}).length,1);assert.deepEqual(publicReads,[null]);
 });
 test('late account loads after a switch and unmount never expose the old account',async()=>{
  const delayed=Promise.withResolvers<Response>();await login(async url=>apiPath(url)==='/api/users/me'?delayed.promise:new Promise<Response>(()=>{}));await mount();assert.equal(renderer!.root.findAllByType(Dashboard).length,0);

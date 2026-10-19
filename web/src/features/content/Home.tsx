@@ -21,7 +21,7 @@ const homeSummarySchema = z.object({ playerCount: z.number(), activeTeamCount: z
 })) });
 
 // ============ HOME (LANDING PAGE) ============
-export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }: { account: Account; allTeams: Team[]; currentSeason: string; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
+export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }: { account: Account; allTeams: Team[]; currentSeason: string | undefined; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
   const [editingCountry, setEditingCountry] = useState(false);
   const [countryInput, setCountryInput] = useState('');
   const [countryBusy, setCountryBusy] = useState(false);
@@ -114,7 +114,7 @@ export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }:
         }} />
         <div className="relative px-6 py-10 md:py-14 md:px-10">
           <div className="font-mono text-[10px] tracking-[0.4em] mb-2" style={{ color: `${C.white}99` }}>
-            // SEASON {currentSeason} • OFFICIAL LEAGUE HUB
+            // {currentSeason && <>SEASON {currentSeason} • </>}OFFICIAL LEAGUE HUB
           </div>
           <h1 className="font-display tracking-tight leading-[0.9]" style={{
             fontSize: 'clamp(36px, 8vw, 68px)',

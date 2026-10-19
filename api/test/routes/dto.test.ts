@@ -1,3 +1,4 @@
+/* eslint-disable unicorn/prefer-switch -- Each fixture hydrates a different domain detail contract. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApp } from '../helper.js';
@@ -37,9 +38,11 @@ const cases = [
 for (const fixture of cases) test(`${fixture.path} exposes only documented fields on every response path`, async () => {
   const row = { ...fixture.row, ...privateFields };
   assert.deepEqual(fixture.format(row), fixture.expected);
+  const writes: Row[] = [];
+  const save = async ({ data }: { data: Row }) => { writes.push(data); Object.assign(row, Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined))); return row; };
   const delegate = {
     findMany: async () => [row], findUnique: async () => row,
-    create: async () => row, update: async () => row, updateManyAndReturn: async () => [row],
+    create: save, update: save, updateManyAndReturn: async (args: { data: Row }) => [await save(args)],
     deleteMany: async () => ({ count: 0 }),
   };
   const db: Database = {
@@ -47,7 +50,8 @@ for (const fixture of cases) test(`${fixture.path} exposes only documented field
       news: delegate, ruleSection: delegate, article: delegate, scheduledMatch: delegate,
       transfer: delegate, totwVotingPeriod: delegate,
       account: { findUnique: async () => ({ id: '11111111-1111-4111-8111-111111111111', username: 'Admin' }), findMany: async () => [{ id: '11111111-1111-4111-8111-111111111111', username: 'Player', position: 'ST' }] },
-      season: { findUnique: async () => ({ id: 'S1' }) },
+      season: { findUnique: async () => ({ id: 'S1' }), findMany: async () => [] },
+      team: { findMany: async () => [] }, teamJoinRequest: { findMany: async () => [] }, teamSeason: { findMany: async () => [] },
     } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
       let rows: Row[] = [];
@@ -74,11 +78,63 @@ for (const fixture of cases) test(`${fixture.path} exposes only documented field
     const { season: _season, ...match } = fixture.input as Record<string, unknown>;
     calls.push({ method: 'PUT', url: '/api/schedule/season/S1', payload: { matches: [match] }, list: true });
   }
+  const headers = { authorization: 'Bearer admin' };
+  const text = async (url: string): Promise<string> => {
+    const response = await app.inject({ url, headers });
+    assert.equal(response.statusCode, 200, response.body);
+    return response.json<{ nodes: string[] }>().nodes.join('');
+  };
+  const snapshot = async () => {
+    const response = await app.inject({ url: `/api/${fixture.path}`, headers });
+    assert.equal(response.statusCode, 200, response.body);
+    const summary = response.json<{ nodes: Row[]; totalCount: number }>();
+    assert.equal(summary.totalCount, 1);
+    const metadata = summary.nodes[0]!;
+    let complete: Row = metadata;
+    if (fixture.path === 'news') {
+      const { bodyUrl, notesUrl, ...rest } = metadata;
+      complete = { ...rest, body: await text(String(bodyUrl)), notes: await text(String(notesUrl)) };
+    } else if (fixture.path === 'rules' || fixture.path === 'articles') {
+      const full = await app.inject({ url: String(metadata.bodyUrl), headers });
+      assert.equal(full.statusCode, 200, full.body);
+      complete = full.json();
+    } else if (fixture.path === 'schedule') {
+      const { notesUrl, homeTeam, awayTeam, homeRecord, awayRecord, ...rest } = metadata;
+      assert.equal(homeTeam, null); assert.equal(awayTeam, null);
+      assert.deepEqual(homeRecord, { w: 0, d: 0, l: 0 }); assert.deepEqual(awayRecord, { w: 0, d: 0, l: 0 });
+      complete = { ...rest, notes: await text(String(notesUrl)) };
+    } else if (fixture.path === 'transfers') {
+      const { fromTeam, toTeam, ...rest } = metadata;
+      assert.equal(fromTeam, null); assert.equal(toTeam, null);
+      complete = rest;
+    } else if (fixture.path === 'voting/periods') {
+      const { eligiblePlayerCount, winnerCount, ...rest } = metadata;
+      const candidates = await app.inject({ url: `/api/voting/periods/${String(metadata.id)}/candidates`, headers });
+      const winners = await app.inject({ url: `/api/voting/periods/${String(metadata.id)}/winners`, headers });
+      assert.equal(candidates.statusCode, 200, candidates.body); assert.equal(winners.statusCode, 200, winners.body);
+      const names = candidates.json<{ nodes: string[] }>().nodes;
+      assert.equal(eligiblePlayerCount, names.length);
+      assert.equal(winnerCount, 0);
+      complete = { ...rest, eligiblePlayers: names, winners: null };
+    }
+    const expected: Row = fixture.format(row);
+    if (fixture.path === 'schedule') expected.notes ??= '';
+    // JSON normalization removes undefined fields exactly as HTTP serialization does.
+    // eslint-disable-next-line unicorn/prefer-structured-clone
+    assert.deepEqual(complete, JSON.parse(JSON.stringify(expected)));
+    assert.ok(!JSON.stringify(complete).includes('provider_secret'));
+  };
   try {
-    for (const { list, ...request } of calls) {
-      const response = await app.inject({ ...request, headers: { authorization: 'Bearer admin' } });
+    await snapshot();
+    const commands = calls.filter(call => call.method !== 'GET');
+    for (const { list: _list, ...request } of commands) {
+      const before = writes.length;
+      const response = await app.inject({ ...request, headers });
       assert.equal(response.statusCode, 200, `${request.method} ${request.url}: ${response.body}`);
-      assert.deepEqual(response.json(), list ? [fixture.expected] : fixture.expected);
+      assert.equal(response.json().ok, true);
+      assert.ok(Buffer.byteLength(response.body) < 1000);
+      assert.ok(writes.length > before, `${request.method} must perform the write`);
+      await snapshot();
     }
   } finally { await app.close(); }
 });

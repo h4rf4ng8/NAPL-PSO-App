@@ -1,12 +1,12 @@
 import React from 'react';
 import { Check, Copy, Download, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type {Account, Team} from '../api/models';
+import type {Account, TeamSummary as Team} from '../api/models';
 import { C } from '../theme/theme';
 import { PlayerCard } from './PlayerCard';
 import { useDialog } from './Dialog';
 import { renderCardToBlob, downloadCardBlob } from './player-card-image';
-export const ShareableCardModal = ({ account, team, onClose }: { account: Account; team?: Team | null | undefined; onClose: () => void }) => {
+export const ShareableCardModal = ({ account, team, onClose, children }: { account: Account; team?: Team | null | undefined; onClose: () => void; children?: React.ReactNode }) => {
   const lifetime = React.useRef<AbortController | null>(null);
   const copiedTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
@@ -130,6 +130,7 @@ export const ShareableCardModal = ({ account, team, onClose }: { account: Accoun
             background: `${C.green}cc`, color: C.white, border: `1px solid ${C.greenLight}66`,
           }}>{info}</div>
         )}
+        {children}
       </div>
     </div>
   );

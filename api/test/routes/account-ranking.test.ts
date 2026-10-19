@@ -130,20 +130,20 @@ test('REST and GraphQL account reads expose computed values without private colu
   try {
     const rest = await app.inject('/api/accounts');
     assert.equal(rest.statusCode, 200, rest.body);
-    const restAlice = rest.json<Array<Record<string, unknown>>>().find(row => row.username === 'Alice')!;
+    const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
     assert.deepEqual(restAlice.ranking, { score: 88, percentile: 0.75, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-    assert.ok(Array.isArray(restAlice.cardStats));
+    assert.equal(restAlice.cardStats, undefined);
     assert.equal(restAlice.email, undefined);
     assert.equal(restAlice.pendingImageUrl, undefined);
     assert.equal(restAlice.privateNote, undefined);
 
     const graph = await app.inject({
-      method: 'POST', url: '/api/standings', headers: { authorization: `Bearer ${alice}` },
+      method: 'POST', url: '/api/leaderboard', headers: { authorization: `Bearer ${alice}` },
       payload: { variables: {} },
     });
     assert.equal(graph.statusCode, 200, graph.body);
-    const result = graph.json<{ data: { accounts: Array<Record<string, unknown>>; defaultPositionWeights: Record<string, unknown> } }>();
-    const graphAlice = result.data.accounts.find(row => row.username === 'Alice')!;
+    const result = graph.json<{ data: { leaderboard: { nodes: Array<Record<string, unknown>> }; defaultPositionWeights: Record<string, unknown> } }>();
+    const graphAlice = result.data.leaderboard.nodes.find(row => row.username === 'Alice')!;
     assert.deepEqual(graphAlice.ranking, { ...restAlice.ranking as object, __typename: 'AccountRanking' });
     assert.equal(graphAlice.email, undefined);
     const weights = await app.inject({ method: 'POST', url: '/api/default-position-weights', payload: { variables: {} } });
@@ -154,7 +154,12 @@ test('REST and GraphQL account reads expose computed values without private colu
     const profile = await app.inject('/api/accounts/Alice');
     assert.equal(profile.statusCode, 200, profile.body);
     const profileAlice = profile.json<Record<string, unknown>>();
-    assert.deepEqual(profileAlice.matches, accounts[0]!.matches);
+    assert.equal(profileAlice.matches, undefined);
+    const raw = await app.inject(`/api/accounts/${alice}/history/matches`);
+    assert.equal(raw.statusCode, 200, raw.body);
+    const detail = await app.inject(raw.json().nodes[0].detailUrl);
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.deepEqual(Object.fromEntries(detail.json().nodes.map((field: { key: string; value: unknown }) => [field.key, field.value])), (accounts[0]!.matches as unknown[])[0]);
     assert.deepEqual(profileAlice.ranking, restAlice.ranking);
     assert.equal(profileAlice.email, undefined);
     assert.equal(profileAlice.privateNote, undefined);

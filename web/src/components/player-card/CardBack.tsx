@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Account, Team } from '../../api/models';
+import type { Account, TeamSummary as Team } from '../../api/models';
 import { cardTier } from '../../utils/rankings';
 import { cardDimensions, cardPalette, cardPath, MetallicDefs, MetallicSurface, CardOutline } from './artwork';
 
@@ -15,8 +15,8 @@ export const CardBack = ({ account, team, size }: { account: Account; team: Team
     ? new Date(account.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : 'Unknown';
   const cabinetItems = [
-    ...account.awards.map(a => ({ kind: 'award' as const, awardId: a.awardId, season: a.season })),
-    ...(account.championships || []).map(c => ({
+    ...(account.awardPreview ?? account.awards ?? []).map(a => ({ kind: 'award' as const, awardId: a.awardId, season: a.season })),
+    ...(account.championshipPreview ?? account.championships ?? []).map(c => ({
       kind: 'champ' as const,
       placement: c.placement,             // 'winner' | 'runner_up'
       season: c.season,

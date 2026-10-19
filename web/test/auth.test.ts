@@ -4,7 +4,6 @@ import React,{createElement} from 'react';
 import {act,create,type ReactTestRenderer} from 'react-test-renderer';
 import {ApolloProvider} from '@apollo/client/react';
 import {createClient} from '@supabase/supabase-js';
-import type {Account} from '../src/api/models';
 import {session} from './session-fixture';
 
 const events=new EventTarget();
@@ -25,8 +24,8 @@ after(async()=>{
  await supabase.auth.dispose();
  for(const [key,value]of Object.entries(originals)){if(value)Object.defineProperty(globalThis,key,value);else Reflect.deleteProperty(globalThis,key);}
 });
-function account(id='user-a'):Account {
- return {id,username:id,position:'ST',teamId:null,imageUrl:null,country:null,stats:{games:0,wins:0,draws:0,losses:0,goals:0,assists:0,passes:0,tackles:0,deflects:0,catches:0,cleanSheets:0,motm:0},ranking:{score:0,percentile:0,ranked:false,gamesPlayed:0,tier:'BRONZE'},cardStats:[],matches:[],awards:[],championships:[],totwUntil:null,cheater:false,strikersId:'123',steamUrl:null,createdAt:1};
+function account(id='user-a') {
+ return {id,username:id,position:'ST',team:null,teamId:null,imageUrl:null,country:null,stats:{games:0,wins:0,draws:0,losses:0,goals:0,assists:0,passes:0,tackles:0,deflects:0,catches:0,cleanSheets:0,motm:0},ranking:{score:0,percentile:0,ranked:false,gamesPlayed:0,tier:'BRONZE'},cardStats:Array.from({length:6},()=>({label:'Goals',value:'0'})),season:'all',awardPreview:[],championshipPreview:[],awardCount:0,championshipCount:0,email:null,pendingImageUrl:null,roles:[],totwUntil:null,cheater:false,strikersId:'123',steamUrl:null,createdAt:1};
 }
 const mount=async()=>{await act(async()=>{renderer=create(createElement(ApolloProvider,{client},createElement(App)));await tick();});};
 const secondary=()=>createClient('https://auth.example.test','sb_publishable_test',{auth:{storage:localStorage,storageKey,persistSession:true,autoRefreshToken:false,detectSessionInUrl:false,flowType:'pkce'}});

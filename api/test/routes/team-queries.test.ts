@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { createApp } from '../helper.js';
+import { collectPage } from '../responses.js';
 import { connectDatabase, Prisma } from '../../plugins/db/client.js';
 
 const teamPath = (id: string) => `/api/teams/${encodeURIComponent(id)}`;
@@ -35,7 +36,7 @@ test('UUID invitations, pending captains, roster rollback and history restrictio
     await t.test('pending captain is visible without active membership; invitations follow account UUID', async () => {
       const shown = await call('GET', teamPath(pending), undefined, captain);
       assert.equal(shown.statusCode, 200, shown.body);
-      assert.deepEqual(shown.json().members, [names.get(captain)]);
+      assert.deepEqual(await collectPage(app, `${teamPath(pending)}/members`, { authorization: `Bearer ${captain}` }), [names.get(captain)]);
       assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: captain } })).team_id, null);
       await db.client.account.update({ where: { id: invited }, data: { username: `${names.get(invited)}_new` } });
       assert.equal((await call('GET', teamPath(pending), undefined, invited)).statusCode, 200);

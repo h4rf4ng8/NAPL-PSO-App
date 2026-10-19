@@ -62,7 +62,7 @@ test('current account ranking uses one population read and keeps private fields 
   const result = currentAccountDto(await getCurrentAccount(db, accountId), []);
   const summarySql = statements.find(sql => sql.sql.includes('AS season_stats'))!;
   assert.equal(result?.email, 'alice@example.test');
-  assert.equal(result?.pendingImageUrl, 'private-image');
+  assert.match(String(result?.pendingImageUrl), /^\/api\/media\/accounts\/[^/]+\/pending-image\?v=[\w-]{12}$/);
   assert.equal(result?.id, accountId);
   assert.match(summarySql.sql, /FROM asl\.accounts a ORDER BY/);
   assert.match(summarySql.sql, /jsonb_array_elements/);

@@ -1,9 +1,12 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { request } from '../../api/http';
+import type { TeamSummary } from '../teams/models';
 import { Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Champions } from './models';
-import type { Team } from '../teams/models';
 import { Dialog } from '../../components/Dialog';
 import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
@@ -14,7 +17,12 @@ import { C } from '../../theme/theme';
 
 
 // SeasonChampions Manager
-export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams, currentSeason, onRefresh }: { account: Account; allPlayers: Account[]; allTeams: Team[]; currentSeason: string; onRefresh: () => void }) => {
+export const SeasonChampionsManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
+  const [teamSearch,setTeamSearch] = useState('');
+  const teamPage = useRestPage<TeamSummary>('/api/teams?status=approved&search='+encodeURIComponent(teamSearch));
+  const [savedTeams,setSavedTeams] = useState<TeamSummary[]>([]);
+  const allTeams = [...savedTeams,...(teamPage.data?.nodes ?? []).filter(team=>savedTeams.every(saved=>saved.id!==team.id))];
+  const [loaded,setLoaded] = useState(false);
   const [champions, setChampions] = useState<Champions>({});             // { S1: { winnerTeamId, runnerUpTeamId } }
   const [editingSeason, setEditingSeason] = useState(currentSeason);
   const [winnerTeamId, setWinnerTeamId] = useState('');
@@ -32,8 +40,8 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
   // Load championships once
   useEffect(() => {
     (async () => {
-      const c = await adminApi.getChampions();
-      setChampions(c || {});
+      try { const c = await adminApi.getChampions(); setChampions(c || {}); setLoaded(true); }
+      catch { setError('Could not load complete championship settings. Reopen the editor to retry.'); }
     })();
   }, []);
 
@@ -46,7 +54,13 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
   }, [editingSeason, champions]);
 
   const teamById = (id: string | null | undefined) => approvedTeams.find(t => t.id === id) || allTeams.find(t => t.id === id);
-  const playersOnTeam = (teamId: string | null | undefined) => allPlayers.filter(p => p.teamId === teamId);
+  const playerCount = (teamId: string | null | undefined) => teamById(teamId)?.memberCount ?? 0;
+  useEffect(()=>{
+    let active=true;
+    const ids=[winnerTeamId,runnerUpTeamId].filter(Boolean);
+    void Promise.all(ids.map(id=>request<TeamSummary>('/api/teams/'+encodeURIComponent(id)))).then(teams=>{if(active)setSavedTeams(teams);}).catch(()=>{if(active)setError('Could not load selected teams.');});
+    return ()=>{active=false;};
+  },[winnerTeamId,runnerUpTeamId]);
 
   // Collect every season that currently has championships set, plus the current season
   const knownSeasons = useMemo(() => {
@@ -61,6 +75,7 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
 
   // Save handler — confirms first to make the impact explicit
   const requestSave = () => {
+    if(!loaded)return;
     setError(''); setInfo('');
     if (!editingSeason.trim()) { setError('Pick a season'); return; }
     if (!winnerTeamId && !runnerUpTeamId) { setError('Pick at least a winner or runner-up'); return; }
@@ -72,6 +87,7 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
   };
 
   const doSave = async () => {
+    if(!loaded)return;
     setBusy(true);
     setError(''); setInfo('');
     try {
@@ -91,8 +107,8 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
 
       const wTeam = winnerTeamId ? teamById(winnerTeamId) : null;
       const rTeam = runnerUpTeamId ? teamById(runnerUpTeamId) : null;
-      const wCount = wTeam ? playersOnTeam(winnerTeamId).length : 0;
-      const rCount = rTeam ? playersOnTeam(runnerUpTeamId).length : 0;
+      const wCount = wTeam ? playerCount(winnerTeamId) : 0;
+      const rCount = rTeam ? playerCount(runnerUpTeamId) : 0;
       const parts = [];
       if (wTeam) parts.push(`${wTeam.name} (winner) — ${wCount} player${wCount === 1 ? '' : 's'}`);
       if (rTeam) parts.push(`${rTeam.name} (runner-up) — ${rCount} player${rCount === 1 ? '' : 's'}`);
@@ -112,6 +128,7 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
   };
 
   const doClear = async () => {
+    if(!loaded)return;
     setBusy(true);
     try {
       const next = { ...champions };
@@ -130,6 +147,10 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
 
   return (
     <div>
+      {!loaded && <p role="status">Loading complete championship settings…</p>}
+      {teamPage.error && <p role="alert">{teamPage.error}</p>}
+      <input aria-label="Find championship team" placeholder="Find team…" value={teamSearch} onChange={event=>setTeamSearch(event.target.value)} />
+      <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
       <div className="flex items-center gap-2 mb-4">
         <Trophy size={22} style={{ color: C.goldLight }} />
         <h3 className="font-display text-2xl tracking-wider" style={{ color: C.cream }}>SEASON CHAMPIONS</h3>
@@ -182,7 +203,7 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
               <option value="" style={{ background: C.navyDeep }}>— None —</option>
               {approvedTeams.map(t => (
                 <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
-                  {t.name} ({playersOnTeam(t.id).length} players)
+                  {t.name} ({playerCount(t.id)} players)
                 </option>
               ))}
             </select>
@@ -200,7 +221,7 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
               <option value="" style={{ background: C.navyDeep }}>— None —</option>
               {approvedTeams.map(t => (
                 <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
-                  {t.name} ({playersOnTeam(t.id).length} players)
+                  {t.name} ({playerCount(t.id)} players)
                 </option>
               ))}
             </select>
@@ -240,9 +261,9 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
                   PLAYERS GETTING THE GOLD TROPHY
                 </div>
                 <div className="font-body text-xs" style={{ color: C.cream }}>
-                  {playersOnTeam(winnerTeamId).length === 0
+                  {playerCount(winnerTeamId) === 0
                     ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
-                    : playersOnTeam(winnerTeamId).map(p => p.username).join(', ')}
+                    : <ChampionRoster teamId={winnerTeamId} />}
                 </div>
               </div>
             )}
@@ -252,9 +273,9 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
                   PLAYERS GETTING THE SILVER TROPHY
                 </div>
                 <div className="font-body text-xs" style={{ color: C.cream }}>
-                  {playersOnTeam(runnerUpTeamId).length === 0
+                  {playerCount(runnerUpTeamId) === 0
                     ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
-                    : playersOnTeam(runnerUpTeamId).map(p => p.username).join(', ')}
+                    : <ChampionRoster teamId={runnerUpTeamId} />}
                 </div>
               </div>
             )}
@@ -334,3 +355,12 @@ export const SeasonChampionsManager = ({ account: _account, allPlayers, allTeams
     </div>
   );
 };
+
+
+function ChampionRoster({teamId}:{teamId:string}) {
+  const page = useRestPage<string>(`/api/teams/${encodeURIComponent(teamId)}/members`);
+  return <div>{page.loading && <p role="status">Loading roster…</p>}{page.error && <p role="alert">{page.error}</p>}
+    {(page.data?.nodes ?? []).join(', ')}
+    <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
+  </div>;
+}

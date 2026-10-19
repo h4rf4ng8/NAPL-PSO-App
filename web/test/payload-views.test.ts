@@ -1,0 +1,32 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import { ApolloClient, ApolloLink, InMemoryCache, Observable } from '@apollo/client';
+import { ApolloProvider } from '@apollo/client/react';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { StatsView } from '../src/features/accounts/StatsView';
+import { accountStatsSchema } from '@napl/contracts/accounts';
+Object.defineProperty(globalThis,'React',{configurable:true,value:React});
+after(()=>{Reflect.deleteProperty(globalThis,'React');});
+const stats=Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key=>[key,0]));
+test('leaderboard requests only explicit pages and filters on the server',async()=>{
+ const calls:{name:string;variables:Record<string,unknown>}[]=[];
+ const client=new ApolloClient({cache:new InMemoryCache(),link:new ApolloLink(operation=>new Observable(observer=>{
+  calls.push({name:operation.operationName,variables:operation.variables});
+  if(operation.operationName==='Seasons')observer.next({data:{seasons:{__typename:'StringPage',nodes:['S2','S1'],summaries:[{games:1,players:1},{games:1,players:1}],totalCount:2,pageInfo:{__typename:'PayloadPageInfo',endCursor:null,hasNextPage:false}}}});
+  else observer.next({data:{leaderboard:{__typename:'AccountSummaryPage',totalCount:20,nodes:[{__typename:'AccountSummary',id:operation.variables.after?'second':'first',username:operation.variables.after?'Second':'First',position:'CM',team:null,teamId:null,imageUrl:null,country:null,stats,ranking:{__typename:'Ranking',score:95,percentile:0.9,ranked:true,gamesPlayed:20,tier:'DIAMOND'}}],pageInfo:{__typename:'PayloadPageInfo',endCursor:'next',hasNextPage:true}}}});
+  observer.complete();
+ }))});
+ let view:ReactTestRenderer;
+ await act(async()=>{view=create(React.createElement(ApolloProvider,{client},React.createElement(StatsView)));await new Promise(resolve=>setImmediate(resolve));});
+ assert.equal(calls.filter(call=>call.name==='Leaderboard').length,1);
+ assert.equal(calls.find(call=>call.name==='Leaderboard')!.variables.after,null);
+ const button=(label:string)=>view!.root.findAllByType('button').find(node=>node.children.join('')===label)!;
+ await act(async()=>{button('Next players').props.onClick();await new Promise(resolve=>setImmediate(resolve));});
+ assert.equal(calls.filter(call=>call.name==='Leaderboard').length,2);assert.equal(calls.at(-1)!.variables.after,'next');
+ await act(async()=>{button('S2').props.onClick();await new Promise(resolve=>setImmediate(resolve));});
+ assert.equal(calls.at(-1)!.variables.season,'S2');assert.equal(calls.at(-1)!.variables.after,null);
+ await act(async()=>{button('GK').props.onClick();await new Promise(resolve=>setImmediate(resolve));});
+ assert.equal(calls.at(-1)!.variables.position,'GK');assert.equal(calls.filter(call=>call.name==='Leaderboard').length,4);
+ act(()=>view!.unmount());client.stop();
+});

@@ -1,8 +1,11 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
 import { CheckCircle, User, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
-import type { Account } from '../accounts/models';
+import type { AdminPlayer } from '../accounts/models';
 import { C } from '../../theme/theme';
+import { MediaImage } from '../../components/MediaImage';
 
 
 
@@ -10,20 +13,23 @@ import { C } from '../../theme/theme';
 
 
 // Pictures Manager
-export const PicturesManager = ({ allPlayers, onRefresh }: { allPlayers: Account[]; onRefresh: () => void }) => {
+export const PicturesManager = ({ onRefresh }: { onRefresh: () => void }) => {
+  const page = useRestPage<AdminPlayer>('/api/accounts?pendingImage=1');
+  const allPlayers = page.data?.nodes ?? [];
+  const refresh = () => { page.restart(); onRefresh(); };
   const [busy, setBusy] = useState('');
   const [info, setInfo] = useState('');
 
   // Players who have a picture waiting for review
   const pending = allPlayers.filter(p => p.pendingImageUrl);
 
-  const approve = async (player: Account) => {
+  const approve = async (player: AdminPlayer) => {
     setBusy(player.username); setInfo('');
     try {
       // The pending picture becomes the live picture
-      await accountApi.patchAccount(player.id,{imageUrl: player.pendingImageUrl, pendingImageUrl: null});
+      await accountApi.reviewImage(player.id, true);
       setInfo(`✓ ${player.username}'s picture approved`);
-      onRefresh?.();
+      refresh();
     } catch (error) {
       setInfo('Error: ' + (error instanceof Error ? error.message : String(error)));
     }
@@ -31,14 +37,14 @@ export const PicturesManager = ({ allPlayers, onRefresh }: { allPlayers: Account
     setTimeout(() => setInfo(''), 3000);
   };
 
-  const reject = async (player: Account) => {
+  const reject = async (player: AdminPlayer) => {
     if (!confirm(`Reject ${player.username}'s new picture? Their current picture stays unchanged.`)) return;
     setBusy(player.username); setInfo('');
     try {
       // Discard the pending picture; live imageUrl untouched
-      await accountApi.patchAccount(player.id,{pendingImageUrl: null});
+      await accountApi.reviewImage(player.id, false);
       setInfo(`${player.username}'s picture rejected`);
-      onRefresh?.();
+      refresh();
     } catch (error) {
       setInfo('Error: ' + (error instanceof Error ? error.message : String(error)));
     }
@@ -61,6 +67,9 @@ export const PicturesManager = ({ allPlayers, onRefresh }: { allPlayers: Account
         </p>
       </div>
 
+      {page.loading && <p role="status">Loading pictures…</p>}
+      {page.error && <p role="alert">{page.error}</p>}
+      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
       {info && (
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
       )}
@@ -88,7 +97,7 @@ export const PicturesManager = ({ allPlayers, onRefresh }: { allPlayers: Account
                     background: `${C.navyDeep}22`, border: `1px solid ${C.navyLight}`,
                   }}>
                     {p.imageUrl ? (
-                      <img src={p.imageUrl} alt="current" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      <MediaImage src={p.imageUrl} alt="current" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
                         <User size={36} style={{ color: `${C.brandNavy}33` }} />
@@ -103,7 +112,7 @@ export const PicturesManager = ({ allPlayers, onRefresh }: { allPlayers: Account
                     width: 120, height: 120, borderRadius: 10, overflow: 'hidden',
                     background: `${C.navyDeep}22`, border: `2px solid ${C.goldLight}`,
                   }}>
-                    <img src={p.pendingImageUrl || undefined} alt="pending" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <MediaImage src={p.pendingImageUrl || undefined} alt="pending" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   </div>
                 </div>
                 {/* Actions */}

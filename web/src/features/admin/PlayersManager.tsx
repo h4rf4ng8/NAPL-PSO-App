@@ -1,9 +1,12 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { readText } from '../../api/page';
+import type { TeamSummary } from '../teams/models';
 import { User, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
 import { teams as teamApi } from '../teams/api';
-import type { Account, PositionRequest } from '../accounts/models';
-import type { Team } from '../teams/models';
+import type { PositionRequest, AdminPlayer } from '../accounts/models';
 import { C } from '../../theme/theme';
 import { ALL_POSITIONS, POSITIONS } from '@napl/contracts/league';
 
@@ -13,13 +16,21 @@ import { ALL_POSITIONS, POSITIONS } from '@napl/contracts/league';
 
 
 // Players Manager
-export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _currentSeason = 'S1', onRefresh }: { allPlayers: Account[]; allTeams?: Team[]; currentSeason?: string; onRefresh: () => void }) => {
+export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh }: { currentSeason?: string; onRefresh: () => void }) => {
   const [search, setSearch] = useState('');
-  const [teamEditing, setTeamEditing] = useState<Account | null>(null); // account whose team is being changed
-  const [sidEditing, setSidEditing] = useState<Account | null>(null); // account whose Strikers ID is being changed
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const allPlayers = playerPage.data?.nodes ?? [];
+  const [teamSearch,setTeamSearch] = useState('');
+  const teamPage = useRestPage<TeamSummary>('/api/teams?search='+encodeURIComponent(teamSearch));
+  const allTeams = teamPage.data?.nodes ?? [];
+  const pendingPage = useRestPage<PositionRequest & {reasonUrl:string}>('/api/position-requests?status=pending');
+  const pendingPosRequests = pendingPage.data?.nodes ?? [];
+  const [reasons,setReasons] = useState<Record<string,string>>({});
+  const refresh = () => { playerPage.restart(); pendingPage.restart(); onRefresh(); };
+  const [teamEditing, setTeamEditing] = useState<AdminPlayer | null>(null); // account whose team is being changed
+  const [sidEditing, setSidEditing] = useState<AdminPlayer | null>(null); // account whose Strikers ID is being changed
   const [newSid, setNewSid] = useState('');
-  const [posEditing, setPosEditing] = useState<Account | null>(null); // account whose position is being changed
-  const [pendingPosRequests, setPendingPosRequests] = useState<PositionRequest[]>([]);
+  const [posEditing, setPosEditing] = useState<AdminPlayer | null>(null); // account whose position is being changed
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -32,14 +43,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
-  // Load pending position change requests for admin review
-  const loadPendingPosRequests = async () => {
-    try {
-      const reqs = await accountApi.listPositionRequests('pending');
-      setPendingPosRequests(reqs);
-    } catch { /* table may not exist yet */ setPendingPosRequests([]); }
-  };
-  useEffect(() => { loadPendingPosRequests(); }, []);
+  const loadPendingPosRequests = () => pendingPage.restart();
 
   const approvePosRequest = async (req: PositionRequest) => {
     setBusy(true);
@@ -47,7 +51,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
       await accountApi.approvePositionRequest(req.id);
       setInfo(`✓ Approved: ${req.username} is now ${req.toPos}`);
       await loadPendingPosRequests();
-      onRefresh?.();
+      refresh();
       setTimeout(() => setInfo(''), 3000);
     } catch (error_) { setError('Could not approve: ' + (error_ instanceof Error ? error_.message : String(error_))); }
     setBusy(false);
@@ -74,21 +78,21 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
   // free agent. Keeps both the old and new teams' member arrays in sync.
   // Flag/unflag a player as a cheater. Just toggles the boolean — the visual
   // CHEATER stamp on their card appears wherever PlayerCard renders.
-  const toggleCheater = async (player: Account) => {
+  const toggleCheater = async (player: AdminPlayer) => {
     const wasCheater = !!player.cheater;
     const label = wasCheater ? `Remove CHEATER flag from ${player.username}?` : `Flag ${player.username} as CHEATER? Their card will show a red diagonal CHEATER stamp.`;
     if (!confirm(label)) return;
     setError(''); setBusy(true);
     try {
       await accountApi.patchAccount(player.id,{cheater:!wasCheater});
-      onRefresh?.();
+      refresh();
     } catch (error_) {
       setError('Could not toggle cheater: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
     setBusy(false);
   };
 
-  const changePosition = async (player: Account, newPos: string) => {
+  const changePosition = async (player: AdminPlayer, newPos: string) => {
     setError('');
     if (!newPos || newPos === player.position) { setPosEditing(null); return; }
     if (!(ALL_POSITIONS as readonly string[]).includes(newPos)) { setError('Invalid position'); return; }
@@ -97,7 +101,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
       await accountApi.patchAccount(player.id,{position:newPos});
       setInfo(`✓ ${player.username}'s position changed to ${newPos}`);
       setPosEditing(null);
-      onRefresh?.();
+      refresh();
       setTimeout(() => setInfo(''), 3000);
     } catch (error_) {
       setError('Could not change position: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -105,7 +109,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
     setBusy(false);
   };
 
-  const changeTeam = async (player: Account, newTeamId: string) => {
+  const changeTeam = async (player: AdminPlayer, newTeamId: string) => {
     setError('');
     // No team assignment without a Strikers Club ID linked on the account.
     // Admins can set the ID via the SC ID button on this same row.
@@ -124,7 +128,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
       const label = newTeamId ? (teamById(newTeamId)?.name || 'team') : 'Free Agent';
       setInfo(`✓ ${player.username} → ${label}`);
       setTeamEditing(null);
-      onRefresh?.();
+      refresh();
       setTimeout(() => setInfo(''), 3000);
     } catch (error_) {
       setError('Could not change team: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -134,7 +138,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
 
   // Admin override for Strikers Club Player ID. Players can't change theirs
   // once set (see MY CARD); this is the only escape hatch. Empty input clears it.
-  const startSidEdit = (player: Account) => {
+  const startSidEdit = (player: AdminPlayer) => {
     setSidEditing(player);
     setNewSid(player.strikersId || '');
     setError('');
@@ -149,20 +153,10 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
     }
     setBusy(true);
     try {
-      // Uniqueness check: refuse to set an ID that another account already owns.
-      if (sid) {
-        const clash = allPlayers.find(p =>
-          p.strikersId && String(p.strikersId) === sid && p.username !== sidEditing.username
-        );
-        if (clash) {
-          setError(`That ID is already linked to ${clash.username}. Clear theirs first if you're moving it.`);
-          setBusy(false); return;
-        }
-      }
       await accountApi.patchAccount(sidEditing.id,{strikersId:sid||null});
       setInfo(`✓ ${sidEditing.username} → Strikers ID ${sid || 'cleared'}`);
       setSidEditing(null);
-      onRefresh?.();
+      refresh();
       setTimeout(() => setInfo(''), 3000);
     } catch (error_) {
       setError('Could not save: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -192,6 +186,10 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
       )}
 
+      {playerPage.loading && <p role="status">Loading players…</p>}
+      {(playerPage.error || pendingPage.error || teamPage.error) && <p role="alert">{playerPage.error || pendingPage.error || teamPage.error}</p>}
+      <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
+      <PageButtons {...pendingPage} hasNextPage={pendingPage.data?.pageInfo.hasNextPage ?? false} />
       {/* POSITION CHANGE REQUESTS — pending queue for admin review */}
       {pendingPosRequests.length > 0 && (
         <div className="rounded-xl p-4" style={{
@@ -199,7 +197,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
         }}>
           <div className="font-display tracking-wider text-sm mb-3 flex items-center gap-2" style={{ color: C.brandNavy }}>
             <span style={{ color: C.goldLight }}>◆</span>
-            POSITION CHANGE REQUESTS ({pendingPosRequests.length})
+            POSITION CHANGE REQUESTS ({pendingPage.data?.totalCount ?? 0})
           </div>
           <div className="space-y-2">
             {pendingPosRequests.map(req => (
@@ -229,9 +227,10 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
                     >DENY</button>
                   </div>
                 </div>
-                {req.reason && (
+                <button onClick={() => { void readText((req as PositionRequest & {reasonUrl:string}).reasonUrl).then(value=>{setReasons(previous=>({...previous,[req.id]:value}));}).catch(()=>{setError('Could not load request reason.');}); }}>Read reason</button>
+                {reasons[req.id] && (
                   <div className="font-body text-xs italic px-2 py-1.5 rounded" style={{ background: `${C.navyLight}22`, color: `${C.brandNavy}cc` }}>
-                    "{req.reason}"
+                    "{reasons[req.id]}"
                   </div>
                 )}
               </div>
@@ -255,7 +254,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
             NO PLAYERS FOUND
           </div>
         ) : filtered.map(p => {
-          const playerTeam = p.teamId ? teamById(p.teamId) : null;
+          const playerTeam = p.team ?? (p.teamId ? teamById(p.teamId) : null);
           return (
           <div key={p.id || p.username} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
             {(() => { if (teamEditing && (teamEditing.id === p.id)) return (
@@ -263,6 +262,8 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
                 <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
                   CHANGE TEAM — {p.username.toUpperCase()}
                 </div>
+                <input aria-label="Find team" placeholder="Find team…" value={teamSearch} onChange={event=>setTeamSearch(event.target.value)} />
+                <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
                 <select
                   autoFocus
                   defaultValue={p.teamId || ''}
@@ -272,6 +273,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
                   style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
                 >
                   <option value="">— Free Agent (no team) —</option>
+                  {p.teamId && approvedTeams.every(team=>team.id!==p.teamId) && <option value={p.teamId}>Current team</option>}
                   {approvedTeams.map(t => (
                     <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>
                   ))}
@@ -348,7 +350,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
                     {p.position} • {p.stats?.games || 0} GAMES
                     {playerTeam
                       ? <span style={{ color: playerTeam.color || C.green }}> • {playerTeam.tag}</span>
-                      : <span style={{ color: `${C.brandNavy}44` }}> • FREE AGENT</span>}
+                      : <span style={{ color: `${C.brandNavy}44` }}>{p.teamId ? ' • ASSIGNED TEAM' : ' • FREE AGENT'}</span>}
                     {p.strikersId
                       ? <span style={{ color: `${C.brandNavy}77` }}> • SC:{p.strikersId}</span>
                       : <span style={{ color: C.red }}> • NO SC ID</span>}

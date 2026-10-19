@@ -1,3 +1,4 @@
+import { page } from './page-fixture';
 import {test,afterEach,mock} from 'node:test';
 import assert from 'node:assert/strict';
 import {request,ApiError} from '../src/api/http';
@@ -17,9 +18,9 @@ test('direct bearer writes retry expiry with stable method, URL, serialized body
 });
 test('real SDK shares one refresh between concurrent Apollo and REST expiry and persists rotated tokens',async()=>{
  const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();let renewals=0;const attempts=new Map<string,number>();
- await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){renewals++;assert.deepEqual(JSON.parse(String(init?.body)),{refresh_token:'user-a-refresh-1'});started.resolve();return renewal.promise;}const path=apiPath(url),count=(attempts.get(path)??0)+1;attempts.set(path,count);return count===1?json({errors:[{extensions:{code:'access_expired'}}]},401):json(path==='/api/team-records'?{data:{teamRecords:[]}}:[]);});
+ await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){renewals++;assert.deepEqual(JSON.parse(String(init?.body)),{refresh_token:'user-a-refresh-1'});started.resolve();return renewal.promise;}const path=apiPath(url),count=(attempts.get(path)??0)+1;attempts.set(path,count);return count===1?json({errors:[{extensions:{code:'access_expired'}}]},401):json(path==='/api/team-records'?{data:{teamRecords: page([])}}:[]);});
  const pending=Promise.all([client.query({query:TeamRecordsDocument}),request('/api/accounts')]);await started.promise;await tick();assert.equal(renewals,1);renewal.resolve(json(session('user-a',2)));
- const [graph,rest]=await pending;assert.deepEqual(graph.data,{teamRecords:[]});assert.deepEqual(rest,[]);assert.equal(renewals,1);assert.deepEqual(attempts.values().toArray(),[2,2]);assert.equal((await supabase.auth.getSession()).data.session?.refresh_token,'user-a-refresh-2');
+ const [graph,rest]=await pending;assert.deepEqual(graph.data,{teamRecords: page([])});assert.deepEqual(rest,[]);assert.equal(renewals,1);assert.deepEqual(attempts.values().toArray(),[2,2]);assert.equal((await supabase.auth.getSession()).data.session?.refresh_token,'user-a-refresh-2');
 });
 test('delayed expired response reuses a token already refreshed by SDK',async()=>{
  const delayed=Promise.withResolvers<Response>();let reads=0,refreshes=0;await login(async url=>{if(url.includes('grant_type=refresh_token')){refreshes++;return json(session('user-a',2));}reads++;return reads===1?delayed.promise:json([]);});const pending=request('/api/accounts');await tick();await supabase.auth.refreshSession();delayed.resolve(json({error:'access_expired'},401));assert.deepEqual(await pending,[]);assert.equal(refreshes,1);assert.equal(reads,2);
@@ -54,6 +55,17 @@ test('switching identities during response JSON decoding cannot invalidate or re
  const decoded=Promise.withResolvers<unknown>();let reads=0;
  await login(async()=>{const response=json({saved:true});mock.method(response,'json',()=>decoded.promise);reads++;return response;});
  const pending=request('/api/teams','POST',{});await tick();mock.method(globalThis,'fetch',async()=>json(session('user-b')));await supabase.auth.signInWithPassword({email:'new@example.test',password:'test'});
- client.cache.writeQuery({query:TeamRecordsDocument,data:{teamRecords:[]}});const cached=client.cache.extract();decoded.resolve({saved:true});
+ client.cache.writeQuery({query:TeamRecordsDocument,data:{teamRecords: page([])}});const cached=client.cache.extract();decoded.resolve({saved:true});
  await assert.rejects(pending,error=>error instanceof ApiError&&error.code==='login_required');assert.equal(reads,1);assert.deepEqual(client.cache.extract(),cached);
+});
+test('binary media shares bearer renewal and returns image bytes without JSON decoding',async()=>{
+ let attempts=0;const bytes=new Uint8Array([137,80,78,71]);
+ await login(async(url,init)=>{
+  if(url.includes('grant_type=refresh_token'))return json(session('user-a',2));
+  assert.equal(apiPath(url),'/api/media/accounts/a/pending-image');
+  assert.match(new Headers(init?.headers).get('Authorization')??'',/^Bearer /);
+  attempts++;return attempts===1?json({error:'access_expired'},401):new Response(bytes,{headers:{'Content-Type':'image/png'}});
+ });
+ const image=await request<Blob>('/api/media/accounts/a/pending-image');
+ assert.deepEqual(new Uint8Array(await image.arrayBuffer()),bytes);assert.equal(attempts,2);
 });

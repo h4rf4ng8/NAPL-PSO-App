@@ -1,4 +1,5 @@
 import type { Article, News, RuleSection, ScheduledMatch, Transfer } from '../../generated/prisma/client.js';
+import { pathSegment, storedImage } from '../payload/page.js';
 
 export function newsDto(row: News) {
   return {
@@ -19,7 +20,7 @@ export function ruleDto(row: RuleSection) {
 
 export function articleDto(row: Article) {
   return {
-    id: row.id, slug: row.slug, title: row.title, coverImageUrl: row.cover_image_url,
+    id: row.id, slug: row.slug, title: row.title, coverImageUrl: storedImage(row.cover_image_url, `/api/media/articles/${pathSegment(row.id)}/cover`),
     author: row.author, body: row.body, excerpt: row.excerpt,
     publishedAt: row.published_at?.getTime() ?? null, updatedAt: row.updated_at?.getTime() ?? null,
   };

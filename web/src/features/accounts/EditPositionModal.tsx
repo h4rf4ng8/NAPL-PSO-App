@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account, PositionRequest } from './models';
 import { ModalShell } from '../../components/Dialog';
+import { request } from '../../api/http';
+import type { Page } from '../../api/page';
 import { C } from '../../theme/theme';
 
 import { POSITIONS } from '../../utils/league';
@@ -10,7 +12,7 @@ import { POSITIONS } from '../../utils/league';
 export const EditPositionModal = ({ account, onClose }: { account: Account; onClose: () => void }) => {
   const [pos, setPos] = useState(account.position);
   const [reason, setReason] = useState('');
-  const [pending, setPending] = useState<PositionRequest | null>(null);   // {toPos} if request is already pending
+  const [pending, setPending] = useState<Pick<PositionRequest, 'id' | 'toPos' | 'fromPos'> | null>(null);   // {toPos} if request is already pending
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -23,13 +25,9 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
 
   // Check if a pending request already exists for this account
   useEffect(() => {
-    (async () => {
-      try {
-        const reqs = await accountApi.listPositionRequests('pending');
-        const mine = reqs.find(r => r.accountId === account.id);
-        if (mine) setPending(mine);
-      } catch { /* table may not exist yet, ignore */ }
-    })();
+    const controller = new AbortController();
+    void request<Page<Pick<PositionRequest, 'id' | 'toPos' | 'fromPos'>>>('/api/position-requests?status=pending&scope=mine', 'GET', undefined, controller.signal).then(page => { setPending(page.nodes[0] ?? null); }).catch((error: unknown) => { if (!controller.signal.aborted) setError(error instanceof Error ? error.message : 'Could not load current request.'); });
+    return () => controller.abort();
   }, [account.id]);
 
   const handleSubmit = async () => {

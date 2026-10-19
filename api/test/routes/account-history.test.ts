@@ -63,3 +63,15 @@ test('match history validates bounds and binds cursors to account and filters', 
     error => error instanceof HttpError && error.status === 400 && error.code === 'invalid_cursor');
   assert.equal(fake.calls, 1);
 });
+
+test('Unicode filter cursors remain bounded and traverse the next page', async () => {
+  const season = '球'.repeat(64), opponent = '😀'.repeat(80);
+  const fake = fakeDatabase(call => ({ version: '1', rows: call
+    ? [{ match: { ...match(2), season, opponent }, ordinality: 2 }]
+    : [{ match: { ...match(1), season, opponent }, ordinality: 1 }, { match: { ...match(2), season, opponent }, ordinality: 2 }] }));
+  const first = await accountMatches(fake.database, { id, first: 1, season, opponent });
+  assert.ok(first.pageInfo.endCursor!.length < 200);
+  const second = await accountMatches(fake.database, { id, first: 1, season, opponent, after: first.pageInfo.endCursor });
+  assert.equal(second.nodes[0]!.id, 'match-2');
+  assert.equal(second.pageInfo.hasNextPage, false);
+});

@@ -11,7 +11,7 @@ async function teamRecords(database: Database, teams: Team[]): Promise<TeamRecor
   const [accounts, requests, seasons, participation] = await Promise.all([
     database.client.account.findMany({ select: { id: true, username: true, team_id: true } }),
     database.client.teamJoinRequest.findMany({ where: { team_id: { in: teams.map(team => team.id) } }, orderBy: { created_at: 'asc' } }),
-    database.client.season.findMany(), database.client.teamSeason.findMany({ where: { team_id: { in: teams.map(team => team.id) } } }),
+    database.client.season.findMany({ orderBy: { id: 'asc' } }), database.client.teamSeason.findMany({ where: { team_id: { in: teams.map(team => team.id) } } }),
   ]);
   const byId = new Map(accounts.map(account => [account.id, account]));
   return teams.map(team => ({ ...team, owner_username: byId.get(team.owner_account_id)?.username ?? '',
@@ -22,14 +22,14 @@ async function teamRecords(database: Database, teams: Team[]): Promise<TeamRecor
 }
 
 export async function listTeams(database: Database, viewer: { id?: string; admin: boolean }) {
-  const rows = await teamRecords(database, await database.client.team.findMany());
+  const rows = await teamRecords(database, await database.client.team.findMany({ orderBy: { id: 'asc' } }));
   // Invitations remain visible after a response so applicants can see the review.
   return rows.filter(row => row.status === 'approved' || viewer.admin || row.owner_account_id === viewer.id || row.pending_members.some(invitation => invitation.accountId === viewer.id)).map(row => teamDto(row));
 }
 
 export async function getTeam(database: Database, id: string, lock = false): Promise<TeamRecord | null> {
   // Prisma has no row-lock API; roster/review mutations must keep their lock.
-  const rows = lock ? await database.query<Team>(Prisma.sql`SELECT * FROM asl.teams WHERE id=${id} FOR UPDATE`) : await database.client.team.findMany({ where: { id } });
+  const rows = lock ? await database.query<Team>(Prisma.sql`SELECT * FROM asl.teams WHERE id=${id} FOR UPDATE`) : await database.client.team.findMany({ orderBy: { id: 'asc' }, where: { id } });
   const records = await teamRecords(database, rows);
   return records[0] ?? null;
 }
@@ -78,7 +78,7 @@ export async function updateTeam(database: Database, id: string, data: Omit<Pris
 }
 export async function setTeamSeasons(database: Database, id: string, excluded: string[]): Promise<void> {
   for (const season of excluded) await ensureSeason(database, season);
-  const seasons = await database.client.season.findMany();
+  const seasons = await database.client.season.findMany({ orderBy: { id: 'asc' } });
   await database.client.teamSeason.deleteMany({ where: { team_id: id } });
   const included = seasons.filter(season => !excluded.includes(season.id));
   if (included.length > 0) await database.client.teamSeason.createMany({ data: included.map(season => ({ team_id: id, season_id: season.id })) });

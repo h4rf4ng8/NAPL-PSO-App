@@ -1,15 +1,20 @@
 import { ApiError,request } from '../api/http';
 import { resetClient } from '../api/client';
 import { endSession, sessionVersion, storageKey, supabase } from './client';
+import { mapCurrentCard, type CurrentCard } from '../features/accounts/api';
 import type { Account,Result } from '../api/models';
 
 const pending:{callback?:Promise<void>}={};
 export const auth = {
   async getCurrent(signal?:AbortSignal):Promise<Account|null> {
-    try { return await request<Account>('/api/users/me','GET',undefined,signal); }
+    try { const row = await request<CurrentCard | null>('/api/users/me','GET',undefined,signal); return row ? mapCurrentCard(row) : null; }
     catch(error) {
       if(error instanceof ApiError && error.status===401) return null;
-      if(error instanceof ApiError && error.status===404) return request<Account>('/api/users/me','POST',{},signal);
+      if(error instanceof ApiError && error.status===404) {
+        await request<void>('/api/users/me','POST',{},signal);
+        const row = await request<CurrentCard | null>('/api/users/me','GET',undefined,signal);
+        return row ? mapCurrentCard(row) : null;
+      }
       throw error;
     }
   },
@@ -25,7 +30,7 @@ export const auth = {
         if(error) throw error;
         const providerToken=data.session?.provider_token;
         if(!providerToken) throw new Error('Discord profile is missing. Please sign in again.');
-        await request<Account>('/api/users/me','POST',{providerToken});
+        await request<void>('/api/users/me','POST',{providerToken});
       } finally { history.replaceState(null,'','/'); }
     })();
     return pending.callback;

@@ -1,5 +1,9 @@
+import { useQuery } from '@apollo/client/react';
+import { SeasonsDocument } from '../../api/generated/graphql';
+import { PageButtons } from '../../components/PageButtons';
+import { z } from 'zod';
 import { Calendar, Clock, Sparkles } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import { EmptyState } from '../../components/Display';
@@ -11,20 +15,14 @@ import { C } from '../../theme/theme';
 
 
 // Season Manager
-export const SeasonManager = ({ account: _account, allPlayers, currentSeason, onRefresh }: { account: Account; allPlayers: Account[]; currentSeason: string; onRefresh: () => void }) => {
+export const SeasonManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
   const [customName, setCustomName] = useState('');
   const [showCustom, setShowCustom] = useState(false);
   const [error, setError] = useState('');
 
-  // Discover all seasons that have matches
-  const allSeasons = useMemo(() => {
-    const seasonsSet = new Set([currentSeason]);
-    allPlayers.forEach(p => {
-      if (p.seasonStats) Object.keys(p.seasonStats).forEach(s => { if (s !== 'all') seasonsSet.add(s); });
-      else (p.matches || []).forEach(m => { if (m.season) seasonsSet.add(m.season); });
-    });
-    return [...seasonsSet].sort((a,b)=>a.localeCompare(b));
-  }, [allPlayers, currentSeason]);
+  const [after,setAfter] = useState<string|null>(null);
+  const [previous,setPrevious] = useState<(string|null)[]>([]);
+  const seasons = useQuery(SeasonsDocument,{variables:{first:10,after}});
 
   // Determine the next season number (auto-increment from current)
   const suggestNext = (current: string) => {
@@ -53,19 +51,8 @@ export const SeasonManager = ({ account: _account, allPlayers, currentSeason, on
     onRefresh();
   };
 
-  // Per-season stats summary (matches & participating players)
-  const seasonSummaries = allSeasons.map(s => {
-    let matches = 0;
-    let players = 0;
-    allPlayers.forEach(p => {
-      const games = p.seasonStats
-        ? p.seasonStats[s]?.games || 0
-        : (p.matches || []).filter(m => (m.season || 'S1') === s).length;
-      matches += games;
-      if (games > 0) players += 1;
-    });
-    return { season: s, matches, players };
-  });
+  const summaries = z.array(z.object({games:z.number(),players:z.number()})).safeParse(seasons.data?.seasons.summaries ?? []);
+  const seasonSummaries = (seasons.data?.seasons.nodes ?? []).map((season,index)=>({season,...(summaries.success && summaries.data[index])}));
 
   return (
     <div className="space-y-5">
@@ -139,6 +126,11 @@ export const SeasonManager = ({ account: _account, allPlayers, currentSeason, on
         <h4 className="font-display text-xl tracking-wider mb-2 flex items-center gap-2" style={{ color: C.cream }}>
           <Clock size={14} style={{ color: C.goldLight }} /> SEASON HISTORY
         </h4>
+        {seasons.loading && <p role="status">Loading season history…</p>}
+        {seasons.error && <p role="alert">{seasons.error.message}</p>}
+        <PageButtons loading={seasons.loading} canPrevious={previous.length > 0} hasNextPage={seasons.data?.seasons.pageInfo.hasNextPage ?? false}
+          previous={()=>{setAfter(previous.at(-1) ?? null);setPrevious(previous.slice(0,-1));}}
+          next={()=>{setPrevious([...previous,after]);setAfter(seasons.data?.seasons.pageInfo.endCursor ?? null);}} />
         {seasonSummaries.length === 0 ? (
           <EmptyState icon={<Calendar size={36} />} text="No past seasons yet." />
         ) : (
@@ -159,7 +151,7 @@ export const SeasonManager = ({ account: _account, allPlayers, currentSeason, on
                       }}>ACTIVE</span>}
                     </div>
                     <div className="font-mono text-[10px] tracking-wider mt-0.5" style={{ color: `${C.cream}77` }}>
-                      {s.matches} {s.matches === 1 ? 'MATCH' : 'MATCHES'} • {s.players} {s.players === 1 ? 'PLAYER' : 'PLAYERS'}
+                      {s.games === undefined ? 'STATISTICS UNAVAILABLE' : `${s.games} PLAYER APPEARANCES • ${s.players} PLAYERS`}
                     </div>
                   </div>
                   {!isActive && (

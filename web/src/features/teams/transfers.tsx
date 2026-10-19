@@ -1,7 +1,13 @@
+import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Swords, User } from 'lucide-react';
-import { useMemo,useState } from 'react';
+import { useState } from 'react';
 import { teams as teamApi } from './api';
-import { useResource } from '../../hooks/use-resource';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { useQuery } from '@apollo/client/react';
+import { SeasonsDocument } from '../../api/generated/graphql';
+import { mergeSeasonPages } from '../dashboard/season-pages';
+import { segment } from '../../api/http';
 import type { Account } from '../accounts/models';
 import type { Transfer } from './models';
 
@@ -10,22 +16,23 @@ import { C } from '../../theme/theme';
 
 import { isAdmin } from '../../utils/league';
 
+type TransferTeam = { id: string; name: string; tag: string; color: string | null; logoUrl: string | null };
+
 // ============ TRANSFERS VIEW ============
 // Shows every roster move (signings, transfers between teams, releases) as a
 // chronological feed. Season filter dropdown, window badges per Rulebook,
 // admin can edit the window tag on any entry.
 export const TransfersView = ({ account }: { account: Account | null }) => {
-  const { data, loading, error, reload } = useResource(async () => {
-    const [transfers, teams] = await Promise.all([teamApi.listTransfers(), teamApi.listTeams()]);
-    return { transfers, teams };
-  }, []);
-  const transfers = data?.transfers ?? [];
-  const teams = data?.teams ?? [];
+  const [seasonPageError, setSeasonPageError] = useState('');
   const [seasonFilter, setSeasonFilter] = useState('all');
+  const page = useRestPage<Transfer & { fromTeam: TransferTeam | null; toTeam: TransferTeam | null }>(`/api/transfers${seasonFilter === 'all' ? '' : `?season=${segment(seasonFilter)}`}`);
+  const { loading, error } = page;
+  const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
+  const seasons = seasonData?.seasons.nodes ?? [];
+  const filtered = page.data?.nodes ?? [];
   const [editingWindow, setEditingWindow] = useState<Transfer | null>(null);
   const isAdminUser = isAdmin(account);
 
-  const teamById = (id: string | null | undefined) => teams.find(t => t.id === id);
   const fmtDate = (ms: number | null | undefined) => {
     if (!ms) return '';
     const d = new Date(ms);
@@ -35,16 +42,6 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
     if (days === 1) return 'Yesterday';
     return days < 7 ? `${days} days ago` : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
-
-  const seasons = useMemo(() => {
-    const set = new Set<string>();
-    transfers.forEach(t => { if (t.season) set.add(t.season); });
-    return [...set].sort((a,b)=>a.localeCompare(b));
-  }, [transfers]);
-
-  const filtered = seasonFilter === 'all'
-    ? transfers
-    : transfers.filter(t => t.season === seasonFilter);
 
   // Chip style for each transfer kind
   const kindChip = (kind: string) => {
@@ -79,7 +76,7 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
   };
 
   // Compact team display with logo + tag, or "FREE AGENT" placeholder
-  const TeamChip = ({ teamId, color: forcedColor }: { teamId: string | null; color?: string }) => {
+  const TeamChip = ({ teamId, team: t, color: forcedColor }: { teamId: string | null; team: TransferTeam | null; color?: string }) => {
     if (!teamId) {
       return (
         <div className="flex items-center gap-2 min-w-0">
@@ -96,12 +93,11 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
         </div>
       );
     }
-    const t = teamById(teamId);
     const color = forcedColor || t?.color || C.brandNavy;
     return (
       <div className="flex items-center gap-2 min-w-0">
         {t?.logoUrl ? (
-          <img src={t.logoUrl} alt={t.name} className="shrink-0 object-contain" style={{
+          <MediaImage src={mediaUrl(t.logoUrl)} alt={t.name} className="shrink-0 object-contain" style={{
             width: 32, height: 32, borderRadius: 6, padding: 2,
             background: `${color}11`,
             border: `1px solid ${color}66`,
@@ -128,7 +124,7 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
     try {
       await teamApi.saveTransfer({ ...tx, windowType: newType });
       setEditingWindow(null);
-      void reload();
+      page.restart();
     } catch (error) {
       alert('Could not update window: ' + (error instanceof Error ? error.message : String(error)));
     }
@@ -138,7 +134,7 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
     if (!confirm(`Delete this transfer entry? This removes it from the log but doesn't undo the roster move.`)) return;
     try {
       await teamApi.deleteTransfer(tx.id);
-      void reload();
+      page.restart();
     } catch (error) {
       alert('Could not delete: ' + (error instanceof Error ? error.message : String(error)));
     }
@@ -177,7 +173,7 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
       </div>
 
       {loading && <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading transfer activity...</div>}
-      {!loading && error && <div role="alert" className="text-center py-8 font-mono text-sm" style={{ color: C.red }}>{error}</div>}
+      {!loading && error && <div role="alert" className="text-center py-8 font-mono text-sm" style={{ color: C.red }}>{error}<button onClick={page.restart}>Restart transfers</button></div>}
       {!loading && !error && filtered.length === 0 && (
         <div className="text-center py-10 font-mono text-sm rounded" style={{
           color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}66`,
@@ -236,11 +232,11 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
                     {tx.playerUsername}
                   </div>
                   <div className="flex items-center gap-3 flex-1 flex-wrap">
-                    <TeamChip teamId={tx.fromTeamId} />
+                    <TeamChip teamId={tx.fromTeamId} team={tx.fromTeam} />
                     <div className="font-display shrink-0" style={{
                       fontSize: 18, color: `${C.brandNavy}66`, letterSpacing: '0.1em',
                     }}>→</div>
-                    <TeamChip teamId={tx.toTeamId} />
+                    <TeamChip teamId={tx.toTeamId} team={tx.toTeam} />
                   </div>
                 </div>
 
@@ -281,6 +277,9 @@ export const TransfersView = ({ account }: { account: Account | null }) => {
           })}
         </div>
       )}
+      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
+{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
+      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
     </div>
   );
 };

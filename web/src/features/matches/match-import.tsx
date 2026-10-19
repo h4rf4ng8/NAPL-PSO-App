@@ -1,9 +1,16 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { matches as matchApi } from './api';
 import { parseImport, type ImportedMatch } from './import';
 import type { ImportResult } from './models';
 import type { Account } from '../accounts/models';
-import type { Team } from '../teams/models';
+import { TeamSelect } from '../teams/TeamSelect';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { ModalShell } from '../../components/Dialog';
+import { segment, ApiError } from '../../api/http';
+import { sessionVersion } from '../../auth/client';
+import { useLazyQuery } from '@apollo/client/react';
+import { ImportAccountMatchesDocument } from '../../api/generated/graphql';
 import { C } from '../../theme/theme';
 
 // ============ IMPORT MATCH MANAGER ============
@@ -22,7 +29,7 @@ import { C } from '../../theme/theme';
 // Unmatched players (no ASL account exists yet): logged but skipped. If the
 // player later signs up, admin can retroactively add these stats from the
 // Skipped Log tab.
-export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, currentSeason, onRefresh }: { account: Account; allPlayers: Account[]; allTeams: Team[]; currentSeason: string; onRefresh: () => void }) => {
+export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
   const [step, setStep] = useState(1); // 1=upload, 2=teams, 3=map, 4=confirm
   const [matchData, setMatchData] = useState<ImportedMatch | null>(null); // parsed JSON
   const [homeTeamId, setHomeTeamId] = useState('');
@@ -38,20 +45,12 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
   const [importResult, setImportResult] = useState<ImportResult | null>(null); // shown on success screen
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Approved teams only
-  const approvedTeams = useMemo(
-    () => (allTeams || []).filter(t => t.status === 'approved'),
-    [allTeams]
-  );
-
-  // Build lookup: strikersId → ASL account
-  const aslByStrikersId = useMemo(() => {
-    const map: Record<string,Account> = {};
-    (allPlayers || []).forEach(p => {
-      if (p.strikersId) map[String(p.strikersId)] = p;
-    });
-    return map;
-  }, [allPlayers]);
+  const [lookupImportAccounts] = useLazyQuery(ImportAccountMatchesDocument, { fetchPolicy: 'network-only' });
+  const [aslByStrikersId, setAutoMatches] = useState<Record<string,{ username: string }>>({});
+  const [selectedTeams, setSelectedTeams] = useState<Record<string,string>>({});
+  const [mappingPlayer, setMappingPlayer] = useState<string | null>(null);
+  const [accountSearch, setAccountSearch] = useState('');
+  const accountPage = useRestPage<Pick<Account, 'id' | 'username' | 'position'>>(mappingPlayer ? `/api/accounts?search=${segment(accountSearch)}` : null);
 
   // ---------- STEP 1: parse uploaded file ----------
   // Accepts BOTH the legacy flat Strikers Club export format and the newer
@@ -63,6 +62,7 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
     setError('');
     if (!file) return;
     setBusy(true);
+    const version = sessionVersion();
     try {
       let text;
       const buf = await file.arrayBuffer();
@@ -79,13 +79,20 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
       }
       const data = parseImport(text);
       setMatchData(data);
-      // Pre-fill player map: auto-match by strikersId when possible
-      const initialMap:Record<string,string> = {};
-      for (const p of data.players) {
-        const asl = aslByStrikersId[String(p.player_id)];
-        initialMap[p.player_id] = asl ? asl.username : '';
-      }
-      setPlayerMap(initialMap);
+      // This explicit upload looks up only the file's player IDs, never the league population.
+      const matched: [string, { username: string }][] = [];
+      let after: string | null = null;
+      do {
+        if (version !== sessionVersion()) throw new ApiError(401, 'login_required', 'Please sign in again.');
+        const result = await lookupImportAccounts({ variables: { strikersIds: data.players.map(player => String(player.player_id)), after } });
+        if (version !== sessionVersion()) throw new ApiError(401, 'login_required', 'Please sign in again.');
+        if (!result.data) throw new Error('Could not match uploaded players.');
+        matched.push(...result.data.importAccountMatches.nodes.map(row => [row.strikersId, { username: row.username }] as [string,{ username: string }]));
+        after = result.data.importAccountMatches.pageInfo.hasNextPage ? result.data.importAccountMatches.pageInfo.endCursor : null;
+      } while (after);
+      const byId = Object.fromEntries(matched);
+      setAutoMatches(byId);
+      setPlayerMap(Object.fromEntries(data.players.map(player => [player.player_id, byId[String(player.player_id)]?.username ?? ''])));
       setStep(2);
     } catch (error_) {
       setError('Could not parse file: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -219,34 +226,14 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <div className="font-mono text-[9px] tracking-wider mb-1" style={{ color: `${C.cream}77` }}>HOME (SCORE {matchData.score?.home ?? 0})</div>
-                <select
-                  value={homeTeamId}
-                  onChange={(e) => setHomeTeamId(e.target.value)}
-                  className="w-full px-3 py-2 rounded font-heading text-sm"
-                  style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
-                >
-                  <option value="">— pick team —</option>
-                  {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>)}
-                </select>
+                <TeamSelect value={homeTeamId} onChange={setHomeTeamId} label="Home import team" onSelected={team => setSelectedTeams(previous => ({ ...previous, [team.id]: team.name }))} />
               </div>
               <div>
                 <div className="font-mono text-[9px] tracking-wider mb-1" style={{ color: `${C.cream}77` }}>AWAY (SCORE {matchData.score?.away ?? 0})</div>
-                <select
-                  value={awayTeamId}
-                  onChange={(e) => setAwayTeamId(e.target.value)}
-                  className="w-full px-3 py-2 rounded font-heading text-sm"
-                  style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
-                >
-                  <option value="">— pick team —</option>
-                  {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>)}
-                </select>
+                <TeamSelect value={awayTeamId} onChange={setAwayTeamId} label="Away import team" onSelected={team => setSelectedTeams(previous => ({ ...previous, [team.id]: team.name }))} />
               </div>
             </div>
-            {approvedTeams.length < 2 && (
-              <div className="mt-2 font-mono text-[10px]" style={{ color: C.redLight }}>
-                You need at least 2 approved teams to import a match.
-              </div>
-            )}
+
           </div>
 
           <div className="flex gap-2">
@@ -318,21 +305,7 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
                       background: `${teamBadgeColor}33`, color: teamBadgeColor === C.red ? C.redLight : `${C.brandNavy}`,
                     }}>{teamBadge}</div>
                     <div className="font-mono text-[9px] hidden sm:block" style={{ color: `${C.cream}66` }}>{summary}</div>
-                    <select
-                      value={currentPick}
-                      onChange={(e) => setPlayerMap(m => ({ ...m, [p.player_id]: e.target.value }))}
-                      className="px-2 py-1.5 rounded font-heading text-xs w-full sm:w-44"
-                      style={{
-                        background: C.navyDeep,
-                        color: currentPick ? C.cream : `${C.cream}55`,
-                        border: `1px solid ${isAuto ? C.green : (currentPick ? C.navyLight : C.red)}66`,
-                      }}
-                    >
-                      <option value="">— skip (no ASL account) —</option>
-                      {(allPlayers || []).map(a => (
-                        <option key={a.username} value={a.username}>{a.username}</option>
-                      ))}
-                    </select>
+                    <button onClick={() => { setMappingPlayer(String(p.player_id)); setAccountSearch(''); }} className="border rounded p-2">{currentPick || 'Choose ASL account or skip'}</button>
                     {/* TKL override: shows auto value as placeholder, admin types to override */}
                     <div className="flex items-center gap-1">
                       <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}77` }}>TKL</span>
@@ -378,7 +351,7 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
           <div className="p-4 rounded" style={{ background: `${C.goldLight}11`, border: `1px solid ${C.goldLight}44` }}>
             <H>REVIEW & CONFIRM</H>
             <div className="font-mono text-xs space-y-1" style={{ color: C.cream }}>
-              <div><b style={{ color: C.goldLight }}>Match:</b> {approvedTeams.find(t => t.id === homeTeamId)?.name} <b>{matchData.score?.home ?? 0} - {matchData.score?.away ?? 0}</b> {approvedTeams.find(t => t.id === awayTeamId)?.name}</div>
+              <div><b style={{ color: C.goldLight }}>Match:</b> {selectedTeams[homeTeamId]} <b>{matchData.score?.home ?? 0} - {matchData.score?.away ?? 0}</b> {selectedTeams[awayTeamId]}</div>
               <div><b style={{ color: C.goldLight }}>Season:</b> {currentSeason}</div>
               <div><b style={{ color: C.goldLight }}>Stadium:</b> {matchData.stadium || '—'}</div>
               <div><b style={{ color: C.goldLight }}>Will update:</b> {Object.values(playerMap).filter(Boolean).length} players</div>
@@ -418,13 +391,11 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
               <div>Skipped: <b style={{ color: C.redLight }}>{importResult.skipped}</b> players (no ASL account)</div>
             )}
           </div>
-          {importResult.skippedList.length > 0 && (
+          {importResult.skippedIndexes.length > 0 && (
             <div className="mt-2 p-2 rounded" style={{ background: `${C.red}11`, border: `1px dashed ${C.red}44` }}>
               <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: C.redLight }}>SKIPPED PLAYERS (need ASL account):</div>
               <div className="font-mono text-[10px] space-y-0.5" style={{ color: `${C.cream}88` }}>
-                {importResult.skippedList.map(s => (
-                  <div key={s.playerId}>· {s.strikersName} (id {s.playerId}) — {s.reason}</div>
-                ))}
+                {importResult.skippedIndexes.map(index => { const skipped = matchData?.players[index]; return skipped ? <div key={index}>· {skipped.username} (id {skipped.player_id}) — No ASL account</div> : null; })}
               </div>
             </div>
           )}
@@ -433,6 +404,14 @@ export const ImportMatchManager = ({ account: _account, allPlayers, allTeams, cu
           </button>
         </div>
       )}
+      {mappingPlayer && <ModalShell title="MAP ASL ACCOUNT" onClose={() => setMappingPlayer(null)}>
+        <input aria-label="Search mapping accounts" placeholder="Search accounts" value={accountSearch} onChange={event => setAccountSearch(event.target.value)} />
+        <button onClick={() => { setPlayerMap(previous => ({ ...previous, [mappingPlayer]: '' })); setMappingPlayer(null); }}>Skip this player</button>
+        {accountPage.loading && <p role="status">Loading accounts…</p>}
+        {accountPage.error && <p role="alert">{accountPage.error}<button onClick={accountPage.restart}>Restart accounts</button></p>}
+        {accountPage.data?.nodes.map(player => <button key={player.id} className="block" onClick={() => { setPlayerMap(previous => ({ ...previous, [mappingPlayer]: player.username })); setMappingPlayer(null); }}>{player.username} · {player.position}</button>)}
+        <PageButtons {...accountPage} hasNextPage={accountPage.data?.pageInfo.hasNextPage ?? false} />
+      </ModalShell>}
     </div>
   );
 };

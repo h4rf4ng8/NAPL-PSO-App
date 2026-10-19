@@ -1,6 +1,7 @@
 import { Activity, Calendar, Edit3, Share2, Shield, Sparkles, Target, TrendingUp, Trophy, User, Zap } from 'lucide-react';
+import { TrophyHistory } from '../accounts/TrophyHistory';
 import type { Account } from '../accounts/models';
-import type { Team } from '../teams/models';
+import type { TeamSummary as Team } from '../teams/models';
 import { AWARD_BY_ID, AwardIcon } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
 import { Metric, RecordBox } from '../../components/Display';
@@ -140,7 +141,7 @@ export function MyCard({ account, season, currentSeason, allSeasons, setSeason, 
                     <Metric icon={<Target />} label="G / GAME" value={gpg} accent={C.redLight} />
                     <Metric icon={<Zap />} label="A / GAME" value={apg} accent={C.goldLight} />
                     <Metric icon={<Shield />} label="CLEAN SHEETS" value={seasonStats.cleanSheets || 0} accent={C.greenLight} />
-                    <Metric icon={<Trophy />} label="AWARDS" value={(account.awards || []).length} accent={C.goldLight} />
+                    <Metric icon={<Trophy />} label="AWARDS" value={account.awardCount ?? account.awards?.length ?? 0} accent={C.goldLight} />
                   </div>
                 </div>
 
@@ -156,6 +157,7 @@ export function MyCard({ account, season, currentSeason, allSeasons, setSeason, 
                 </div>
               </div>
             </div>
+            <TrophyHistory accountId={account.id} />
           </div>
 
   );

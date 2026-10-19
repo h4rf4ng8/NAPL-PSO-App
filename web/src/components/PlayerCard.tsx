@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import type { Account, Team } from '../api/models';
+import type { Account, TeamSummary as Team } from '../api/models';
 import { CardFront } from './player-card/CardFront';
 import { CardBack } from './player-card/CardBack';
 import { cardDimensions } from './player-card/artwork';

@@ -5,6 +5,7 @@ import { EmptyState, ResultBadge } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { useQuery } from '@apollo/client/react';
 import { AccountMatchesDocument } from '../../api/generated/graphql';
+import { FullRecord } from '../../components/FullRecord';
 import { mapAccountMatchPage } from '../accounts/api';
 
 export function MatchLog({ account, season }: { account: Account; season: string }) {
@@ -49,6 +50,7 @@ export function MatchLog({ account, season }: { account: Account; season: string
               <div className="flex-1 min-w-0">
                 <div className="font-heading tracking-wider truncate" style={{ color: C.cream }}>VS {(m.opponent || 'UNKNOWN').toUpperCase()}</div>
                 <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>{new Date(m.date || 0).toLocaleDateString()} • {m.season || 'S1'}</div>
+                {typeof m.detailUrl === 'string' && <FullRecord key={m.detailUrl} url={m.detailUrl} label="Full match details" />}
               </div>
               <div className="flex gap-3 font-mono text-xs items-center">
                 <span><span style={{ color: C.greenLight }}>{m.goals}</span>G</span>

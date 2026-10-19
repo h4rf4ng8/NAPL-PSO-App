@@ -1,3 +1,4 @@
+import { readFields } from '../responses.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -29,8 +30,8 @@ test('settings retain nullable text defaults and championship changes roll back 
     const currentSeason = await app.inject('/api/settings/current_season');
     assert.equal(currentSeason.statusCode, 200, currentSeason.body);
     assert.equal(currentSeason.body, 'S1');
-    assert.deepEqual((await app.inject('/api/settings/season_champions')).json(), {});
-    assert.deepEqual((await app.inject('/api/settings/position_weights')).json(), DEFAULT_POSITION_WEIGHTS);
+    assert.deepEqual(await readFields(app, '/api/settings/season_champions'), {});
+    assert.deepEqual(await readFields(app, '/api/settings/position_weights'), DEFAULT_POSITION_WEIGHTS);
     await owner.client.setting.update({ where: { key: 'position_weights' }, data: { value: '{broken' } });
     assert.equal((await app.inject('/api/settings/position_weights')).statusCode, 503);
     await owner.client.userRole.createMany({ data: [{ user_id: alice, role: 'admin' }], skipDuplicates: true });
@@ -58,7 +59,7 @@ test('settings retain nullable text defaults and championship changes roll back 
     assert.equal(await owner.client.teamSeason.count({ where: { team_id: teamId, season_id: nextSeason } }), 1);
     const exclusion = await app.inject({ method: 'PATCH', url: `/api/teams/${teamId}`, headers: { authorization: `Bearer ${admin}` }, payload: { seasons: [excludedSeason] } });
     assert.equal(exclusion.statusCode, 200, exclusion.body);
-    assert.ok(exclusion.json().seasons.includes(excludedSeason));
+    assert.deepEqual(exclusion.json(), { ok: true, id:teamId });
     assert.equal((await call('current_season', excludedSeason)).statusCode, 200);
     assert.equal(await owner.client.teamSeason.count({ where: { team_id: teamId, season_id: excludedSeason } }), 0);
     const champions = { 'S-query': { winnerTeamId: teamId, runnerUpTeamId: null, setAt: 1234 } };
@@ -69,7 +70,7 @@ test('settings retain nullable text defaults and championship changes roll back 
     assert.ok(account.championships.some(award => typeof award === 'object' && award !== null && !Array.isArray(award) && award.teamId === teamId));
     const same = await call('season_champions', { 'S-query': { winnerTeamId: teamId, runnerUpTeamId: teamId, setAt: 5678 } });
     assert.equal(same.statusCode, 400, same.body);
-    assert.deepEqual((await app.inject('/api/settings/season_champions')).json(), champions);
+    assert.deepEqual(await readFields(app, '/api/settings/season_champions'), champions);
     const missing = await call('season_champions', { 'S-query': { winnerTeamId: 'missing-settings-team', runnerUpTeamId: null, setAt: 5678 } });
     assert.equal(missing.statusCode, 404, missing.body);
     assert.deepEqual((await owner.client.account.findUniqueOrThrow({ where: { id: alice } })).championships, account.championships);
@@ -79,7 +80,7 @@ test('settings retain nullable text defaults and championship changes roll back 
       const failed = await call('season_champions', {});
       assert.equal(failed.statusCode, 400, failed.body);
       assert.deepEqual((await owner.client.account.findUniqueOrThrow({ where: { id: alice } })).championships, account.championships);
-      assert.deepEqual((await app.inject('/api/settings/season_champions')).json(), champions);
+      assert.deepEqual(await readFields(app, '/api/settings/season_champions'), champions);
     } finally { await owner.execute(Prisma.sql `ALTER TABLE asl.settings DROP CONSTRAINT settings_queries_reject`); }
     assert.equal((await call('season_champions', {})).statusCode, 200);
     assert.equal(JSON.stringify((await owner.client.account.findUniqueOrThrow({ where: { id: alice } })).championships).includes(teamId), false);

@@ -1,0 +1,1261 @@
+[
+  {
+    "key": "logos/asl_logo_src",
+    "source": "logos/asl_logo_src.png",
+    "path": "static/821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7.png",
+    "sha256": "821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7",
+    "contentType": "image/png",
+    "size": 74236
+  },
+  {
+    "key": "logos/asl_logo_diamond",
+    "source": "logos/asl_logo_diamond.png",
+    "path": "static/b1bd70b6215b0fc657e2c1d3f9b8e57deda43b6c2ac6fdf5d325f563465b025c.png",
+    "sha256": "b1bd70b6215b0fc657e2c1d3f9b8e57deda43b6c2ac6fdf5d325f563465b025c",
+    "contentType": "image/png",
+    "size": 25246
+  },
+  {
+    "key": "fonts/1Ptgg87LROyAm3K8-C8CSKlvPfE",
+    "source": "fonts/1Ptgg87LROyAm3K8-C8CSKlvPfE.woff2",
+    "path": "static/889f979804fc6c2ddb3c9577805caf156bfd092a5b6e58d680535d65267b933e.woff2",
+    "sha256": "889f979804fc6c2ddb3c9577805caf156bfd092a5b6e58d680535d65267b933e",
+    "contentType": "font/woff2",
+    "size": 5188,
+    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3K8-C8CSKlvPfE.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Anton'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/1Ptgg87LROyAm3K9-C8CSKlvPfE",
+    "source": "fonts/1Ptgg87LROyAm3K9-C8CSKlvPfE.woff2",
+    "path": "static/ae1a8ac1c2899a66eed47a851201bb78a56664bf8da6d34a9ee226582d15ac19.woff2",
+    "sha256": "ae1a8ac1c2899a66eed47a851201bb78a56664bf8da6d34a9ee226582d15ac19",
+    "contentType": "font/woff2",
+    "size": 21296,
+    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3K9-C8CSKlvPfE.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Anton'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/1Ptgg87LROyAm3Kz-C8CSKlv",
+    "source": "fonts/1Ptgg87LROyAm3Kz-C8CSKlv.woff2",
+    "path": "static/23aab0b2692a0c89eb7997d3c7cf5bda41276d6cd4ab6cc0edc3edfcece32b09.woff2",
+    "sha256": "23aab0b2692a0c89eb7997d3c7cf5bda41276d6cd4ab6cc0edc3edfcece32b09",
+    "contentType": "font/woff2",
+    "size": 12004,
+    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3Kz-C8CSKlv.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Anton'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw",
+    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw.woff2",
+    "path": "static/bc42ba6f77ac0be14c84afea284154ce761c7c0b8e4bb0b896bc0b606adedc88.woff2",
+    "sha256": "bc42ba6f77ac0be14c84afea284154ce761c7c0b8e4bb0b896bc0b606adedc88",
+    "contentType": "font/woff2",
+    "size": 4560,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk",
+    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
+    "path": "static/0e2a408159b32d8105bcd1a0a4d6222fcee375a84fb62703c614ce34d8bb68bb.woff2",
+    "sha256": "0e2a408159b32d8105bcd1a0a4d6222fcee375a84fb62703c614ce34d8bb68bb",
+    "contentType": "font/woff2",
+    "size": 14672,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw",
+    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw.woff2",
+    "path": "static/ed8618e86bffee6caa69d0aa5c08339fa886d878962444348b09b2e5ec2d516c.woff2",
+    "sha256": "ed8618e86bffee6caa69d0aa5c08339fa886d878962444348b09b2e5ec2d516c",
+    "contentType": "font/woff2",
+    "size": 9264,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2",
+    "path": "static/31ff5e6e96a096fde4d78bc838719e69b093db2d0b062b96e423c065a6d1b2b1.woff2",
+    "sha256": "31ff5e6e96a096fde4d78bc838719e69b093db2d0b062b96e423c065a6d1b2b1",
+    "contentType": "font/woff2",
+    "size": 14680,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg.woff2",
+    "path": "static/f8ec026d88a29e8d6a920c82348d90d08200a771e7763c5888376e407ac83a8f.woff2",
+    "sha256": "f8ec026d88a29e8d6a920c82348d90d08200a771e7763c5888376e407ac83a8f",
+    "contentType": "font/woff2",
+    "size": 9188,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg.woff2",
+    "path": "static/864c709d407bcd818c900149400a94194c9e8d3a25b16f9ba1353430d1bd88ec.woff2",
+    "sha256": "864c709d407bcd818c900149400a94194c9e8d3a25b16f9ba1353430d1bd88ec",
+    "contentType": "font/woff2",
+    "size": 4556,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro.woff2",
+    "path": "static/e3e520cb7468f2efd60bc2ce96694567c3312f4ef414fffbe605e3ad146b24e6.woff2",
+    "sha256": "e3e520cb7468f2efd60bc2ce96694567c3312f4ef414fffbe605e3ad146b24e6",
+    "contentType": "font/woff2",
+    "size": 14888,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg.woff2",
+    "path": "static/0c1655655b5a1fa18382367f471b943c8e009c5cf36a3898433babd92fc606e2.woff2",
+    "sha256": "0c1655655b5a1fa18382367f471b943c8e009c5cf36a3898433babd92fc606e2",
+    "contentType": "font/woff2",
+    "size": 9328,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg.woff2",
+    "path": "static/960aaed3bedcba7e3f7aa0b0d619339e5d0de4161218a5a46679ea1010ad2bbe.woff2",
+    "sha256": "960aaed3bedcba7e3f7aa0b0d619339e5d0de4161218a5a46679ea1010ad2bbe",
+    "contentType": "font/woff2",
+    "size": 4612,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro.woff2",
+    "path": "static/89eec21b1a1d6fd579d3e3c518901c5a6e3579e0e7a4f8b2f17b1473117bc30d.woff2",
+    "sha256": "89eec21b1a1d6fd579d3e3c518901c5a6e3579e0e7a4f8b2f17b1473117bc30d",
+    "contentType": "font/woff2",
+    "size": 14764,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "800",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg.woff2",
+    "path": "static/14480fbcd1bfa4ccfa6849f37004c1e985487034e9816c0157645cccdda53836.woff2",
+    "sha256": "14480fbcd1bfa4ccfa6849f37004c1e985487034e9816c0157645cccdda53836",
+    "contentType": "font/woff2",
+    "size": 9228,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "800",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg.woff2",
+    "path": "static/f54288496268d32e700bfb9db4797a5c40d904aed7372986306f503af8254954.woff2",
+    "sha256": "f54288496268d32e700bfb9db4797a5c40d904aed7372986306f503af8254954",
+    "contentType": "font/woff2",
+    "size": 4764,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "800",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
+    "path": "static/5bc49d41f32810a114765314392332ce2acae2276635eee265a50319a12c1b49.woff2",
+    "sha256": "5bc49d41f32810a114765314392332ce2acae2276635eee265a50319a12c1b49",
+    "contentType": "font/woff2",
+    "size": 14844,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg.woff2",
+    "path": "static/a2f92ada1d0eaf10dd83b11392ea389c039aa78f6e17418fc062c23f0ba78438.woff2",
+    "sha256": "a2f92ada1d0eaf10dd83b11392ea389c039aa78f6e17418fc062c23f0ba78438",
+    "contentType": "font/woff2",
+    "size": 9236,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg",
+    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg.woff2",
+    "path": "static/50c25f3210bca008b36809e4f3f964fc4acab82e07a27d099b14c378ea58bf5b.woff2",
+    "sha256": "50c25f3210bca008b36809e4f3f964fc4acab82e07a27d099b14c378ea58bf5b",
+    "contentType": "font/woff2",
+    "size": 4628,
+    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Barlow Condensed'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg.woff2",
+    "path": "static/9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f.woff2",
+    "sha256": "9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f",
+    "contentType": "font/woff2",
+    "size": 1664,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2",
+    "path": "static/9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4.woff2",
+    "sha256": "9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4",
+    "contentType": "font/woff2",
+    "size": 11596,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
+    "path": "static/2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4.woff2",
+    "sha256": "2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4",
+    "contentType": "font/woff2",
+    "size": 31340,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg.woff2",
+    "path": "static/49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111.woff2",
+    "sha256": "49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111",
+    "contentType": "font/woff2",
+    "size": 6800,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0370-0377, U+037A-037F, U+0384-038A, U+038C, U+038E-03A1, U+03A3-03FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg.woff2",
+    "path": "static/4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2.woff2",
+    "sha256": "4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2",
+    "contentType": "font/woff2",
+    "size": 8892,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      }
+    ]
+  },
+  {
+    "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg",
+    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg.woff2",
+    "path": "static/d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1.woff2",
+    "sha256": "d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1",
+    "contentType": "font/woff2",
+    "size": 5872,
+    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      },
+      {
+        "font-family": "'JetBrains Mono'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4",
+    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4.woff2",
+    "path": "static/514ecf75b904f66460a1160531fb2626f3e886118ecdb7d2611e88fe1bc578a1.woff2",
+    "sha256": "514ecf75b904f66460a1160531fb2626f3e886118ecdb7d2611e88fe1bc578a1",
+    "contentType": "font/woff2",
+    "size": 11708,
+    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      }
+    ]
+  },
+  {
+    "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl",
+    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl.woff2",
+    "path": "static/9dde3797547520f762f4ba3a822d417a0872b962bc78753a7ee9f955382b6b85.woff2",
+    "sha256": "9dde3797547520f762f4ba3a822d417a0872b962bc78753a7ee9f955382b6b85",
+    "contentType": "font/woff2",
+    "size": 21412,
+    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4",
+    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4.woff2",
+    "path": "static/7b6295733e76a64d4e0b61e68a565fac062bfc9a285dfcdee9e20ca0b3a613f5.woff2",
+    "sha256": "7b6295733e76a64d4e0b61e68a565fac062bfc9a285dfcdee9e20ca0b3a613f5",
+    "contentType": "font/woff2",
+    "size": 18944,
+    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4",
+    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4.woff2",
+    "path": "static/4dcc5a78747cadd5c40e10eb590829447bee4a9166632f0f681b9aeab254c8f8.woff2",
+    "sha256": "4dcc5a78747cadd5c40e10eb590829447bee4a9166632f0f681b9aeab254c8f8",
+    "contentType": "font/woff2",
+    "size": 6300,
+    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0102-0103, U+0110-0111, U+0128-0129, U+0168-0169, U+01A0-01A1, U+01AF-01B0, U+0300-0301, U+0303-0304, U+0308-0309, U+0323, U+0329, U+1EA0-1EF9, U+20AB"
+      }
+    ]
+  },
+  {
+    "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4",
+    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4.woff2",
+    "path": "static/9feb685bacd358b6a87797379478ce95de7580461a476a3eabcbe3d74ad9e517.woff2",
+    "sha256": "9feb685bacd358b6a87797379478ce95de7580461a476a3eabcbe3d74ad9e517",
+    "contentType": "font/woff2",
+    "size": 13976,
+    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      },
+      {
+        "font-family": "'Oswald'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg.woff2",
+    "path": "static/0b49d495ac765440570c07bf73f5b288e244c71e758f6d95ff481e9169b816f3.woff2",
+    "sha256": "0b49d495ac765440570c07bf73f5b288e244c71e758f6d95ff481e9169b816f3",
+    "contentType": "font/woff2",
+    "size": 6944,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg.woff2",
+    "path": "static/cc1a99ba7dbdbe106aa32c345d85c00a989b45b4edc02cc362a6634e9592b11c.woff2",
+    "sha256": "cc1a99ba7dbdbe106aa32c345d85c00a989b45b4edc02cc362a6634e9592b11c",
+    "contentType": "font/woff2",
+    "size": 36428,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0900-097F, U+1CD0-1CF4, U+1CF7-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B0A"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx",
+    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx.woff2",
+    "path": "static/7597c31a957ae3d2e1ebc786238752d883c15ce2e6b5da617dc3453a9fd86335.woff2",
+    "sha256": "7597c31a957ae3d2e1ebc786238752d883c15ce2e6b5da617dc3453a9fd86335",
+    "contentType": "font/woff2",
+    "size": 9304,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "700",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg.woff2",
+    "path": "static/6464c05505c4a3bc7dce7021a89aa9102618ee4fea4c21942008bbb37b7fe85f.woff2",
+    "sha256": "6464c05505c4a3bc7dce7021a89aa9102618ee4fea4c21942008bbb37b7fe85f",
+    "contentType": "font/woff2",
+    "size": 6824,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg.woff2",
+    "path": "static/8dd77e3310adcae53f7221ae63f3b8f46894aac4cc28ecd2766fc7420a85a408.woff2",
+    "sha256": "8dd77e3310adcae53f7221ae63f3b8f46894aac4cc28ecd2766fc7420a85a408",
+    "contentType": "font/woff2",
+    "size": 39852,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0900-097F, U+1CD0-1CF4, U+1CF7-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B0A"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx",
+    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx.woff2",
+    "path": "static/4745b75b6e92d917e2402925dc1a6c1c6300e6e0f607a1ce286da54b33d80d3b.woff2",
+    "sha256": "4745b75b6e92d917e2402925dc1a6c1c6300e6e0f607a1ce286da54b33d80d3b",
+    "contentType": "font/woff2",
+    "size": 8964,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "500",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg.woff2",
+    "path": "static/bdf7c1b3c51cfc37d1a0e2b15d86d85f1fa0fdb87678277e11714f9470b734ed.woff2",
+    "sha256": "bdf7c1b3c51cfc37d1a0e2b15d86d85f1fa0fdb87678277e11714f9470b734ed",
+    "contentType": "font/woff2",
+    "size": 7208,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg",
+    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg.woff2",
+    "path": "static/3477c6df9ea3e3ecc42c6584b6720413706258af0bd2b6a8b7e0a23f79b4d319.woff2",
+    "sha256": "3477c6df9ea3e3ecc42c6584b6720413706258af0bd2b6a8b7e0a23f79b4d319",
+    "contentType": "font/woff2",
+    "size": 40056,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0900-097F, U+1CD0-1CF4, U+1CF7-1CF9, U+200C-200D, U+20A8, U+20B9, U+20F0, U+25CC, U+A830-A839, U+A8E0-A8FF, U+11B00-11B0A"
+      }
+    ]
+  },
+  {
+    "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx",
+    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx.woff2",
+    "path": "static/35f7e628ec8e7dd3bf434e95ce28289803401f12d8605c56ca83db2b4b301d33.woff2",
+    "sha256": "35f7e628ec8e7dd3bf434e95ce28289803401f12d8605c56ca83db2b4b301d33",
+    "contentType": "font/woff2",
+    "size": 9400,
+    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Rajdhani'",
+        "font-style": "normal",
+        "font-weight": "600",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "fonts/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT",
+    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT.woff2",
+    "path": "static/3d27bea878fc4351c18c064c38aa2574c85debbc8e128580575bf1cb94ca1e4c.woff2",
+    "sha256": "3d27bea878fc4351c18c064c38aa2574c85debbc8e128580575bf1cb94ca1e4c",
+    "contentType": "font/woff2",
+    "size": 4368,
+    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Russo One'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF"
+      }
+    ]
+  },
+  {
+    "key": "fonts/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT",
+    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT.woff2",
+    "path": "static/5649dd6a78b6f1989bd8ab96ee2da97a1d7d253f1f2a564d76f84e1cc348faac.woff2",
+    "sha256": "5649dd6a78b6f1989bd8ab96ee2da97a1d7d253f1f2a564d76f84e1cc348faac",
+    "contentType": "font/woff2",
+    "size": 4528,
+    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Russo One'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116"
+      }
+    ]
+  },
+  {
+    "key": "fonts/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A",
+    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A.woff2",
+    "path": "static/53c9adb058b01d0143a6f23ada52a6719800bf0253edb1439285010eaaca5284.woff2",
+    "sha256": "53c9adb058b01d0143a6f23ada52a6719800bf0253edb1439285010eaaca5284",
+    "contentType": "font/woff2",
+    "size": 7360,
+    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A.woff2",
+    "fontFaces": [
+      {
+        "font-family": "'Russo One'",
+        "font-style": "normal",
+        "font-weight": "400",
+        "font-display": "swap",
+        "unicode-range": "U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD"
+      }
+    ]
+  },
+  {
+    "key": "flags/ca",
+    "source": "flags/ca.png",
+    "path": "static/c6a0b1b087f62170a41cd9d0b35bd532df0286608cc7c1c5a8c3639937b6c867.png",
+    "sha256": "c6a0b1b087f62170a41cd9d0b35bd532df0286608cc7c1c5a8c3639937b6c867",
+    "contentType": "image/png",
+    "size": 404,
+    "origin": "https://flagcdn.com/w80/ca.png"
+  },
+  {
+    "key": "flags/us",
+    "source": "flags/us.png",
+    "path": "static/59ac434b97e6db8b4fcee5c8e1996995562747e76875625f0886f1936488b7c9.png",
+    "sha256": "59ac434b97e6db8b4fcee5c8e1996995562747e76875625f0886f1936488b7c9",
+    "contentType": "image/png",
+    "size": 430,
+    "origin": "https://flagcdn.com/w80/us.png"
+  },
+  {
+    "key": "flags/mx",
+    "source": "flags/mx.png",
+    "path": "static/c0fdb027d455efda31d165351dbac9b2145fdca51aa1f9c9410a346b43bf1f2f.png",
+    "sha256": "c0fdb027d455efda31d165351dbac9b2145fdca51aa1f9c9410a346b43bf1f2f",
+    "contentType": "image/png",
+    "size": 562,
+    "origin": "https://flagcdn.com/w80/mx.png"
+  },
+  {
+    "key": "flags/sv",
+    "source": "flags/sv.png",
+    "path": "static/0325efeb9cd30269f18a30faaf848d0e6ee83118dcb0effbb821b0facd087862.png",
+    "sha256": "0325efeb9cd30269f18a30faaf848d0e6ee83118dcb0effbb821b0facd087862",
+    "contentType": "image/png",
+    "size": 479,
+    "origin": "https://flagcdn.com/w80/sv.png"
+  },
+  {
+    "key": "flags/gb",
+    "source": "flags/gb.png",
+    "path": "static/94f29281d0b2b67b035dd279a4b43b18b8be9e889f5287af2b2c5e3723e0c810.png",
+    "sha256": "94f29281d0b2b67b035dd279a4b43b18b8be9e889f5287af2b2c5e3723e0c810",
+    "contentType": "image/png",
+    "size": 395,
+    "origin": "https://flagcdn.com/w80/gb.png"
+  },
+  {
+    "key": "flags/ie",
+    "source": "flags/ie.png",
+    "path": "static/3d67eb9367c3f8903cce0f1af01203d4e5edeb72c0106a6ef856d25ff943eb5b.png",
+    "sha256": "3d67eb9367c3f8903cce0f1af01203d4e5edeb72c0106a6ef856d25ff943eb5b",
+    "contentType": "image/png",
+    "size": 119,
+    "origin": "https://flagcdn.com/w80/ie.png"
+  },
+  {
+    "key": "flags/fr",
+    "source": "flags/fr.png",
+    "path": "static/2a539c1a42f160aab68730f4caaa322bd6fbccf42145015bb7544961671a9cbd.png",
+    "sha256": "2a539c1a42f160aab68730f4caaa322bd6fbccf42145015bb7544961671a9cbd",
+    "contentType": "image/png",
+    "size": 123,
+    "origin": "https://flagcdn.com/w80/fr.png"
+  },
+  {
+    "key": "flags/de",
+    "source": "flags/de.png",
+    "path": "static/5eb33c86a8f1cd43cbbd990aee89e4ce4fabf7efdece1529be66fb1becf29fc9.png",
+    "sha256": "5eb33c86a8f1cd43cbbd990aee89e4ce4fabf7efdece1529be66fb1becf29fc9",
+    "contentType": "image/png",
+    "size": 105,
+    "origin": "https://flagcdn.com/w80/de.png"
+  },
+  {
+    "key": "flags/es",
+    "source": "flags/es.png",
+    "path": "static/cfd46911c2d8a218317ecfa94d776ca3784def0212332b2c230d0a7cfeb6be41.png",
+    "sha256": "cfd46911c2d8a218317ecfa94d776ca3784def0212332b2c230d0a7cfeb6be41",
+    "contentType": "image/png",
+    "size": 673,
+    "origin": "https://flagcdn.com/w80/es.png"
+  },
+  {
+    "key": "flags/pt",
+    "source": "flags/pt.png",
+    "path": "static/0006bee743a0d81fc4dcea7ae2fdc2bb17e560792b9939fb10ec05d76dd828ef.png",
+    "sha256": "0006bee743a0d81fc4dcea7ae2fdc2bb17e560792b9939fb10ec05d76dd828ef",
+    "contentType": "image/png",
+    "size": 893,
+    "origin": "https://flagcdn.com/w80/pt.png"
+  },
+  {
+    "key": "flags/it",
+    "source": "flags/it.png",
+    "path": "static/655b1b31b9a3d3b6f659863e6ffebedaf8810e5e97f12fea687e9ede6d298c3d.png",
+    "sha256": "655b1b31b9a3d3b6f659863e6ffebedaf8810e5e97f12fea687e9ede6d298c3d",
+    "contentType": "image/png",
+    "size": 122,
+    "origin": "https://flagcdn.com/w80/it.png"
+  },
+  {
+    "key": "flags/nl",
+    "source": "flags/nl.png",
+    "path": "static/2551bcd6a2ea816da99fd646a6f68feef0e3b2897216b1afca88a6e4283ee42f.png",
+    "sha256": "2551bcd6a2ea816da99fd646a6f68feef0e3b2897216b1afca88a6e4283ee42f",
+    "contentType": "image/png",
+    "size": 127,
+    "origin": "https://flagcdn.com/w80/nl.png"
+  },
+  {
+    "key": "flags/be",
+    "source": "flags/be.png",
+    "path": "static/4bb0a14682b00ccb8912a25aee9a44a5129362d0c09e3cfdb5257879bd23adb3.png",
+    "sha256": "4bb0a14682b00ccb8912a25aee9a44a5129362d0c09e3cfdb5257879bd23adb3",
+    "contentType": "image/png",
+    "size": 127,
+    "origin": "https://flagcdn.com/w80/be.png"
+  },
+  {
+    "key": "flags/ch",
+    "source": "flags/ch.png",
+    "path": "static/c0238ceffa2927c670890712efe6eafdce019fa68e9118486ac08c2651ae4a4c.png",
+    "sha256": "c0238ceffa2927c670890712efe6eafdce019fa68e9118486ac08c2651ae4a4c",
+    "contentType": "image/png",
+    "size": 135,
+    "origin": "https://flagcdn.com/w80/ch.png"
+  },
+  {
+    "key": "flags/se",
+    "source": "flags/se.png",
+    "path": "static/e8433ddb96b727f2b2420f21f588feb88a5f3984b0c2fe65e97e0b5285f3a2ef.png",
+    "sha256": "e8433ddb96b727f2b2420f21f588feb88a5f3984b0c2fe65e97e0b5285f3a2ef",
+    "contentType": "image/png",
+    "size": 100,
+    "origin": "https://flagcdn.com/w80/se.png"
+  },
+  {
+    "key": "flags/no",
+    "source": "flags/no.png",
+    "path": "static/f58edc8912be7c7f5a462809dae326895a9b529bd841475a4aedf0ccf26e6d7f.png",
+    "sha256": "f58edc8912be7c7f5a462809dae326895a9b529bd841475a4aedf0ccf26e6d7f",
+    "contentType": "image/png",
+    "size": 192,
+    "origin": "https://flagcdn.com/w80/no.png"
+  },
+  {
+    "key": "flags/dk",
+    "source": "flags/dk.png",
+    "path": "static/7f9de76f88b1049ad15974b93e1bc863280bfc3c5c566227a702e57684e0f233.png",
+    "sha256": "7f9de76f88b1049ad15974b93e1bc863280bfc3c5c566227a702e57684e0f233",
+    "contentType": "image/png",
+    "size": 148,
+    "origin": "https://flagcdn.com/w80/dk.png"
+  },
+  {
+    "key": "flags/pl",
+    "source": "flags/pl.png",
+    "path": "static/bc81e9a8f5f9482d3b266a434f5f28441b8df90b29c6f7e8d08d120d8dfb97d0.png",
+    "sha256": "bc81e9a8f5f9482d3b266a434f5f28441b8df90b29c6f7e8d08d120d8dfb97d0",
+    "contentType": "image/png",
+    "size": 94,
+    "origin": "https://flagcdn.com/w80/pl.png"
+  },
+  {
+    "key": "flags/al",
+    "source": "flags/al.png",
+    "path": "static/d3bc5980296f0635d91f8afc6d91ff0e4f8434c88a6c59039743dd60529df6ac.png",
+    "sha256": "d3bc5980296f0635d91f8afc6d91ff0e4f8434c88a6c59039743dd60529df6ac",
+    "contentType": "image/png",
+    "size": 643,
+    "origin": "https://flagcdn.com/w80/al.png"
+  },
+  {
+    "key": "flags/ba",
+    "source": "flags/ba.png",
+    "path": "static/65458f3db09cabf5e23ceb4e27463f3ced69fa3bdd65ff1107a0dbfec2281c97.png",
+    "sha256": "65458f3db09cabf5e23ceb4e27463f3ced69fa3bdd65ff1107a0dbfec2281c97",
+    "contentType": "image/png",
+    "size": 346,
+    "origin": "https://flagcdn.com/w80/ba.png"
+  },
+  {
+    "key": "flags/br",
+    "source": "flags/br.png",
+    "path": "static/c9ea019c610713d111f4c81d97f5c0df2caf7ae4c9bda6079f414916dcada975.png",
+    "sha256": "c9ea019c610713d111f4c81d97f5c0df2caf7ae4c9bda6079f414916dcada975",
+    "contentType": "image/png",
+    "size": 816,
+    "origin": "https://flagcdn.com/w80/br.png"
+  },
+  {
+    "key": "flags/ar",
+    "source": "flags/ar.png",
+    "path": "static/6350038be1f1cd0b67c22cbd02f08bcc0fef2c23b59d5c657c75ab23363cee16.png",
+    "sha256": "6350038be1f1cd0b67c22cbd02f08bcc0fef2c23b59d5c657c75ab23363cee16",
+    "contentType": "image/png",
+    "size": 335,
+    "origin": "https://flagcdn.com/w80/ar.png"
+  },
+  {
+    "key": "flags/co",
+    "source": "flags/co.png",
+    "path": "static/cc204eef36e8d922b38b794cd00000b9cfefeb7964c914d5c15d432b27cb0771.png",
+    "sha256": "cc204eef36e8d922b38b794cd00000b9cfefeb7964c914d5c15d432b27cb0771",
+    "contentType": "image/png",
+    "size": 125,
+    "origin": "https://flagcdn.com/w80/co.png"
+  },
+  {
+    "key": "flags/cl",
+    "source": "flags/cl.png",
+    "path": "static/cc0ac853ca90cf65565e5df4465a2108558eb397166abaa65838c71cecc18077.png",
+    "sha256": "cc0ac853ca90cf65565e5df4465a2108558eb397166abaa65838c71cecc18077",
+    "contentType": "image/png",
+    "size": 228,
+    "origin": "https://flagcdn.com/w80/cl.png"
+  },
+  {
+    "key": "flags/au",
+    "source": "flags/au.png",
+    "path": "static/eb3cd6aba81315a7db38b55a555938f3d4c1553342eafb3a37e13d4d1fe76450.png",
+    "sha256": "eb3cd6aba81315a7db38b55a555938f3d4c1553342eafb3a37e13d4d1fe76450",
+    "contentType": "image/png",
+    "size": 592,
+    "origin": "https://flagcdn.com/w80/au.png"
+  },
+  {
+    "key": "flags/nz",
+    "source": "flags/nz.png",
+    "path": "static/2a69d660a346b756b26e5faba477f8033901b76b2ccf35d00463620be4a794c4.png",
+    "sha256": "2a69d660a346b756b26e5faba477f8033901b76b2ccf35d00463620be4a794c4",
+    "contentType": "image/png",
+    "size": 536,
+    "origin": "https://flagcdn.com/w80/nz.png"
+  },
+  {
+    "key": "flags/jp",
+    "source": "flags/jp.png",
+    "path": "static/25c1ac6db4fa0b5e6b79b4efe546683c8589cf060f5f848b27be02944fad8114.png",
+    "sha256": "25c1ac6db4fa0b5e6b79b4efe546683c8589cf060f5f848b27be02944fad8114",
+    "contentType": "image/png",
+    "size": 353,
+    "origin": "https://flagcdn.com/w80/jp.png"
+  },
+  {
+    "key": "flags/kr",
+    "source": "flags/kr.png",
+    "path": "static/8a0e8db363c5177c129bdc1140f5c219f17014153a5da592877c4b4c718c248f.png",
+    "sha256": "8a0e8db363c5177c129bdc1140f5c219f17014153a5da592877c4b4c718c248f",
+    "contentType": "image/png",
+    "size": 972,
+    "origin": "https://flagcdn.com/w80/kr.png"
+  },
+  {
+    "key": "flags/cn",
+    "source": "flags/cn.png",
+    "path": "static/fdbfb0d49ec098827d28f297a4ee3614edd1dcc014bcdf978b7dce73c7b7b4f1.png",
+    "sha256": "fdbfb0d49ec098827d28f297a4ee3614edd1dcc014bcdf978b7dce73c7b7b4f1",
+    "contentType": "image/png",
+    "size": 315,
+    "origin": "https://flagcdn.com/w80/cn.png"
+  },
+  {
+    "key": "flags/ru",
+    "source": "flags/ru.png",
+    "path": "static/fe1a82a5145e5fba6982bb14cb20663b888a5feabada2235d036825fa4cbcac8.png",
+    "sha256": "fe1a82a5145e5fba6982bb14cb20663b888a5feabada2235d036825fa4cbcac8",
+    "contentType": "image/png",
+    "size": 125,
+    "origin": "https://flagcdn.com/w80/ru.png"
+  },
+  {
+    "key": "flags/ng",
+    "source": "flags/ng.png",
+    "path": "static/6076be1144054cb5cecb1fe958b5f0bbfd23d6a1894146300c60fc54a09b15ca.png",
+    "sha256": "6076be1144054cb5cecb1fe958b5f0bbfd23d6a1894146300c60fc54a09b15ca",
+    "contentType": "image/png",
+    "size": 105,
+    "origin": "https://flagcdn.com/w80/ng.png"
+  },
+  {
+    "key": "flags/za",
+    "source": "flags/za.png",
+    "path": "static/ed7056cd01ca444344dd15379189fe9da0f6b500f0f1049d5442cee9fe6ea65e.png",
+    "sha256": "ed7056cd01ca444344dd15379189fe9da0f6b500f0f1049d5442cee9fe6ea65e",
+    "contentType": "image/png",
+    "size": 543,
+    "origin": "https://flagcdn.com/w80/za.png"
+  },
+  {
+    "key": "flags/in",
+    "source": "flags/in.png",
+    "path": "static/fc3292a3ac5feb33759087d8968441965723068fa7cbbd12226b646b7ff83252.png",
+    "sha256": "fc3292a3ac5feb33759087d8968441965723068fa7cbbd12226b646b7ff83252",
+    "contentType": "image/png",
+    "size": 354,
+    "origin": "https://flagcdn.com/w80/in.png"
+  },
+  {
+    "key": "licenses/anton",
+    "source": "licenses/anton.txt",
+    "path": "static/ee67e6ee22790b7929f1a3769ca2801d565c64b5a9096942c1adf5596de9c9e4.txt",
+    "sha256": "ee67e6ee22790b7929f1a3769ca2801d565c64b5a9096942c1adf5596de9c9e4",
+    "contentType": "text/plain",
+    "size": 4484,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/anton/OFL.txt"
+  },
+  {
+    "key": "licenses/barlowcondensed",
+    "source": "licenses/barlowcondensed.txt",
+    "path": "static/186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f.txt",
+    "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f",
+    "contentType": "text/plain",
+    "size": 4377,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/OFL.txt"
+  },
+  {
+    "key": "licenses/jetbrainsmono",
+    "source": "licenses/jetbrainsmono.txt",
+    "path": "static/b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d.txt",
+    "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d",
+    "contentType": "text/plain",
+    "size": 4399,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt"
+  },
+  {
+    "key": "licenses/oswald",
+    "source": "licenses/oswald.txt",
+    "path": "static/0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652.txt",
+    "sha256": "0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652",
+    "contentType": "text/plain",
+    "size": 4483,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt"
+  },
+  {
+    "key": "licenses/rajdhani",
+    "source": "licenses/rajdhani.txt",
+    "path": "static/f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f.txt",
+    "sha256": "f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f",
+    "contentType": "text/plain",
+    "size": 4373,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/rajdhani/OFL.txt"
+  },
+  {
+    "key": "licenses/russoone",
+    "source": "licenses/russoone.txt",
+    "path": "static/3ac1301549523d9861fedca12871f24e575fbd26d520632fc00ba849b471d275.txt",
+    "sha256": "3ac1301549523d9861fedca12871f24e575fbd26d520632fc00ba849b471d275",
+    "contentType": "text/plain",
+    "size": 4390,
+    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/russoone/OFL.txt"
+  }
+]

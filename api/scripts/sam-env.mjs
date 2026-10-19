@@ -11,6 +11,7 @@ const parameterEnv = {
   DatabaseUrl: 'DATABASE_URL',
   SupabaseUrl: 'SUPABASE_URL',
   SupabasePublishableKey: 'SUPABASE_PUBLISHABLE_KEY',
+  SupabaseSecretKey: 'SUPABASE_SECRET_KEY',
   SupabaseJwksUrl: 'SUPABASE_JWKS_URL',
   PublicOrigin: 'PUBLIC_ORIGIN',
   DiscordTransferWebhook: 'DISCORD_TRANSFER_WEBHOOK',

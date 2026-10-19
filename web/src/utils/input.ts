@@ -26,3 +26,25 @@ export const compressImage=(file:File,maxDim=400,quality=0.82)=>new Promise<stri
 
 export const numericRowValue=(row:object,key:string):number=>{const value=Reflect.get(row,key);return typeof value==='number'?value:0;};
 
+
+export async function fetchImageFile(source: string): Promise<File> {
+  const url = new URL(source);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error('Enter an HTTP image URL.');
+  const response = await fetch(url, { mode: 'cors', credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(20_000) });
+  if (!response.ok || !response.body) throw new Error('Image could not be imported.');
+  const maximum = 20 * 1024 * 1024;
+  const reader = response.body.getReader();
+  const chunks: BlobPart[] = [];
+  let size = 0;
+  try {
+    if (Number(response.headers.get('content-length')) > maximum) throw new Error('Image must be under 20 MB.');
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maximum) throw new Error('Image must be under 20 MB.');
+      chunks.push(value);
+    }
+  } finally { await reader.cancel(); }
+  return new File(chunks, 'cover', { type: response.headers.get('content-type') ?? '' });
+}

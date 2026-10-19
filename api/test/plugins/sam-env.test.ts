@@ -7,7 +7,7 @@ import { prepareSamParams } from '../../scripts/sam-env.mjs';
 
 const env = {
   DATABASE_URL: 'postgres://db.example/app?sslmode=verify-full',
-  SUPABASE_URL: 'https://project.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'public-key',
+  SUPABASE_URL: 'https://project.supabase.co', SUPABASE_PUBLISHABLE_KEY: 'public-key', SUPABASE_SECRET_KEY: 'server-storage-secret',
   SUPABASE_JWKS_URL: 'https://project.supabase.co/auth/v1/.well-known/jwks.json',
   PUBLIC_ORIGIN: 'https://league.example', DISCORD_TRANSFER_WEBHOOK: '',
   APPLICATION_ROLE_BOUNDARY_ARN: 'arn:aws:iam::123456789012:policy/napl-deployment-boundary',
@@ -24,7 +24,7 @@ test('writes only current validated parameters, with injected settings taking pr
   const params = JSON.parse(await readFile(files.outputPath, 'utf8'));
   assert.deepEqual(params, {
     DatabaseUrl: 'postgres://injected.example/app?sslmode=verify-full', SupabaseUrl: env.SUPABASE_URL,
-    SupabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY, SupabaseJwksUrl: env.SUPABASE_JWKS_URL,
+    SupabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY, SupabaseSecretKey: env.SUPABASE_SECRET_KEY, SupabaseJwksUrl: env.SUPABASE_JWKS_URL,
     PublicOrigin: env.PUBLIC_ORIGIN, DiscordTransferWebhook: '', RolePermissionsBoundaryArn: env.APPLICATION_ROLE_BOUNDARY_ARN,
   });
   assert.equal((await stat(files.outputPath)).mode & 0o777, 0o600);
@@ -48,5 +48,6 @@ test('rejects Lambda environments above 4 KiB and unfilled placeholders', async 
   const files = await paths(t);
   await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_PUBLISHABLE_KEY: 'x'.repeat(4200) } }), /4096 bytes/);
   await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_PUBLISHABLE_KEY: 'REPLACE_WITH_KEY' } }), /placeholders/);
+  await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_SECRET_KEY: 'REPLACE_WITH_STORAGE_SECRET' } }), /placeholders/);
   await assert.rejects(readFile(files.outputPath));
 });

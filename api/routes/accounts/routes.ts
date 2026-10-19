@@ -11,10 +11,11 @@ import type { Prisma } from '../../plugins/db/client.js';
 import { string, array, object } from '../../plugins/db/records.js';
 import { accountDto, currentAccountDto, positionRequestDto, playerCard, playerSummary } from './dto.js';
 import { provisionAccount, getCurrentAccount, listAccounts, loadRankedAccounts, findAccountByUsername, requireAccount, updateAccount, listPositionRequests, hasPendingPositionRequest, createPositionRequest, lockPositionRequest, reviewPositionRequest, deletePositionRequest } from './queries.js';
+import { prepareImage, removeUnusedImages } from '../payload/storage.js';
 import { pathSegment, detailUrl, page, pageInput, textPage } from '../payload/page.js';
 const awardSeason = z.string().trim().min(1).max(64);
 const historicalAwardId = z.string().trim().min(1).max(160);
-export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencies): void {
+export function registerAccounts(app: FastifyInstance, { db, auth, storage }: Dependencies): void {
     const limiter = new RateLimiter(auth.authStore);
     app.get('/api/accounts', {
         config: {
@@ -87,6 +88,8 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         if (!admin && actor(request).id !== id)
             throw new HttpError(403, 'forbidden');
         const input = (admin ? adminAccountPatch : profilePatch).parse(request.body);
+        const images: (string | null | undefined)[] = [];
+        try {
         const { row, calculated } = await db.transaction(async (tx) => {
             const existing = await requireAccount(tx, id, true);
             request.resource = { type: 'account', id: existing.id };
@@ -96,6 +99,17 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
                 throw new HttpError(403, 'strikers_id_locked');
             if (input.strikersId && !/^\d{2,15}$/.test(input.strikersId))
                 throw new HttpError(400, 'invalid_strikers_id');
+            const target = { kind: 'account-image' as const, entityId: id, actorId: actor(request).id, public: false };
+            if (input.pendingImageUrl !== undefined) {
+                images.push(existing.pending_image_url);
+                input.pendingImageUrl = await prepareImage(storage, input.pendingImageUrl, existing.pending_image_url, target);
+                images.push(input.pendingImageUrl);
+            }
+            if (input.imageUrl !== undefined) {
+                images.push(existing.image_url);
+                input.imageUrl = await prepareImage(storage, input.imageUrl, existing.image_url, { ...target, public: true });
+                images.push(input.imageUrl);
+            }
             const data = {
                 country: input.country, steam_url: input.steamUrl, pending_image_url: input.pendingImageUrl,
                 strikers_id: input.strikersId, position: input.position,
@@ -116,6 +130,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
             ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats,
             ...((actor(request).id === id) && {roles:request.userRoles})
         };
+        } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.put('/api/accounts/:id/awards/:awardId/:season', {
         config: { role: 'admin' }

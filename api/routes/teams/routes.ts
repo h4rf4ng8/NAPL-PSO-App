@@ -15,6 +15,8 @@ import { listTeams, getTeam, needTeam, getAccount, needAccount, findAccount, has
 import { ensureSeason } from '../settings/queries.js';
 import { checkBlockedName } from '../name-validation.js';
 import { pathSegment, detailUrl, page, pageInput, requireRevision, textPage } from '../payload/page.js';
+import { PRIVATE_BUCKET, type ImageStorage } from '../../plugins/storage/client.js';
+import { prepareImage, removeUnusedImages } from '../payload/storage.js';
 import { fieldPage, fieldValue } from '../payload/details.js';
 const same = (a: unknown, b: unknown) => string(a).toLowerCase() === string(b).toLowerCase();
 function validateTeamNames(name?: string, tag?: string): void {
@@ -75,11 +77,11 @@ const summary = (team: ReturnType<typeof teamDto>) => ({ id: team.id, name: team
     createdAt: team.createdAt, reviewedAt: team.reviewedAt, reviewedBy: team.reviewedBy,
     memberCount: team.members.length, invitationCount: team.invitations.length, seasonCount: team.seasons.length,
 });
-const editor = (row: TeamRecord) => ({ ...teamDto(row),
-    logoUrl: row.logo_url?.startsWith('data:image/') ? teamDto(row).logoUrl : row.logo_url,
-    logoStoredImage: Boolean(row.logo_url?.startsWith('data:image/')),
+const editor = (row: TeamRecord, storage?: ImageStorage) => ({ ...teamDto(row),
+    logoUrl: (row.logo_url?.startsWith('data:image/') || (row.logo_url && storage?.reference(row.logo_url)?.bucket === PRIVATE_BUCKET)) ? teamDto(row).logoUrl : row.logo_url,
+    logoStoredImage: Boolean(row.logo_url?.startsWith('data:image/') || (row.logo_url && storage?.reference(row.logo_url))),
 });
-export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependencies): void {
+export function registerTeams(app: FastifyInstance, { db, webhookUrl, storage }: Dependencies): void {
     const visibleTeam = async (request: FastifyRequest) => {
         const row = await getTeam(db, parameters(request).id!);
         if (!row || (row.status !== 'approved' && !isAdmin(request) && row.owner_account_id !== request.identity?.id && row.pending_members.every(invitation => invitation.accountId !== request.identity?.id))) throw new HttpError(404, 'not_found');
@@ -119,12 +121,12 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         const row = await visibleTeam(request);
         if (!isAdmin(request) && row.owner_account_id !== actor(request).id) throw new HttpError(404, 'not_found');
         requireRevision(teamDto(row), request);
-        return fieldPage(editor(row), `/api/teams/${pathSegment(row.id)}/editor`, request);
+        return fieldPage(editor(row, storage), `/api/teams/${pathSegment(row.id)}/editor`, request);
     });
     app.get('/api/teams/:id/editor/fields/:field', async request => {
         const row = await visibleTeam(request);
         if (!isAdmin(request) && row.owner_account_id !== actor(request).id) throw new HttpError(404, 'not_found');
-        return fieldValue(editor(row), parameters(request).field!, `team-editor:${row.id}`, request);
+        return fieldValue(editor(row, storage), parameters(request).field!, `team-editor:${row.id}`, request);
     });
     app.get('/api/teams/:id/lineup', { config: { public: true } }, async request => {
         const team = teamDto(await visibleTeam(request));
@@ -149,7 +151,8 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         const input = teamInput.parse(request.body);
         validateTeamNames(input.name, input.tag);
         const name = await actorName(db, request);
-        return db.transaction(async (tx) => {
+        const images: (string | null | undefined)[] = [];
+        try { return await db.transaction(async (tx) => {
             const self = await needAccount(tx, actor(request).id, true);
             if (!self.strikers_id)
                 throw new HttpError(409, 'strikers_id_required');
@@ -169,6 +172,8 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             }
             const lineup=Object.values(input.lineup??{});
             if(lineup.length>1||lineup.some(value=>!same(value,name)))throw new HttpError(400,'invalid_lineup');
+            input.logoUrl = await prepareImage(storage, input.logoUrl, null, { kind: 'team-logo', entityId: input.id, actorId: actor(request).id, public: false });
+            images.push(input.logoUrl);
             const team = await createTeam(tx, {
                 id: input.id, ...teamFields(input), name: input.name, tag: input.tag, owner_account_id: self.id, status: 'pending'
             });
@@ -176,12 +181,13 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             for (const accountId of invitations) await createInvitation(tx, team.id, accountId);
             request.resource = { type: 'team', id: team.id };
             return teamDto(await needTeam(tx, team.id));
-        });
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.patch('/api/teams/:id', async (request) => {
         const input = teamPatch.parse(request.body);
         validateTeamNames(input.name, input.tag);
-        return db.transaction(async (tx) => {
+        const images: (string | null | undefined)[] = [];
+        try { return await db.transaction(async (tx) => {
             const row = await needTeam(tx, parameters(request).id!, true);
             if (!isAdmin(request) && row.owner_account_id !== actor(request).id)
                 throw new HttpError(403, 'captain_required');
@@ -194,10 +200,15 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
                 if (new Set(lineup).size !== lineup.length || lineup.some(v => !members.has(v)))
                     throw new HttpError(400, 'invalid_lineup');
             }
+            if (input.logoUrl !== undefined) {
+                images.push(row.logo_url);
+                input.logoUrl = await prepareImage(storage, input.logoUrl, row.logo_url, { kind: 'team-logo', entityId: row.id, actorId: actor(request).id, public: row.status === 'approved' });
+                images.push(input.logoUrl);
+            }
             await updateTeam(tx, row.id, teamFields(input));
             if (input.seasons !== undefined) await setTeamSeasons(tx, row.id, input.seasons);
             return teamDto(await needTeam(tx, row.id));
-        });
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.post('/api/teams/:id/review', {
         config: {
@@ -207,6 +218,8 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         const input = z.strictObject({
             status: z.enum(['approved', 'rejected']), reason: z.string().max(2000).optional()
         }).parse(request.body), reviewer = { id: actor(request).id, username: await actorName(db, request) };
+        const images: (string | null | undefined)[] = [];
+        try {
         const result = await db.transaction(async (tx) => {
             let row = await needTeam(tx, parameters(request).id!, true);
             request.resource = { type: 'team', id: row.id };
@@ -214,7 +227,10 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
                 return teamDto(row);
             if (row.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
-            row = await updateTeam(tx, row.id, {
+            images.push(row.logo_url);
+            const logo = await prepareImage(storage, row.logo_url, row.logo_url, { kind: 'team-logo', entityId: row.id, actorId: actor(request).id, public: input.status === 'approved' });
+            images.push(logo);
+            row = await updateTeam(tx, row.id, { logo_url: logo,
                 status: input.status, reviewed_by: reviewer.username, reviewed_by_account_id: reviewer.id, reviewed_at: new Date(), rejection_reason: input.reason ?? null
             });
             if (input.status === 'approved') {
@@ -235,6 +251,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         });
         await notify(webhookUrl, parameters(request).id!, request);
         return result;
+        } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.post('/api/teams/:id/membership', async (request) => {
         const input = z.strictObject({
@@ -289,12 +306,14 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             role: 'admin'
         }
     }, async (request) => {
-        await db.transaction(async (tx) => {
+        const images: (string | null | undefined)[] = [];
+        try { await db.transaction(async (tx) => {
             const team = await needTeam(tx, parameters(request).id!, true);
             request.resource = { type: 'team', id: team.id };
+            images.push(team.logo_url);
             await teamAccounts(tx, team.id);
             await removeTeam(tx, team.id);
-        });
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
         return {
             ok: true
         };

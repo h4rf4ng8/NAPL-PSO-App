@@ -40,12 +40,14 @@ test('SAM template describes the bounded Lambda and direct browser Function URL'
   assert.equal(resources.ApiRole.Properties.Policies[0].PolicyDocument.Statement[0].Resource, '${ApiLogGroup.Arn}:*');
   assert.equal(fn.FunctionUrlConfig.Cors, undefined);
   assert.equal(template.Parameters.DatabaseUrl.NoEcho, true);
+  assert.equal(template.Parameters.SupabaseSecretKey.NoEcho, true);
+  assert.deepEqual(fn.Environment.Variables.SUPABASE_SECRET_KEY, ['HasSupabaseSecretKey', 'SupabaseSecretKey', 'AWS::NoValue']);
   assert.equal(fn.Environment.Variables.NODE_ENV, 'production');
   assert.equal(fn.Environment.Variables.DATABASE_URL, 'DatabaseUrl');
   assert.equal(fn.Environment.Variables.SUPABASE_URL, 'SupabaseUrl');
   assert.equal(fn.Environment.Variables.SUPABASE_JWKS_URL, 'SupabaseJwksUrl');
   assert.deepEqual(Object.keys(fn.Environment.Variables).filter(name => name.endsWith('DATABASE_URL')), ['DATABASE_URL']);
-  for (const name of ['SUPABASE_SECRET_KEY', 'COOKIE_KEYS', 'ORIGIN_SECRET', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_GUILD_ID']) assert.equal(fn.Environment.Variables[name], undefined);
+  for (const name of ['COOKIE_KEYS', 'ORIGIN_SECRET', 'DISCORD_CLIENT_ID', 'DISCORD_CLIENT_SECRET', 'DISCORD_GUILD_ID']) assert.equal(fn.Environment.Variables[name], undefined);
   assert.equal(fn.Environment.Variables.DISCORD_TRANSFER_WEBHOOK[2], 'AWS::NoValue');
   assert.ok(Object.values(resources).every(resource => !['AWS::ApiGateway::RestApi', 'AWS::CloudFront::Distribution'].includes(resource.Type)));
   assert.ok(Object.keys(fn).every(key => !['VpcConfig', 'ProvisionedConcurrencyConfig'].includes(key)));

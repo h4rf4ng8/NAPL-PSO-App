@@ -58,7 +58,7 @@ export async function request<T>(path:string, method='GET', body?:unknown, signa
     if(response.ok) {
       const result=response.status===204?undefined as T:(path.startsWith('/api/media/') && !response.headers.get('Content-Type')?.includes('application/json')?await response.blob() as T:await response.json() as T);
       check();
-      if(mutates && path.startsWith('/api/')) {
+      if(mutates && path !== '/api/media/uploads') {
         const { resetQueries } = await import('./client');
         check();
         await resetQueries();

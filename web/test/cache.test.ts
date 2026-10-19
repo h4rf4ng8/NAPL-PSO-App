@@ -65,6 +65,22 @@ test('failed commands preserve cached reads; successful commands refetch each ac
   assert.deepEqual(results.at(-1)?.data, { teamRecords: page([record(2)]) });
 });
 
+test('upload credentials leave active reads intact until the image save succeeds', async () => {
+  let reads = 0;
+  mock.method(globalThis, 'fetch', async url => {
+    const path = String(url).replace('http://api.example.test', '');
+    return path === '/api/team-records' ? response(++reads) : Response.json({ ok: true });
+  });
+  const { ready, results } = watch();
+  await ready;
+  await request('/api/media/uploads', 'POST', { kind: 'team-logo', entityId: 'blue', contentType: 'image/jpeg' });
+  assert.equal(reads, 1, 'issuing an upload token must not refetch league data');
+  assert.deepEqual(results.at(-1)?.data, { teamRecords: page([record(1)]) });
+  await request('/api/teams/blue', 'PATCH', { logoUrl: 'https://storage.example/uploaded.jpg' });
+  assert.equal(reads, 2, 'saving the uploaded image must still refetch active reads');
+  assert.deepEqual(results.at(-1)?.data, { teamRecords: page([record(2)]) });
+});
+
 test('a successful command remains successful when its refetch fails and query subscribers see the error', async () => {
   let reads = 0;
   mock.method(globalThis, 'fetch', async url => {

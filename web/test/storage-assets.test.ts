@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { COUNTRIES, flagUrl } from '../src/utils/league';
 
-test('every referenced static file exists with its immutable hash and preserved font licenses', () => {
+test('retained static files preserve hashes and licenses; country flags use Storage URLs', () => {
   const directory = new URL('../assets/storage/', import.meta.url);
   const assets = JSON.parse(readFileSync(new URL('manifest.json', directory), 'utf8')) as { key: string; source: string; path: string; sha256: string; contentType: string; size: number }[];
   for (const asset of assets) {
@@ -27,7 +27,6 @@ test('every referenced static file exists with its immutable hash and preserved 
   for (const country of COUNTRIES) {
     if (country === 'Other') continue;
     const url = flagUrl(country)!;
-    assert.ok(url.startsWith('https://auth.example.test/storage/v1/object/public/asl-assets/static/'), country);
-    assert.ok(assets.some(asset => url.endsWith(asset.path)), country);
+    assert.match(url, /^https:\/\/auth\.example\.test\/storage\/v1\/object\/public\/asl-assets\/static\/[a-f\d]{64}\.png$/, country);
   }
 });

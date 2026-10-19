@@ -1,8 +1,9 @@
+import { imageUploadInput } from '@napl/contracts/storage';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { id as resourceId } from '@napl/contracts';
 import type { Dependencies } from '../../app.js';
-import { ImageStorage, imageKind, imageContentType } from '../../plugins/storage/client.js';
+import { ImageStorage } from '../../plugins/storage/client.js';
 import { RateLimiter, normalizeIp } from '../../plugins/limits/auth.js';
 import { clientIp } from '../../plugins/request.js';
 import { GatewayError } from '../../plugins/auth/errors.js';
@@ -24,7 +25,7 @@ export function registerMedia(app: FastifyInstance, { db, storage, auth }: Pick<
   const limiter = new RateLimiter(auth.authStore);
   app.post('/api/media/uploads', async request => {
     if (!storage) throw new GatewayError(503, 'storage_unavailable');
-    const input = z.strictObject({ kind: imageKind, entityId: resourceId, contentType: imageContentType }).parse(request.body);
+    const input = imageUploadInput.parse(request.body);
     const user = actor(request);
     if (input.kind === 'account-image') {
       const id = z.uuid().parse(input.entityId);

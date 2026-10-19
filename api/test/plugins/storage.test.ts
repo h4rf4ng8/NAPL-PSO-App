@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
-import { ASSET_BUCKET, PRIVATE_BUCKET } from '../../plugins/storage/client.js';
+import { ASSET_BUCKET, PRIVATE_BUCKET } from '@napl/contracts/storage';
 import { storageFixture, storageRoot, storageSecret, png } from '../storage-fixture.js';
 import { storedImage } from '../../routes/payload/page.js';
 

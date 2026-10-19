@@ -1,15 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { StorageClient } from '@supabase/storage-js';
-import { z } from 'zod';
+import { ASSET_BUCKET, PRIVATE_BUCKET, MAX_IMAGE_BYTES, imageContentType, type ImageKind, type ImageContentType, type ImageUploadResponse } from '@napl/contracts/storage';
 import { HttpError } from '../auth/identity.js';
 import { GatewayError } from '../auth/errors.js';
 
-export const ASSET_BUCKET = 'asl-assets';
-export const PRIVATE_BUCKET = 'asl-private-media';
-export const imageKind = z.enum(['account-image', 'team-logo', 'article-cover']);
-export const imageContentType = z.enum(['image/png', 'image/jpeg', 'image/webp']);
-export const MAX_IMAGE_BYTES = 1_500_000;
-export type ImageKind = z.infer<typeof imageKind>;
 export type ImageTarget = { kind: ImageKind; entityId: string; actorId: string; public: boolean };
 type ObjectRef = { bucket: typeof ASSET_BUCKET | typeof PRIVATE_BUCKET; path: string };
 const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as const;
@@ -39,10 +33,10 @@ export class ImageStorage {
   private url(ref: ObjectRef): string {
     return `${this.root}/storage/v1/object/${ref.bucket === ASSET_BUCKET ? 'public' : 'authenticated'}/${ref.bucket}/${ref.path.split('/').map(part => encodeURIComponent(part)).join('/')}`;
   }
-  private path(kind: ImageKind, entityId: string, actorId: string, mime: z.infer<typeof imageContentType>): string {
+  private path(kind: ImageKind, entityId: string, actorId: string, mime: ImageContentType): string {
     return `${kind}/${actorId}/${Buffer.from(entityId).toString('base64url')}/${randomUUID()}.${extension[mime]}`;
   }
-  async signedUpload(kind: ImageKind, entityId: string, actorId: string, mime: z.infer<typeof imageContentType>) {
+  async signedUpload(kind: ImageKind, entityId: string, actorId: string, mime: ImageContentType): Promise<ImageUploadResponse> {
     const path = this.path(kind, entityId, actorId, mime);
     const { data, error } = await this.client.from(PRIVATE_BUCKET).createSignedUploadUrl(path, { upsert: false });
     if (error) throw unavailable();

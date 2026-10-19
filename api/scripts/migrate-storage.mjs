@@ -1,3 +1,4 @@
+import { ASSET_BUCKET, PRIVATE_BUCKET, MAX_IMAGE_BYTES, imageContentType } from '@napl/contracts/storage';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
@@ -10,12 +11,12 @@ import pg from 'pg';
 import ipaddr from 'ipaddr.js';
 
 const repo = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
-const mediaLimit = 1_500_000;
+const mediaLimit = MAX_IMAGE_BYTES;
 const publicLimit = 5_000_000;
-const imageTypes = ['image/png', 'image/jpeg', 'image/webp'];
+const imageTypes = imageContentType.options;
 const bucketSpecs = [
-  { id: 'asl-assets', name: 'asl-assets', public: true, file_size_limit: publicLimit, allowed_mime_types: [...imageTypes, 'image/gif', 'image/svg+xml', 'image/x-icon', 'font/woff2', 'text/plain', 'application/pdf'] },
-  { id: 'asl-private-media', name: 'asl-private-media', public: false, file_size_limit: mediaLimit, allowed_mime_types: imageTypes },
+  { id: ASSET_BUCKET, name: ASSET_BUCKET, public: true, file_size_limit: publicLimit, allowed_mime_types: [...imageTypes, 'image/gif', 'image/svg+xml', 'image/x-icon', 'font/woff2', 'text/plain', 'application/pdf'] },
+  { id: PRIVATE_BUCKET, name: PRIVATE_BUCKET, public: false, file_size_limit: mediaLimit, allowed_mime_types: imageTypes },
 ];
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const fail = code => { throw new Error(code); };
@@ -108,7 +109,7 @@ async function prepareMedia(directory, row, origin) {
   const [contentType, extension] = imageType(bytes);
   if (contentType === 'image/gif' && row.private) fail('unsupported_image');
   if (embedded && (contentType !== embedded[1] || bytes.toString('base64') !== embedded[2])) fail('invalid_embedded_image');
-  const entry = await stage(directory, { ...row, contentType, bucket: row.private ? 'asl-private-media' : 'asl-assets' }, bytes);
+  const entry = await stage(directory, { ...row, contentType, bucket: row.private ? PRIVATE_BUCKET : ASSET_BUCKET }, bytes);
   const kind = { accounts: 'account-image', teams: 'team-logo', articles: 'article-cover' }[row.table];
   entry.path = `${kind}/${row.actor}/${Buffer.from(row.id).toString('base64url')}/${entry.sha256}.${extension}`;
   entry.destination = `${origin}/storage/v1/object/${row.private ? 'authenticated' : 'public'}/${entry.bucket}/${encodedPath(entry.path)}`;
@@ -145,7 +146,7 @@ async function prepare(directory, staticManifest, origin) {
       if (!source.startsWith(`${base}${path.sep}`)) fail('static_source_outside_manifest');
       const bytes = await readFile(source);
       if (hash(bytes) !== entry.sha256 || bytes.length !== entry.size || !/^static\/[a-f0-9]{64}\.[a-z0-9]+$/.test(entry.path) || !entry.path.includes(entry.sha256) || !bucketSpecs[0].allowed_mime_types.includes(entry.contentType)) fail('static_manifest_invalid');
-      state.entries.push(await stage(directory, { bucket: 'asl-assets', path: entry.path, contentType: entry.contentType }, bytes));
+      state.entries.push(await stage(directory, { bucket: ASSET_BUCKET, path: entry.path, contentType: entry.contentType }, bytes));
     }
   }
   await saveState(directory, state);

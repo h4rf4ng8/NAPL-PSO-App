@@ -1,3 +1,5 @@
+import { MAX_IMAGE_DATA_URL_LENGTH } from './storage.js';
+export * from './storage.js';
 import { z } from 'zod';
 import { ALL_POSITIONS, SLOT, VOTE_FIELDS } from './league/positions.js';
 import { matchSchema, championshipSchema } from './accounts/index.js';
@@ -40,7 +42,7 @@ export const httpUrl = z.string().max(2048).refine(v => {
         return false;
     }
 }, 'Expected HTTP(S) URL');
-export const imageUrl = z.union([httpUrl, z.string().max(1_500_000).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)]).nullable();
+export const imageUrl = z.union([httpUrl, z.string().max(MAX_IMAGE_DATA_URL_LENGTH).regex(/^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/)]).nullable();
 export const jsonObject = z.record(z.string(), z.json());
 export const stats = z.record(z.string(), z.number().nonnegative());
 export const profilePatch = z.strictObject({

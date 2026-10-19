@@ -1,3 +1,4 @@
+import { PRIVATE_BUCKET } from '@napl/contracts/storage';
 import { GatewayError } from '../../plugins/auth/errors.js';
 import { diagnose } from '../../plugins/logging.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
@@ -15,7 +16,7 @@ import { listTeams, getTeam, needTeam, getAccount, needAccount, findAccount, has
 import { ensureSeason } from '../settings/queries.js';
 import { checkBlockedName } from '../name-validation.js';
 import { pathSegment, detailUrl, page, pageInput, requireRevision, textPage } from '../payload/page.js';
-import { PRIVATE_BUCKET, type ImageStorage } from '../../plugins/storage/client.js';
+import { type ImageStorage } from '../../plugins/storage/client.js';
 import { prepareImage, removeUnusedImages } from '../payload/storage.js';
 import { fieldPage, fieldValue } from '../payload/details.js';
 const same = (a: unknown, b: unknown) => string(a).toLowerCase() === string(b).toLowerCase();

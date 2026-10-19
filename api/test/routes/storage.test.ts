@@ -4,7 +4,7 @@ import type { Database } from '../../plugins/db/client.js';
 import { createApp } from '../helper.js';
 import { payloadFixture, fixtureUser } from '../payload-fixture.js';
 import { storageFixture, png } from '../storage-fixture.js';
-import { ASSET_BUCKET, PRIVATE_BUCKET } from '../../plugins/storage/client.js';
+import { ASSET_BUCKET, PRIVATE_BUCKET } from '@napl/contracts/storage';
 
 const admin = '00000000-0000-4000-8000-000000000003';
 const outsider = '00000000-0000-4000-8000-000000000002';

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mock } from 'node:test';
-import { ImageStorage, ASSET_BUCKET, PRIVATE_BUCKET } from '../plugins/storage/client.js';
+import { ImageStorage } from '../plugins/storage/client.js';
+import { ASSET_BUCKET, PRIVATE_BUCKET } from '@napl/contracts/storage';
 
 export const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=', 'base64');
 export const storageRoot = 'https://storage.example.test';

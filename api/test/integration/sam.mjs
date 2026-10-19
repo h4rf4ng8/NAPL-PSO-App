@@ -87,11 +87,14 @@ try {
   await invoke('protected route rejects forged identity headers', event('/api/users/me', { headers: { authorization: 'Bearer forged', 'x-user-role': 'super_admin' } }), 401);
   await invoke('mutation requires bearer', event('/api/teams', { method: 'POST', headers: { 'content-type': 'application/json' }, body: {} }), 401);
   const auth = { origin, 'content-type': 'application/json', 'apollo-require-preflight': 'true' };
-  const dashboard = await invoke('base64 GraphQL body and database-backed reads', event('/api/dashboard', {
+  const dashboard = await invoke('base64 GraphQL preserves public data and rejects its private account field', event('/api/dashboard', {
     method: 'POST', headers: auth, base64: true, body: { variables: {} },
-  }), 200);
+  }), 401);
   const payload = JSON.parse(dashboard.body);
-  assert.equal(payload.errors, undefined);
+  assert.equal(payload.errors.length, 1);
+  assert.equal(payload.errors[0].extensions.code, 'authentication_required');
+  assert.equal(payload.errors[0].extensions.status, 401);
+  assert.equal(payload.data.me, null);
   assert.ok(Array.isArray(payload.data.accounts));
   assert.ok(Array.isArray(payload.data.teams));
   assert.equal(dashboard.cookies, undefined);

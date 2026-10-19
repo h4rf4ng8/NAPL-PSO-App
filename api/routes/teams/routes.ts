@@ -1,3 +1,5 @@
+import { GatewayError } from '../../plugins/auth/errors.js';
+import { diagnose } from '../../plugins/logging.js';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { teamInput, teamPatch } from '@napl/contracts';
@@ -44,7 +46,7 @@ export async function moveMember(database: Database, player: Account, target: Te
     });
     return saved;
 }
-async function notify(url: string | undefined, teamId: string, log: FastifyRequest['log']): Promise<void> {
+async function notify(url: string | undefined, teamId: string, request: FastifyRequest): Promise<void> {
     if (!url)
         return;
     try {
@@ -58,12 +60,11 @@ async function notify(url: string | undefined, teamId: string, log: FastifyReque
             }), signal: AbortSignal.timeout(5000)
         });
         if (!response.ok)
-            throw new Error(`Discord status ${response.status}`);
+            throw new GatewayError(503, 'discord_notification_failed', undefined, { dependency: 'discord', operation: 'notification', failure: 'http', status: response.status });
     }
-    catch {
-        log.warn({
-            teamId
-        }, 'Roster saved, Discord notification failed');
+    catch (error) {
+        diagnose(request, error instanceof GatewayError ? error : new GatewayError(503, 'discord_notification_failed', undefined, { dependency: 'discord', operation: 'notification', failure: error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network' }), 'discord_notification_failed', 'warn');
+        request.diagnostic!.team_id = teamId;
     }
 }
 export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependencies): void {
@@ -173,7 +174,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             }
             return teamDto(await needTeam(tx, row.id));
         });
-        await notify(webhookUrl, parameters(request).id!, request.log);
+        await notify(webhookUrl, parameters(request).id!, request);
         return result;
     });
     app.post('/api/teams/:id/membership', async (request) => {
@@ -202,7 +203,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             }
             return moveMember(tx, player, team, reviewer);
         });
-        await notify(webhookUrl, parameters(request).id!, request.log);
+        await notify(webhookUrl, parameters(request).id!, request);
         return {...accountDto(saved, true), ...((actor(request).id === userId) && {roles:request.userRoles})};
     });
     app.post('/api/teams/:id/invitation', async (request) => {

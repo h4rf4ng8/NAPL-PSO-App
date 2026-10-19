@@ -88,6 +88,10 @@ Resources:
       CodeUri: dist/api.zip
       FunctionName: !Sub ${AWS::StackName}-api
       Handler: lambda.handler
+      LoggingConfig:
+        LogFormat: JSON
+        ApplicationLogLevel: INFO
+        SystemLogLevel: INFO
       Runtime: nodejs24.x
       Architectures: [arm64]
       AutoPublishAlias: live

@@ -38,7 +38,7 @@ export class SupabaseClient implements SupabaseAuth {
     } catch (error) {
       const code = error instanceof Error && 'code' in error ? error.code : '';
       if (error instanceof errors.JWTExpired && error.claim === 'exp' && z.uuid().safeParse(error.payload.sub).success && z.uuid().safeParse(error.payload.session_id).success) throw new GatewayError(401, 'access_expired');
-      if (code === 'ERR_JWKS_TIMEOUT' || error instanceof TypeError) throw new GatewayError(503, 'identity_provider_unavailable', 1);
+      if (code === 'ERR_JWKS_TIMEOUT' || error instanceof TypeError) throw new GatewayError(503, 'identity_provider_unavailable', 1, { dependency: 'supabase', operation: 'verify', failure: code === 'ERR_JWKS_TIMEOUT' ? 'timeout' : 'network' });
       throw new GatewayError(401, 'access_invalid');
     }
   }
@@ -50,12 +50,12 @@ export class SupabaseClient implements SupabaseAuth {
         signal: AbortSignal.timeout(4000), redirect: 'error',
       });
       if (response.status === 401 || response.status === 403) throw new GatewayError(401, 'access_invalid');
-      if (response.status === 429) throw new GatewayError(429, 'identity_provider_rate_limited', 60);
-      if (!response.ok) throw new GatewayError(503, 'identity_provider_unavailable', 1);
+      if (response.status === 429) throw new GatewayError(429, 'identity_provider_rate_limited', 60, { dependency: 'supabase', operation: 'user', failure: 'http', status: response.status });
+      if (!response.ok) throw new GatewayError(503, 'identity_provider_unavailable', 1, { dependency: 'supabase', operation: 'user', failure: 'http', status: response.status });
       return userSchema.parse(await response.json() as unknown);
     } catch (error) {
       if (error instanceof GatewayError) throw error;
-      throw new GatewayError(503, 'identity_provider_unavailable', 1);
+      throw new GatewayError(503, 'identity_provider_unavailable', 1, { dependency: 'supabase', operation: 'user', failure: error instanceof z.ZodError || error instanceof SyntaxError ? 'schema' : (error instanceof Error && error.name === 'TimeoutError' ? 'timeout' : 'network') });
     }
   }
 }

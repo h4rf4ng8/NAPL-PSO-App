@@ -1,0 +1,11 @@
+{
+  "baseline_commit": "b41fd67cd89094de65f2163a09e6c1e3ede86f2c",
+  "node": "24.22.0",
+  "measurement": "local UTF-8 application stdout JSON bytes including newlines; identical injected API traffic",
+  "requests": 30,
+  "before": {"events": 70, "stdout_bytes": 11774, "by_status": {"200": {"requests": 10, "events": 20, "bytes": 3441}, "401": {"requests": 10, "events": 20, "bytes": 3439}, "503": {"requests": 10, "events": 30, "bytes": 4894}}},
+  "after": {"events": 30, "stdout_bytes": 8771, "by_status": {"200": {"requests": 10, "events": 10, "bytes": 2431}, "401": {"requests": 10, "events": 10, "bytes": 2590}, "503": {"requests": 10, "events": 10, "bytes": 3750}}},
+  "platform_bytes": null,
+  "cloudwatch_ingestion_bytes": null,
+  "cloudwatch_cost_change": null
+}

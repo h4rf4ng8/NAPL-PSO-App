@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -11,15 +9,12 @@ import { AWARD_TYPES, AwardIcon, CaptainStar, ChampionTrophy } from '../src/comp
 Object.assign(globalThis, { React });
 const render = renderToStaticMarkup;
 
-test('league artwork retains its decoded bytes and branding defaults', () => {
+test('league artwork retains its hosted Storage URLs and branding defaults', () => {
   for (const [src, expected] of [
     [ASL_LOGO_SRC, '821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7'],
     [ASL_LOGO_DIAMOND, 'b1bd70b6215b0fc657e2c1d3f9b8e57deda43b6c2ac6fdf5d325f563465b025c'],
   ]) {
     assert.ok(src.endsWith(`/asl-assets/static/${expected}.png`));
-    const manifest = JSON.parse(readFileSync(new URL('../assets/storage/manifest.json', import.meta.url), 'utf8')) as { sha256: string; source: string }[];
-    const asset = manifest.find(entry => entry.sha256 === expected)!;
-    assert.equal(createHash('sha256').update(readFileSync(new URL('../assets/storage/' + asset.source, import.meta.url))).digest('hex'), expected);
   }
   const crest = render(React.createElement(ASLCrest));
   assert.ok(crest.includes('width="40" height="40"'));

@@ -1,28 +1,11 @@
 [
   {
     "key": "logos/asl_logo_src",
-    "source": "logos/asl_logo_src.png",
-    "path": "static/821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7.png",
-    "sha256": "821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7",
-    "contentType": "image/png",
-    "size": 74236
-  },
-  {
-    "key": "logos/asl_logo_diamond",
-    "source": "logos/asl_logo_diamond.png",
-    "path": "static/b1bd70b6215b0fc657e2c1d3f9b8e57deda43b6c2ac6fdf5d325f563465b025c.png",
-    "sha256": "b1bd70b6215b0fc657e2c1d3f9b8e57deda43b6c2ac6fdf5d325f563465b025c",
-    "contentType": "image/png",
-    "size": 25246
+    "path": "static/821ed843faad56ae844a6da3bfc551ea7a6c8ccb4cd0883ab24342a7fcff81a7.png"
   },
   {
     "key": "fonts/1Ptgg87LROyAm3K8-C8CSKlvPfE",
-    "source": "fonts/1Ptgg87LROyAm3K8-C8CSKlvPfE.woff2",
     "path": "static/889f979804fc6c2ddb3c9577805caf156bfd092a5b6e58d680535d65267b933e.woff2",
-    "sha256": "889f979804fc6c2ddb3c9577805caf156bfd092a5b6e58d680535d65267b933e",
-    "contentType": "font/woff2",
-    "size": 5188,
-    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3K8-C8CSKlvPfE.woff2",
     "fontFaces": [
       {
         "font-family": "'Anton'",
@@ -35,12 +18,7 @@
   },
   {
     "key": "fonts/1Ptgg87LROyAm3K9-C8CSKlvPfE",
-    "source": "fonts/1Ptgg87LROyAm3K9-C8CSKlvPfE.woff2",
     "path": "static/ae1a8ac1c2899a66eed47a851201bb78a56664bf8da6d34a9ee226582d15ac19.woff2",
-    "sha256": "ae1a8ac1c2899a66eed47a851201bb78a56664bf8da6d34a9ee226582d15ac19",
-    "contentType": "font/woff2",
-    "size": 21296,
-    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3K9-C8CSKlvPfE.woff2",
     "fontFaces": [
       {
         "font-family": "'Anton'",
@@ -53,12 +31,7 @@
   },
   {
     "key": "fonts/1Ptgg87LROyAm3Kz-C8CSKlv",
-    "source": "fonts/1Ptgg87LROyAm3Kz-C8CSKlv.woff2",
     "path": "static/23aab0b2692a0c89eb7997d3c7cf5bda41276d6cd4ab6cc0edc3edfcece32b09.woff2",
-    "sha256": "23aab0b2692a0c89eb7997d3c7cf5bda41276d6cd4ab6cc0edc3edfcece32b09",
-    "contentType": "font/woff2",
-    "size": 12004,
-    "origin": "https://fonts.gstatic.com/s/anton/v27/1Ptgg87LROyAm3Kz-C8CSKlv.woff2",
     "fontFaces": [
       {
         "font-family": "'Anton'",
@@ -71,12 +44,7 @@
   },
   {
     "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw",
-    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw.woff2",
     "path": "static/bc42ba6f77ac0be14c84afea284154ce761c7c0b8e4bb0b896bc0b606adedc88.woff2",
-    "sha256": "bc42ba6f77ac0be14c84afea284154ce761c7c0b8e4bb0b896bc0b606adedc88",
-    "contentType": "font/woff2",
-    "size": 4560,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x7T2lv0tKk7aw.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -89,12 +57,7 @@
   },
   {
     "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk",
-    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
     "path": "static/0e2a408159b32d8105bcd1a0a4d6222fcee375a84fb62703c614ce34d8bb68bb.woff2",
-    "sha256": "0e2a408159b32d8105bcd1a0a4d6222fcee375a84fb62703c614ce34d8bb68bb",
-    "contentType": "font/woff2",
-    "size": 14672,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6xHT2lv0tKk.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -107,12 +70,7 @@
   },
   {
     "key": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw",
-    "source": "fonts/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw.woff2",
     "path": "static/ed8618e86bffee6caa69d0aa5c08339fa886d878962444348b09b2e5ec2d516c.woff2",
-    "sha256": "ed8618e86bffee6caa69d0aa5c08339fa886d878962444348b09b2e5ec2d516c",
-    "contentType": "font/woff2",
-    "size": 9264,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTx3L3I-JCGChYJ8VI-L6OO_au7B6x_T2lv0tKk7aw.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -125,12 +83,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2",
     "path": "static/31ff5e6e96a096fde4d78bc838719e69b093db2d0b062b96e423c065a6d1b2b1.woff2",
-    "sha256": "31ff5e6e96a096fde4d78bc838719e69b093db2d0b062b96e423c065a6d1b2b1",
-    "contentType": "font/woff2",
-    "size": 14680,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3bWuYMBYro.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -143,12 +96,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg.woff2",
     "path": "static/f8ec026d88a29e8d6a920c82348d90d08200a771e7763c5888376e407ac83a8f.woff2",
-    "sha256": "f8ec026d88a29e8d6a920c82348d90d08200a771e7763c5888376e407ac83a8f",
-    "contentType": "font/woff2",
-    "size": 9188,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3jWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -161,12 +109,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg.woff2",
     "path": "static/864c709d407bcd818c900149400a94194c9e8d3a25b16f9ba1353430d1bd88ec.woff2",
-    "sha256": "864c709d407bcd818c900149400a94194c9e8d3a25b16f9ba1353430d1bd88ec",
-    "contentType": "font/woff2",
-    "size": 4556,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4-Lwz3nWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -179,12 +122,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro.woff2",
     "path": "static/e3e520cb7468f2efd60bc2ce96694567c3312f4ef414fffbe605e3ad146b24e6.woff2",
-    "sha256": "e3e520cb7468f2efd60bc2ce96694567c3312f4ef414fffbe605e3ad146b24e6",
-    "contentType": "font/woff2",
-    "size": 14888,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3bWuYMBYro.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -197,12 +135,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg.woff2",
     "path": "static/0c1655655b5a1fa18382367f471b943c8e009c5cf36a3898433babd92fc606e2.woff2",
-    "sha256": "0c1655655b5a1fa18382367f471b943c8e009c5cf36a3898433babd92fc606e2",
-    "contentType": "font/woff2",
-    "size": 9328,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3jWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -215,12 +148,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg.woff2",
     "path": "static/960aaed3bedcba7e3f7aa0b0d619339e5d0de4161218a5a46679ea1010ad2bbe.woff2",
-    "sha256": "960aaed3bedcba7e3f7aa0b0d619339e5d0de4161218a5a46679ea1010ad2bbe",
-    "contentType": "font/woff2",
-    "size": 4612,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B46r2z3nWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -233,12 +161,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro.woff2",
     "path": "static/89eec21b1a1d6fd579d3e3c518901c5a6e3579e0e7a4f8b2f17b1473117bc30d.woff2",
-    "sha256": "89eec21b1a1d6fd579d3e3c518901c5a6e3579e0e7a4f8b2f17b1473117bc30d",
-    "contentType": "font/woff2",
-    "size": 14764,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3bWuYMBYro.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -251,12 +174,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg.woff2",
     "path": "static/14480fbcd1bfa4ccfa6849f37004c1e985487034e9816c0157645cccdda53836.woff2",
-    "sha256": "14480fbcd1bfa4ccfa6849f37004c1e985487034e9816c0157645cccdda53836",
-    "contentType": "font/woff2",
-    "size": 9228,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3jWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -269,12 +187,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg.woff2",
     "path": "static/f54288496268d32e700bfb9db4797a5c40d904aed7372986306f503af8254954.woff2",
-    "sha256": "f54288496268d32e700bfb9db4797a5c40d904aed7372986306f503af8254954",
-    "contentType": "font/woff2",
-    "size": 4764,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B47b1z3nWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -287,12 +200,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
     "path": "static/5bc49d41f32810a114765314392332ce2acae2276635eee265a50319a12c1b49.woff2",
-    "sha256": "5bc49d41f32810a114765314392332ce2acae2276635eee265a50319a12c1b49",
-    "contentType": "font/woff2",
-    "size": 14844,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3bWuYMBYro.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -305,12 +213,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg.woff2",
     "path": "static/a2f92ada1d0eaf10dd83b11392ea389c039aa78f6e17418fc062c23f0ba78438.woff2",
-    "sha256": "a2f92ada1d0eaf10dd83b11392ea389c039aa78f6e17418fc062c23f0ba78438",
-    "contentType": "font/woff2",
-    "size": 9236,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3jWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -323,12 +226,7 @@
   },
   {
     "key": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg",
-    "source": "fonts/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg.woff2",
     "path": "static/50c25f3210bca008b36809e4f3f964fc4acab82e07a27d099b14c378ea58bf5b.woff2",
-    "sha256": "50c25f3210bca008b36809e4f3f964fc4acab82e07a27d099b14c378ea58bf5b",
-    "contentType": "font/woff2",
-    "size": 4628,
-    "origin": "https://fonts.gstatic.com/s/barlowcondensed/v13/HTxwL3I-JCGChYJ8VI-L6OO_au7B4873z3nWuYMBYrp0xg.woff2",
     "fontFaces": [
       {
         "font-family": "'Barlow Condensed'",
@@ -341,12 +239,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg.woff2",
     "path": "static/9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f.woff2",
-    "sha256": "9343de2ca5d9549f792e7962375af8efb0f320c7643bfd36c884b5a30e5c396f",
-    "contentType": "font/woff2",
-    "size": 1664,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx3cwgknk-6nFg.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -373,12 +266,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2",
     "path": "static/9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4.woff2",
-    "sha256": "9c38cb2d0d2d93c1ee6e21fa78db76f13ea7e15e15cc64214c7ca89b6aaa35c4",
-    "contentType": "font/woff2",
-    "size": 11596,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx7cwgknk-6nFg.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -405,12 +293,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
     "path": "static/2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4.woff2",
-    "sha256": "2c32b9b3ee358c119e210f6f5195f9bd34894d78a785ff2e95d60e718e400af4",
-    "contentType": "font/woff2",
-    "size": 31340,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxDcwgknk-4.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -437,12 +320,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg.woff2",
     "path": "static/49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111.woff2",
-    "sha256": "49c3da6c9a2b279b0f1f860f5cfb1f5dc38d88a5c7be9c9b1837bbc4e3db6111",
-    "contentType": "font/woff2",
-    "size": 6800,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxPcwgknk-6nFg.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -469,12 +347,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg.woff2",
     "path": "static/4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2.woff2",
-    "sha256": "4995a9a43ac659ec32fcd8b463755cd6a07b31a6e6b3894a6a153b661cf490e2",
-    "contentType": "font/woff2",
-    "size": 8892,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPxTcwgknk-6nFg.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -501,12 +374,7 @@
   },
   {
     "key": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg",
-    "source": "fonts/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg.woff2",
     "path": "static/d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1.woff2",
-    "sha256": "d44eb1936043a56038eb02dd70b243f379bef65783f94ec12f277550720411f1",
-    "contentType": "font/woff2",
-    "size": 5872,
-    "origin": "https://fonts.gstatic.com/s/jetbrainsmono/v24/tDbv2o-flEEny0FZhsfKu5WU4zr3E_BX0PnT8RD8yKwBNntkaToggR7BYRbKPx_cwgknk-6nFg.woff2",
     "fontFaces": [
       {
         "font-family": "'JetBrains Mono'",
@@ -533,12 +401,7 @@
   },
   {
     "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4",
-    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4.woff2",
     "path": "static/514ecf75b904f66460a1160531fb2626f3e886118ecdb7d2611e88fe1bc578a1.woff2",
-    "sha256": "514ecf75b904f66460a1160531fb2626f3e886118ecdb7d2611e88fe1bc578a1",
-    "contentType": "font/woff2",
-    "size": 11708,
-    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlSHYjMdZwlou4.woff2",
     "fontFaces": [
       {
         "font-family": "'Oswald'",
@@ -565,12 +428,7 @@
   },
   {
     "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl",
-    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl.woff2",
     "path": "static/9dde3797547520f762f4ba3a822d417a0872b962bc78753a7ee9f955382b6b85.woff2",
-    "sha256": "9dde3797547520f762f4ba3a822d417a0872b962bc78753a7ee9f955382b6b85",
-    "contentType": "font/woff2",
-    "size": 21412,
-    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlWHYjMdZwl.woff2",
     "fontFaces": [
       {
         "font-family": "'Oswald'",
@@ -597,12 +455,7 @@
   },
   {
     "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4",
-    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4.woff2",
     "path": "static/7b6295733e76a64d4e0b61e68a565fac062bfc9a285dfcdee9e20ca0b3a613f5.woff2",
-    "sha256": "7b6295733e76a64d4e0b61e68a565fac062bfc9a285dfcdee9e20ca0b3a613f5",
-    "contentType": "font/woff2",
-    "size": 18944,
-    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlYHYjMdZwlou4.woff2",
     "fontFaces": [
       {
         "font-family": "'Oswald'",
@@ -629,12 +482,7 @@
   },
   {
     "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4",
-    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4.woff2",
     "path": "static/4dcc5a78747cadd5c40e10eb590829447bee4a9166632f0f681b9aeab254c8f8.woff2",
-    "sha256": "4dcc5a78747cadd5c40e10eb590829447bee4a9166632f0f681b9aeab254c8f8",
-    "contentType": "font/woff2",
-    "size": 6300,
-    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlZHYjMdZwlou4.woff2",
     "fontFaces": [
       {
         "font-family": "'Oswald'",
@@ -661,12 +509,7 @@
   },
   {
     "key": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4",
-    "source": "fonts/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4.woff2",
     "path": "static/9feb685bacd358b6a87797379478ce95de7580461a476a3eabcbe3d74ad9e517.woff2",
-    "sha256": "9feb685bacd358b6a87797379478ce95de7580461a476a3eabcbe3d74ad9e517",
-    "contentType": "font/woff2",
-    "size": 13976,
-    "origin": "https://fonts.gstatic.com/s/oswald/v57/TK3IWkUHHAIjg75cFRf3bXL8LICs1_Fv40pKlN4NNSeSASz7FmlbHYjMdZwlou4.woff2",
     "fontFaces": [
       {
         "font-family": "'Oswald'",
@@ -693,12 +536,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg.woff2",
     "path": "static/0b49d495ac765440570c07bf73f5b288e244c71e758f6d95ff481e9169b816f3.woff2",
-    "sha256": "0b49d495ac765440570c07bf73f5b288e244c71e758f6d95ff481e9169b816f3",
-    "contentType": "font/woff2",
-    "size": 6944,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOleefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -711,12 +549,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg.woff2",
     "path": "static/cc1a99ba7dbdbe106aa32c345d85c00a989b45b4edc02cc362a6634e9592b11c.woff2",
-    "sha256": "cc1a99ba7dbdbe106aa32c345d85c00a989b45b4edc02cc362a6634e9592b11c",
-    "contentType": "font/woff2",
-    "size": 36428,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOqeefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -729,12 +562,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx",
-    "source": "fonts/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx.woff2",
     "path": "static/7597c31a957ae3d2e1ebc786238752d883c15ce2e6b5da617dc3453a9fd86335.woff2",
-    "sha256": "7597c31a957ae3d2e1ebc786238752d883c15ce2e6b5da617dc3453a9fd86335",
-    "contentType": "font/woff2",
-    "size": 9304,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pa8FvOreefkkbIx.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -747,12 +575,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg.woff2",
     "path": "static/6464c05505c4a3bc7dce7021a89aa9102618ee4fea4c21942008bbb37b7fe85f.woff2",
-    "sha256": "6464c05505c4a3bc7dce7021a89aa9102618ee4fea4c21942008bbb37b7fe85f",
-    "contentType": "font/woff2",
-    "size": 6824,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOleefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -765,12 +588,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg.woff2",
     "path": "static/8dd77e3310adcae53f7221ae63f3b8f46894aac4cc28ecd2766fc7420a85a408.woff2",
-    "sha256": "8dd77e3310adcae53f7221ae63f3b8f46894aac4cc28ecd2766fc7420a85a408",
-    "contentType": "font/woff2",
-    "size": 39852,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOqeefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -783,12 +601,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx",
-    "source": "fonts/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx.woff2",
     "path": "static/4745b75b6e92d917e2402925dc1a6c1c6300e6e0f607a1ce286da54b33d80d3b.woff2",
-    "sha256": "4745b75b6e92d917e2402925dc1a6c1c6300e6e0f607a1ce286da54b33d80d3b",
-    "contentType": "font/woff2",
-    "size": 8964,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pb0EPOreefkkbIx.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -801,12 +614,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg.woff2",
     "path": "static/bdf7c1b3c51cfc37d1a0e2b15d86d85f1fa0fdb87678277e11714f9470b734ed.woff2",
-    "sha256": "bdf7c1b3c51cfc37d1a0e2b15d86d85f1fa0fdb87678277e11714f9470b734ed",
-    "contentType": "font/woff2",
-    "size": 7208,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OleefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -819,12 +627,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg",
-    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg.woff2",
     "path": "static/3477c6df9ea3e3ecc42c6584b6720413706258af0bd2b6a8b7e0a23f79b4d319.woff2",
-    "sha256": "3477c6df9ea3e3ecc42c6584b6720413706258af0bd2b6a8b7e0a23f79b4d319",
-    "contentType": "font/woff2",
-    "size": 40056,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OqeefkkbIxyyg.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -837,12 +640,7 @@
   },
   {
     "key": "fonts/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx",
-    "source": "fonts/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx.woff2",
     "path": "static/35f7e628ec8e7dd3bf434e95ce28289803401f12d8605c56ca83db2b4b301d33.woff2",
-    "sha256": "35f7e628ec8e7dd3bf434e95ce28289803401f12d8605c56ca83db2b4b301d33",
-    "contentType": "font/woff2",
-    "size": 9400,
-    "origin": "https://fonts.gstatic.com/s/rajdhani/v17/LDI2apCSOBg7S-QT7pbYF_OreefkkbIx.woff2",
     "fontFaces": [
       {
         "font-family": "'Rajdhani'",
@@ -855,12 +653,7 @@
   },
   {
     "key": "fonts/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT",
-    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT.woff2",
     "path": "static/3d27bea878fc4351c18c064c38aa2574c85debbc8e128580575bf1cb94ca1e4c.woff2",
-    "sha256": "3d27bea878fc4351c18c064c38aa2574c85debbc8e128580575bf1cb94ca1e4c",
-    "contentType": "font/woff2",
-    "size": 4368,
-    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOwcmJvLuL9BLT.woff2",
     "fontFaces": [
       {
         "font-family": "'Russo One'",
@@ -873,12 +666,7 @@
   },
   {
     "key": "fonts/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT",
-    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT.woff2",
     "path": "static/5649dd6a78b6f1989bd8ab96ee2da97a1d7d253f1f2a564d76f84e1cc348faac.woff2",
-    "sha256": "5649dd6a78b6f1989bd8ab96ee2da97a1d7d253f1f2a564d76f84e1cc348faac",
-    "contentType": "font/woff2",
-    "size": 4528,
-    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOy8mJvLuL9BLT.woff2",
     "fontFaces": [
       {
         "font-family": "'Russo One'",
@@ -891,12 +679,7 @@
   },
   {
     "key": "fonts/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A",
-    "source": "fonts/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A.woff2",
     "path": "static/53c9adb058b01d0143a6f23ada52a6719800bf0253edb1439285010eaaca5284.woff2",
-    "sha256": "53c9adb058b01d0143a6f23ada52a6719800bf0253edb1439285010eaaca5284",
-    "contentType": "font/woff2",
-    "size": 7360,
-    "origin": "https://fonts.gstatic.com/s/russoone/v18/Z9XUDmZRWg6M1LvRYsHOz8mJvLuL9A.woff2",
     "fontFaces": [
       {
         "font-family": "'Russo One'",
@@ -910,55 +693,37 @@
   {
     "key": "licenses/anton",
     "source": "licenses/anton.txt",
-    "path": "static/ee67e6ee22790b7929f1a3769ca2801d565c64b5a9096942c1adf5596de9c9e4.txt",
     "sha256": "ee67e6ee22790b7929f1a3769ca2801d565c64b5a9096942c1adf5596de9c9e4",
-    "contentType": "text/plain",
-    "size": 4484,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/anton/OFL.txt"
+    "size": 4484
   },
   {
     "key": "licenses/barlowcondensed",
     "source": "licenses/barlowcondensed.txt",
-    "path": "static/186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f.txt",
     "sha256": "186d750eb496a4c17a76385f82be6aea2ac1cf2de074a811d63786cf374ea73f",
-    "contentType": "text/plain",
-    "size": 4377,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/barlowcondensed/OFL.txt"
+    "size": 4377
   },
   {
     "key": "licenses/jetbrainsmono",
     "source": "licenses/jetbrainsmono.txt",
-    "path": "static/b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d.txt",
     "sha256": "b2fe5e8987594e9ffd1d2ca52a2f5d73eb8335243893c5d6254b5ad69269591d",
-    "contentType": "text/plain",
-    "size": 4399,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/OFL.txt"
+    "size": 4399
   },
   {
     "key": "licenses/oswald",
     "source": "licenses/oswald.txt",
-    "path": "static/0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652.txt",
     "sha256": "0fd731a904b729a4e02eaf5e8ebd06783edd9abe400e8882760160230675b652",
-    "contentType": "text/plain",
-    "size": 4483,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/oswald/OFL.txt"
+    "size": 4483
   },
   {
     "key": "licenses/rajdhani",
     "source": "licenses/rajdhani.txt",
-    "path": "static/f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f.txt",
     "sha256": "f62ef357d3a1c3d27edd35a6e1ba350e8a8d13499797964eeadefbf0b3b15d1f",
-    "contentType": "text/plain",
-    "size": 4373,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/rajdhani/OFL.txt"
+    "size": 4373
   },
   {
     "key": "licenses/russoone",
     "source": "licenses/russoone.txt",
-    "path": "static/3ac1301549523d9861fedca12871f24e575fbd26d520632fc00ba849b471d275.txt",
     "sha256": "3ac1301549523d9861fedca12871f24e575fbd26d520632fc00ba849b471d275",
-    "contentType": "text/plain",
-    "size": 4390,
-    "origin": "https://raw.githubusercontent.com/google/fonts/main/ofl/russoone/OFL.txt"
+    "size": 4390
   }
 ]

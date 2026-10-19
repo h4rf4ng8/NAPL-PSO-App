@@ -116,7 +116,7 @@ async function prepareMedia(directory, row, origin) {
   return entry;
 }
 
-async function prepare(directory, staticManifest, origin) {
+async function prepare(directory, origin) {
   try { await stat(path.join(directory, 'manifest.json')); fail('state_already_exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const state = { version: 1, origin, createdAt: new Date().toISOString(), entries: [], failures: [] };
   const rows = await database(async client => {
@@ -136,19 +136,6 @@ async function prepare(directory, staticManifest, origin) {
         state.failures.push({ ...row, code: safeCode(error) });
       }
     }
-  if (staticManifest) {
-    const manifestPath = await realpath(staticManifest);
-    const base = path.dirname(manifestPath);
-    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'));
-    const entries = Array.isArray(manifest) ? manifest : manifest.entries;
-    for (const entry of entries) {
-      const source = await realpath(path.resolve(base, entry.source));
-      if (!source.startsWith(`${base}${path.sep}`)) fail('static_source_outside_manifest');
-      const bytes = await readFile(source);
-      if (hash(bytes) !== entry.sha256 || bytes.length !== entry.size || !/^static\/[a-f0-9]{64}\.[a-z0-9]+$/.test(entry.path) || !entry.path.includes(entry.sha256) || !bucketSpecs[0].allowed_mime_types.includes(entry.contentType)) fail('static_manifest_invalid');
-      state.entries.push(await stage(directory, { bucket: ASSET_BUCKET, path: entry.path, contentType: entry.contentType }, bytes));
-    }
-  }
   await saveState(directory, state);
   report(state);
 }
@@ -273,14 +260,14 @@ export async function selfCheck() {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const { values } = parseArgs({ options: { mode: { type: 'string', default: 'prepare' }, state: { type: 'string' }, 'static-manifest': { type: 'string' } } });
+    const { values } = parseArgs({ options: { mode: { type: 'string', default: 'prepare' }, state: { type: 'string' } } });
     if (values.mode === 'self-check') { await selfCheck(); console.log('Storage migration self-check passed.'); }
     else {
       if (!values.state || !['prepare', 'retry', 'apply'].includes(values.mode)) fail('mode_and_private_state_required');
       const origin = new URL(process.env.SUPABASE_URL).origin;
       if (origin !== 'https://jvubotxbflumsuwvsfzv.supabase.co') fail('unexpected_project');
       const directory = await privateDirectory(path.resolve(values.state));
-      if (values.mode === 'prepare') await prepare(directory, values['static-manifest'], origin);
+      if (values.mode === 'prepare') await prepare(directory, origin);
       else if (values.mode === 'retry') await retry(directory, origin);
       else await apply(directory, origin);
     }

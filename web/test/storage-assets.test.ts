@@ -4,16 +4,20 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { COUNTRIES, flagUrl } from '../src/utils/league';
 
-test('retained static files preserve hashes and licenses; country flags use Storage URLs', () => {
+test('hosted assets preserve metadata, Storage URLs and local font license notices', () => {
   const directory = new URL('../assets/storage/', import.meta.url);
-  const assets = JSON.parse(readFileSync(new URL('manifest.json', directory), 'utf8')) as { key: string; source: string; path: string; sha256: string; contentType: string; size: number }[];
+  const assets = JSON.parse(readFileSync(new URL('manifest.json', directory), 'utf8')) as { key: string; source?: string; path?: string; sha256?: string; size?: number; fontFaces?: Record<string, string>[] }[];
   for (const asset of assets) {
-    assert.ok(!asset.source.includes('..') && !asset.source.startsWith('/'));
-    const bytes = readFileSync(new URL(asset.source, directory));
-    assert.equal(bytes.length, asset.size, asset.source);
-    assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256, asset.source);
-    assert.ok(asset.path.startsWith(`static/${asset.sha256}.`));
-    if (asset.contentType === 'font/woff2') assert.equal(bytes.subarray(0, 4).toString(), 'wOF2', asset.source);
+    if (asset.key.startsWith('licenses/')) {
+      assert.match(asset.source!, /^licenses\/[a-z]+\.txt$/);
+      const notice = readFileSync(new URL(asset.source!, directory));
+      assert.equal(notice.length, asset.size, asset.key);
+      assert.equal(createHash('sha256').update(notice).digest('hex'), asset.sha256, asset.key);
+    } else {
+      assert.match(asset.path!, /^static\/[a-f\d]{64}\.(?:woff2|png)$/);
+      assert.equal(asset.source, undefined, 'Hosted binaries need no local source');
+      if (asset.key.startsWith('fonts/')) assert.ok(asset.fontFaces!.length > 0, asset.key);
+    }
   }
   assert.equal(assets.filter(asset => asset.key.startsWith('licenses/')).length, 6);
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');

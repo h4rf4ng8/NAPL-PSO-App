@@ -5,28 +5,24 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build && pnpm run build:proxy",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "test": "node --import tsx --test test/*.test.ts",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "test": "node --import ./test/setup.mjs --import tsx --test test/*.test.ts",
     "gql:generate": "node --import tsx scripts/codegen.ts",
     "gql:check": "node --import tsx scripts/codegen.ts --check",
     "pregql:generate": "pnpm --filter @napl/contracts run build",
-    "pregql:check": "pnpm --filter @napl/contracts run build",
-    "build:proxy": "node scripts/build-proxy.mjs"
+    "pregql:check": "pnpm --filter @napl/contracts run build"
   },
   "dependencies": {
     "@apollo/client": "4.3.3",
-    "@aws-crypto/sha256-js": "5.2.0",
     "@napl/contracts": "workspace:*",
-    "@smithy/protocol-http": "5.6.2",
-    "@smithy/signature-v4": "5.7.4",
-    "@vercel/oidc-aws-credentials-provider": "3.3.13",
     "graphql": "16.14.2",
     "lucide-react": "0.383.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "rxjs": "7.8.2",
-    "zod": "4.6.7"
+    "zod": "4.6.7",
+    "@supabase/supabase-js": "2.118.0"
   },
   "devDependencies": {
     "@graphql-codegen/core": "6.2.2",
@@ -39,7 +35,6 @@
     "@types/react-test-renderer": "18.3.1",
     "@vitejs/plugin-react": "4.7.0",
     "autoprefixer": "10.4.21",
-    "esbuild": "0.25.12",
     "postcss": "8.5.30",
     "react-test-renderer": "18.3.1",
     "tailwindcss": "3.4.19",

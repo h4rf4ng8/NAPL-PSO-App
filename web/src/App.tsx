@@ -1,45 +1,65 @@
 import { useEffect,useRef,useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import type { Account } from './api/models';
 import { auth } from './auth/session';
+import { sessionVersion, supabase } from './auth/client';
 import { resetClient } from './api/client';
 import { Dashboard,PublicLeague } from './features/dashboard';
 
-// ============ ROOT ============
 export default function App() {
-  const [account, setAccount] = useState<Account | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const sessionVersion = useRef(0);
+  const [session,setSession] = useState<Session|null>();
+  const [ready,setReady] = useState(false);
+  const [account,setAccount] = useState<Account|null>(null);
+  const [loadedFor,setLoadedFor] = useState<string|null>();
+  const [error,setError] = useState('');
+  const loggingOut=useRef(false);
+  const activeUser=useRef<string|null>(null);
+  const renderVersion=sessionVersion();
+  const initialized=session!==undefined;
+  const previousUser = useRef<string|null>();
+  const userId=session?.user.id ?? null;
   useEffect(() => {
     let mounted=true;
+    const {data:{subscription}}=supabase.auth.onAuthStateChange((_event,current) => {if(loggingOut.current)return;activeUser.current=current?.user.id??null;setSession(current);});
+    void auth.completeSignIn().catch((error:unknown) => {
+      if(mounted)setError(error instanceof Error?error.message:'Could not finish sign-in.');
+    }).finally(() => {if(mounted)setReady(true);});
+    return () => {mounted=false;subscription.unsubscribe();};
+  },[]);
+  useEffect(() => {
+    if(!ready||!initialized)return;
+    const controller=new AbortController();
+    const changed=previousUser.current!==undefined&&previousUser.current!==userId;
+    previousUser.current=userId;
+    setAccount(null);
     const load=async () => {
-      const version=++sessionVersion.current;
-      setLoading(true); setAccount(null); setError('');
-      await resetClient();
-      try { const current=await auth.getCurrent(); if(mounted&&version===sessionVersion.current) setAccount(current); }
-      catch(error) { if(mounted&&version===sessionVersion.current) setError(error instanceof Error ? error.message : 'Could not load session.'); }
-      finally { if(mounted&&version===sessionVersion.current) setLoading(false); }
+      try {
+        if(changed)await resetClient();
+        controller.signal.throwIfAborted();
+        const current=userId?await auth.getCurrent(controller.signal):null;
+        controller.signal.throwIfAborted();
+        setAccount(current);setLoadedFor(userId);
+      } catch(error) {
+        if(!controller.signal.aborted){setError(error instanceof Error?error.message:'Could not load session.');setLoadedFor(userId);}
+      }
     };
     void load();
-    const changed=(event: StorageEvent) => { if(event.key==='napl-session-change') void load(); };
-    addEventListener('storage',changed);
-    return () => { mounted=false;removeEventListener('storage',changed); };
-  }, []);
-  if (loading) return <div className="min-h-screen pitch-bg flex items-center justify-center">Loading league…</div>;
-  if(error) return <div role="alert" className="min-h-screen pitch-bg p-8">{error}<button onClick={()=>location.reload()}>Try again</button></div>;
+    return () => controller.abort();
+    // Token refreshes keep account state and Apollo reads intact.
+  },[ready,userId,initialized]);
   const handleLogout=async()=>{
-    ++sessionVersion.current;
-    setLoading(true);setError('');
-    try {
-      await auth.signOut();
-      // A cross-tab session read may have started while logout was pending.
-      ++sessionVersion.current;
-      setAccount(null);
-    } catch(error) {setError(error instanceof Error?error.message:'Could not sign out.');}
-    finally {setLoading(false);}
+    loggingOut.current=true;activeUser.current=null;
+    setSession(null);setAccount(null);setLoadedFor(null);setError('');
+    try {await auth.signOut();}
+    catch(error) {setError(error instanceof Error?error.message:'Could not revoke the session.');}
+    finally {loggingOut.current=false;}
   };
-  const handleLogin=async()=>{const result=await auth.signInWithDiscord();if(!result.ok)setError(result.reason);};
-  return account
-    ? <Dashboard key={account.id} account={account} onLogout={handleLogout} onUpdate={setAccount} />
-    : <PublicLeague onLogin={()=>{void handleLogin();}} />;
+  const handleLogin=async()=>{if(loggingOut.current)return;const result=await auth.signInWithDiscord();if(!result.ok)setError(result.reason);};
+  const loading=!ready||session===undefined||loadedFor!==userId;
+  return <>
+    {error&&<div role="alert" className="pitch-bg p-4">{error}<button onClick={()=>{setError('');location.reload();}}>Try again</button><button onClick={()=>setError('')}>Dismiss</button></div>}
+    {loading?<div className="min-h-screen pitch-bg flex items-center justify-center">Loading league…</div>
+      :(account&&account.id===userId?<Dashboard key={account.id} account={account} onLogout={handleLogout} onUpdate={current=>{if(renderVersion===sessionVersion()&&activeUser.current===userId&&current.id===userId)setAccount(current);}}/>
+        :<PublicLeague onLogin={()=>{void handleLogin();}}/>)}
+  </>;
 }

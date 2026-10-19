@@ -1,156 +1,59 @@
 import {test,afterEach,mock} from 'node:test';
 import assert from 'node:assert/strict';
-import {request,ApiError,resetCsrf} from '../src/api/http';
-const fixture={cookie:''};
-Object.defineProperty(globalThis,'document',{configurable:true,value:{get cookie(){return fixture.cookie;}}});
-afterEach(()=>{mock.restoreAll();fixture.cookie='';resetCsrf();});
-const json=(body:unknown,status=200)=>Response.json(body,{status,headers:{'Content-Type':'application/json'}});
-test('refreshes one expired command and preserves its idempotency key and rotated CSRF',async()=>{
- fixture.cookie='napl-csrf=before';
- const calls:{url:string;headers:Headers}[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  const target=String(url);calls.push({url:target,headers:new Headers(options?.headers)});
-  if(target==='/auth/refresh'){fixture.cookie='napl-csrf=after';return json({ok:true});}
-  return calls.length===1?json({error:{code:'session_expired'}},401):json({saved:true});
- });
- assert.deepEqual(await request('/api/teams','POST',{name:'Example'}),{saved:true});
- assert.deepEqual(calls.map(c=>c.url),['/api/teams','/auth/refresh','/api/teams']);
- assert.equal(calls[0]!.headers.get('Idempotency-Key'),calls[2]!.headers.get('Idempotency-Key'));
- assert.equal(calls[2]!.headers.get('X-CSRF-Token'),'after');
+import {request,ApiError} from '../src/api/http';
+import {client,resetClient} from '../src/api/client';
+import {TeamRecordsDocument} from '../src/api/generated/graphql';
+import {supabase} from '../src/auth/client';
+import {apiPath,clearSession,login,session,tick} from './auth-fixture';
+const json=(body:unknown,status=200)=>Response.json(body,{status});
+afterEach(async()=>{await clearSession();await resetClient();});
+test('direct bearer writes retry expiry with stable method, URL, serialized body and key',async()=>{
+ const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();const attempts:{url:string;init:RequestInit}[]=[];
+ const original=await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){started.resolve();return renewal.promise;}attempts.push({url,init:init!});return attempts.length===1?json({error:'access_expired'},401):json({saved:true});});
+ const body={matchId:'original'};const pending=request('/api/import-match','POST',body);await started.promise;body.matchId='changed';renewal.resolve(json(session('user-a',2)));
+ assert.deepEqual(await pending,{saved:true});assert.equal(attempts.length,2);
+ assert.deepEqual(attempts.map(({url,init})=>({url,method:init.method,body:init.body,credentials:init.credentials})),Array.from({length:2},()=>({url:'http://api.example.test/api/import-match',method:'POST',body:'{"matchId":"original"}',credentials:'omit'})));
+ const headers=attempts.map(({init})=>new Headers(init.headers));assert.equal(headers[0]!.get('Authorization'),`Bearer ${original.access_token}`);assert.equal(headers[1]!.get('Authorization'),`Bearer ${session('user-a',2).access_token}`);assert.ok(headers[0]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('Idempotency-Key'),headers[1]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('X-CSRF-Token'),null);
 });
-test('bootstraps the CSRF response contract and reads later cross-tab rotation',async()=>{
- const tokens:string[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  if(String(url)==='/auth/csrf'){fixture.cookie='__Host-napl-csrf=initial';return json({csrfToken:'initial'});}
-  tokens.push(new Headers(options?.headers).get('X-CSRF-Token')||'');return new Response(null,{status:204});
- });
- await request('/api/teams/one','DELETE');fixture.cookie='__Host-napl-csrf=changed';await request('/api/teams/two','DELETE');
- assert.deepEqual(tokens,['initial','changed']);
+test('real SDK shares one refresh between concurrent Apollo and REST expiry and persists rotated tokens',async()=>{
+ const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();let renewals=0;const attempts=new Map<string,number>();
+ await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){renewals++;assert.deepEqual(JSON.parse(String(init?.body)),{refresh_token:'user-a-refresh-1'});started.resolve();return renewal.promise;}const path=apiPath(url),count=(attempts.get(path)??0)+1;attempts.set(path,count);return count===1?json({errors:[{extensions:{code:'access_expired'}}]},401):json(path==='/api/team-records'?{data:{teamRecords:[]}}:[]);});
+ const pending=Promise.all([client.query({query:TeamRecordsDocument}),request('/api/accounts')]);await started.promise;await tick();assert.equal(renewals,1);renewal.resolve(json(session('user-a',2)));
+ const [graph,rest]=await pending;assert.deepEqual(graph.data,{teamRecords:[]});assert.deepEqual(rest,[]);assert.equal(renewals,1);assert.deepEqual(attempts.values().toArray(),[2,2]);assert.equal((await supabase.auth.getSession()).data.session?.refresh_token,'user-a-refresh-2');
 });
-test('does not replay failed mutations or retry refresh indefinitely',async()=>{
- fixture.cookie='napl-csrf=present';let calls=0;
- mock.method(globalThis,'fetch',async()=>{calls++;return json({error:'membership_refresh_required'},503);});
- await assert.rejects(request('/api/teams','POST',{}),error=>error instanceof ApiError&&error.code==='membership_refresh_required');
- assert.equal(calls,2);
- calls=0;mock.method(globalThis,'fetch',async()=>{calls++;return json({error:'upstream_unavailable'},503);});
- await assert.rejects(request('/api/teams','POST',{}),ApiError);assert.equal(calls,1);
+test('delayed expired response reuses a token already refreshed by SDK',async()=>{
+ const delayed=Promise.withResolvers<Response>();let reads=0,refreshes=0;await login(async url=>{if(url.includes('grant_type=refresh_token')){refreshes++;return json(session('user-a',2));}reads++;return reads===1?delayed.promise:json([]);});const pending=request('/api/accounts');await tick();await supabase.auth.refreshSession();delayed.resolve(json({error:'access_expired'},401));assert.deepEqual(await pending,[]);assert.equal(refreshes,1);assert.equal(reads,2);
 });
-
-test('does not replay a REST conflict or an ambiguous network failure',async()=>{
- fixture.cookie='napl-csrf=present';
- const conflict=mock.method(globalThis,'fetch',async()=>json({error:'conflict'},409));
- await assert.rejects(request('/api/import-match','POST',{}),error=>error instanceof ApiError&&error.status===409);
- assert.equal(conflict.mock.callCount(),1);
- mock.restoreAll();
- const failure=new TypeError('network unavailable');
- const network=mock.method(globalThis,'fetch',async()=>{throw failure;});
- await assert.rejects(request('/api/import-match','POST',{}),error=>error===failure);
- assert.equal(network.mock.callCount(),1);
+for(const [code,status] of [['access_expired',503],['session_expired',401],['membership_refresh_required',401],['session_revoked',401],['forbidden',403],['csrf_invalid',403],['conflict',409],['upstream_unavailable',503]] as const)test(`does not replay writes after ${code} (${status})`,async()=>{let calls=0;await login(async()=>{calls++;return json({error:code},status);});await assert.rejects(request('/api/import-match','POST',{}),error=>error instanceof ApiError&&error.code===code);assert.equal(calls,1);});
+test('does not replay ambiguous network failures',async()=>{const failure=new TypeError('offline');let calls=0;await login(async()=>{calls++;throw failure;});await assert.rejects(request('/api/import-match','POST',{}),error=>error===failure);assert.equal(calls,1);});
+test('renewed commands get at most two application attempts',async()=>{let writes=0,refreshes=0;await login(async url=>{if(url.includes('grant_type=refresh_token')){refreshes++;return json(session('user-a',2));}writes++;return json({error:'access_expired'},401);});await assert.rejects(request('/api/import-match','POST',{}),error=>error instanceof ApiError&&error.code==='access_expired');assert.equal(writes,2);assert.equal(refreshes,1);});
+test('cancelling Apollo during shared SDK refresh prevents its retry while REST completes',async()=>{
+ const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();const calls:string[]=[];await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){assert.equal(init?.signal,undefined);started.resolve();return renewal.promise;}const path=apiPath(url);calls.push(path);return calls.filter(value=>value===path).length===1?json({error:'access_expired'},401):json([]);});
+ const graph=Promise.allSettled([client.query({query:TeamRecordsDocument})]),rest=request('/api/accounts');await started.promise;await tick();await resetClient();renewal.resolve(json(session('user-a',2)));await graph;assert.deepEqual(await rest,[]);assert.equal(calls.filter(path=>path==='/api/team-records').length,1);assert.deepEqual(client.cache.extract(),{});
 });
-test('rejects arbitrary upstream URLs',async()=>{
- await assert.rejects(request('https://app:3000/api/teams'),/Invalid API path/);
+test('cancellation stops before auth and after response decoding',async()=>{
+ const before=new AbortController();before.abort();const fetch=mock.method(globalThis,'fetch');await assert.rejects(request('/api/accounts','GET',undefined,before.signal),{name:'AbortError'});assert.equal(fetch.mock.callCount(),0);mock.restoreAll();
+ const controller=new AbortController();let calls=0;await login(async()=>{calls++;const response=json([]);mock.method(response,'json',async()=>{controller.abort();return [];});return response;});await assert.rejects(request('/api/accounts','GET',undefined,controller.signal),{name:'AbortError'});assert.equal(calls,1);
 });
-
-test('validates CSRF bootstrap data and preserves REST error precedence',async()=>{
- mock.method(globalThis,'fetch',async()=>json({csrfToken:42}));
- await assert.rejects(request('/api/teams','POST',{}),/Could not initialize secure session/);
-
- mock.restoreAll();
- fixture.cookie='napl-csrf=present';
- mock.method(globalThis,'fetch',async()=>json({
-  message:'top-level',error:{code:'rest_code',message:'REST message'},
-  errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}}],
- },409));
- await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
-  &&error.code==='rest_code'&&error.message==='top-level');
+test('old identity responses cannot retry with a newly signed-in account or return stale write results',async()=>{
+ for(const expired of [true,false]){const delayed=Promise.withResolvers<Response>();let writes=0;await login(async()=>{writes++;return delayed.promise;});const pending=request('/api/teams','POST',{});await tick();mock.method(globalThis,'fetch',async()=>json(session('user-b')));await supabase.auth.signInWithPassword({email:'new@example.test',password:'test'});delayed.resolve(expired?json({error:'access_expired'},401):json({saved:true}));await assert.rejects(pending,error=>error instanceof ApiError&&error.code==='login_required');assert.equal(writes,1);await clearSession();}
 });
-
-test('falls back from malformed REST fields to the first GraphQL error object',async()=>{
- fixture.cookie='napl-csrf=present';
- mock.method(globalThis,'fetch',async()=>json({
-  error:{code:3,message:'REST message'},
-  errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}},{message:'later',extensions:{code:'later_code'}}],
- },400));
- await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
-  &&error.code==='graphql_code'&&error.message==='REST message');
+test('rejects arbitrary upstream URLs and removed auth paths',async()=>{for(const path of ['https://app:3000/api/teams','/auth/refresh'])await assert.rejects(request(path),/Invalid API path/);});
+test('preserves REST error precedence and first GraphQL error object decoding',async()=>{
+ for(const [body,code,message] of [[{message:'top-level',error:{code:'rest_code',message:'REST message'},errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}}]},'rest_code','top-level'],[{error:{code:3,message:'REST message'},errors:[null,{message:'GraphQL message',extensions:{code:'graphql_code'}}]},'graphql_code','REST message'],[null,'request_failed','Request failed (400)'],[{errors:[{}, {extensions:{code:'access_expired'}}]},'request_failed','Request failed (400)'],[{errors:[[], {extensions:{code:'access_expired'}}]},'request_failed','Request failed (400)']] as const){mock.method(globalThis,'fetch',async()=>json(body,400));await assert.rejects(request('/api/accounts'),error=>error instanceof ApiError&&error.code===code&&error.message===message);mock.restoreAll();}
 });
-
-test('keeps the first object error authoritative and handles malformed error bodies',async()=>{
- for (const body of [null, [], {errors:[{}, {extensions:{code:'session_expired'}}]}, {errors:[[], {extensions:{code:'session_expired'}}]}]) {
-  let calls=0;
-  mock.method(globalThis,'fetch',async()=>{calls++;return json(body,400);});
-  await assert.rejects(request('/api/teams'),error=>error instanceof ApiError
-   &&error.code==='request_failed'&&error.message==='Request failed (400)');
-  assert.equal(calls,1);
-  mock.restoreAll();
- }
+test('a write waiting for its first SDK session cannot adopt a later login',async()=>{
+ let writes=0;await login(async()=>{writes++;return json({saved:true});});
+ const waiting=Promise.withResolvers<Awaited<ReturnType<typeof supabase.auth.getSession>>>();
+ const original=supabase.auth.getSession.bind(supabase.auth);mock.method(supabase.auth,'getSession',()=>waiting.promise);
+ const pending=request('/api/teams','POST',{owner:'old'});await tick();
+ mock.method(globalThis,'fetch',async()=>json(session('user-b')));await supabase.auth.signInWithPassword({email:'new@example.test',password:'test'});
+ waiting.resolve(await original());await assert.rejects(pending,error=>error instanceof ApiError&&error.code==='login_required');assert.equal(writes,0);
 });
-
-test('reads GraphQL error extensions.code and keeps refresh protected by signed CSRF',async()=>{
- fixture.cookie='napl-csrf=before';
- const calls:{url:string;headers:Headers}[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  const target=String(url);calls.push({url:target,headers:new Headers(options?.headers)});
-  if(target==='/auth/refresh'){fixture.cookie='napl-csrf=after';return json({ok:true});}
-  return calls.length===1
-   ?json({errors:[{message:'Session expired',extensions:{code:'membership_refresh_required'}}]},401)
-   :json({data:{accounts:[]}});
- });
- assert.deepEqual(await request('/api/standings','POST',{variables:{}}),{data:{accounts:[]}});
- assert.deepEqual(calls.map(call=>call.url),['/api/standings','/auth/refresh','/api/standings']);
- assert.equal(calls[1]!.headers.get('X-CSRF-Token'),'before');
- for(const index of [0,2]) {
-  assert.equal(calls[index]!.headers.get('Apollo-Require-Preflight'),'true');
-  assert.equal(calls[index]!.headers.get('X-CSRF-Token'),null);
-  assert.equal(calls[index]!.headers.get('Idempotency-Key'),null);
- }
-});
-
-test('an expired REST command gets only one retry even when renewal succeeds',async()=>{
- fixture.cookie='napl-csrf=present';
- const calls:{url:string;headers:Headers}[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  const target=String(url);calls.push({url:target,headers:new Headers(options?.headers)});
-  return target==='/auth/refresh'?json({ok:true}):json({error:'access_expired'},401);
- });
- await assert.rejects(request('/api/import-match','POST',{}),error=>error instanceof ApiError&&error.code==='access_expired');
- assert.deepEqual(calls.map(call=>call.url),['/api/import-match','/auth/refresh','/api/import-match']);
- assert.ok(calls[0]!.headers.get('Idempotency-Key'));
- assert.equal(calls[0]!.headers.get('Idempotency-Key'),calls[2]!.headers.get('Idempotency-Key'));
-});
-
-test('REST CSRF rotation retries once without changing the logical write key',async()=>{
- fixture.cookie='napl-csrf=old';
- const writes:Headers[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  if(String(url)==='/auth/csrf'){fixture.cookie='napl-csrf=new';return json({csrfToken:'new'});}
-  writes.push(new Headers(options?.headers));
-  return json({error:'csrf_invalid'},403);
- });
- await assert.rejects(request('/api/import-match','POST',{}),error=>error instanceof ApiError&&error.code==='csrf_invalid');
- assert.equal(writes.length,2);
- assert.deepEqual(writes.map(headers=>headers.get('X-CSRF-Token')),['old','new']);
- assert.equal(writes[0]!.get('Idempotency-Key'),writes[1]!.get('Idempotency-Key'));
-});
-
-test('a write keeps its original method, URL and body while session renewal is pending',async()=>{
- fixture.cookie='napl-csrf=present';
- const renewal=Promise.withResolvers<Response>();
- const started=Promise.withResolvers<void>();
- const attempts:{url:string;method:string|undefined;body:BodyInit|null|undefined}[]=[];
- mock.method(globalThis,'fetch',async(url,options)=>{
-  if(String(url)==='/auth/refresh'){started.resolve();return renewal.promise;}
-  attempts.push({url:String(url),method:options?.method,body:options?.body});
-  return attempts.length===1?json({error:'session_expired'},401):json({saved:true});
- });
- const body={matchId:'original'};
- const pending=request('/api/import-match','POST',body);
- await started.promise;
- body.matchId='changed';
- renewal.resolve(json({ok:true}));
- await pending;
- assert.deepEqual(attempts,[
-  {url:'/api/import-match',method:'POST',body:'{"matchId":"original"}'},
-  {url:'/api/import-match',method:'POST',body:'{"matchId":"original"}'},
- ]);
+test('switching identities during response JSON decoding cannot invalidate or return old results',async()=>{
+ const decoded=Promise.withResolvers<unknown>();let reads=0;
+ await login(async()=>{const response=json({saved:true});mock.method(response,'json',()=>decoded.promise);reads++;return response;});
+ const pending=request('/api/teams','POST',{});await tick();mock.method(globalThis,'fetch',async()=>json(session('user-b')));await supabase.auth.signInWithPassword({email:'new@example.test',password:'test'});
+ client.cache.writeQuery({query:TeamRecordsDocument,data:{teamRecords:[]}});const cached=client.cache.extract();decoded.resolve({saved:true});
+ await assert.rejects(pending,error=>error instanceof ApiError&&error.code==='login_required');assert.equal(reads,1);assert.deepEqual(client.cache.extract(),cached);
 });

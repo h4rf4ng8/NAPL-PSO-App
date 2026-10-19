@@ -43,14 +43,13 @@ Radical-simplicity coding guidelines distilled from George Hotz's public philoso
 ## Project conventions
 
 - GraphQL reads use Apollo hooks; do not add custom fetch hooks for GraphQL. Keep the small REST resource hook only for actual REST callers, and check every caller before removing it.
-- Fixed GraphQL reads use Apollo Server's native CSRF prevention and the browser's preflight header. Cookie-authenticated REST and auth writes retain their signed CSRF token and Origin checks.
+- Browser requests call Lambda directly with Supabase bearer tokens and credentials omitted. Fastify owns exact-origin CORS; GraphQL keeps Apollo's native CSRF prevention and its preflight header. Do not restore cookie sessions, auth proxy routes, or signed CSRF tokens.
 - The API owns canonical rankings, validation, and authorization. Browser mappers validate response shapes and prepare display data; they must not become a second source of league rules.
 
 ## Refactoring evidence and structure changes
 
 - Before deleting code, read its definitions and callers and record the evidence that it is unused.
 - Use dependency-cruiser to check dependency boundary rules.
-- Do not rewrite files to move code. Use only a weaver/refac move tool for moves; propose the target tree and obtain approval before moving anything.
 - Work in small batches and run typecheck/tests after each batch. Separate architecture changes from cleanup; record the current behavior, structural change, and smallest parity check for each pass.
 - For an identical edit across more than two files, use a tested codemod.
 - Use the [pinned Brooks PR Review skill](https://github.com/hyhmrright/brooks-lint/blob/c85f65eada5c56721275ef89e2dd41ac453dcba2/skills/brooks-review/SKILL.md) alongside ESLint for refactor reviews; it is advisory and does not replace typecheck, tests, or ESLint.

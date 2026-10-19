@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { Database, Row } from './plugins/db/client.js';
 import { object, string } from './plugins/db/records.js';
-import { HttpError, type Identity, actor, isAdmin, requireMember, requireActiveSession, roles } from './plugins/auth/identity.js';
+import { HttpError, type Identity, actor, isAdmin, requireActiveSession, roles } from './plugins/auth/identity.js';
 import { registerAccounts } from './routes/accounts/routes.js';
 import { registerTeams } from './routes/teams/routes.js';
 import { registerContent } from './routes/content/routes.js';
@@ -11,10 +11,11 @@ import { registerVoting } from './routes/voting/routes.js';
 import { registerAdmin } from './routes/admin/routes.js';
 import { registerSettings } from './routes/settings/routes.js';
 import { registerGraphQL } from './routes/graphql/index.js';
-import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
 import fp from 'fastify-plugin';
-import { createHash, timingSafeEqual } from 'node:crypto';
-import { createSession, type SessionDependencies } from './plugins/auth/session.js';
+import type { SupabaseAuth } from './plugins/supabase/client.js';
+import type { DiscordAuth } from './plugins/discord/client.js';
+import type { AuthStore } from './plugins/session/store.js';
 import { GatewayError } from './plugins/auth/errors.js';
 import type { Config } from './plugins/cfg.js';
 declare module 'fastify' {
@@ -25,14 +26,12 @@ declare module 'fastify' {
     interface FastifyContextConfig {
         public?: boolean;
         role?: 'admin' | 'super_admin';
-        membership?: boolean;
-        csrf?: 'apollo';
     }
 }
 export interface Dependencies {
     db: Database;
     config: Config;
-    session: SessionDependencies;
+    auth: { supabase: SupabaseAuth; discord: DiscordAuth; authStore: AuthStore };
     close?: () => Promise<void>;
     webhookUrl?: string;
 }
@@ -40,35 +39,16 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
     const app = Fastify({
         bodyLimit: 2_000_000, requestTimeout: 20_000,
         logger: dependencies.config.NODE_ENV === 'test' ? false : {
-            // Never log raw URLs: OAuth callback URLs contain one-time credentials.
             serializers: { req: request => ({ method: request.method }), res: reply => ({ statusCode: reply.statusCode }) },
-            redact: ['req.headers.authorization', 'req.headers.cookie', 'req.headers.x-origin-secret', 'res.headers.set-cookie'],
+            redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.providerToken', 'res.headers.set-cookie'],
         },
-    });
-    const secret = dependencies.config.ORIGIN_SECRET;
-    if (!secret || secret.length < 32) throw new Error('ORIGIN_SECRET must contain at least 32 characters');
-    const expected = createHash('sha256').update(secret).digest();
-    app.addHook('onRoute', options => {
-        if (options.url.startsWith('/auth/')) options.bodyLimit = 16 * 1024;
     });
     app.decorateRequest('identity', null);
     app.decorateRequest('userRoles');
-    app.addHook('onRequest', async request => {
-        const supplied = request.headers['x-origin-secret'];
-        if (typeof supplied !== 'string' || !timingSafeEqual(expected, createHash('sha256').update(supplied).digest())) {
-            throw new HttpError(403, 'origin_forbidden');
-        }
-        // Identity comes exclusively from the verified HttpOnly session cookie.
-        delete request.headers.authorization;
-        delete request.headers['x-user-id'];
-        delete request.headers['x-session-id'];
-        delete request.headers['x-user-role'];
-    });
-    app.addHook('onSend', async (request, reply, payload) => {
+    app.addHook('onSend', async (_request, reply, payload) => {
         reply.header('cache-control', 'no-store');
-        reply.header('x-vercel-enable-rewrite-caching', '0');
         reply.header('x-content-type-options', 'nosniff');
-        if (!request.routeOptions.url?.startsWith('/auth/')) reply.removeHeader('set-cookie');
+        reply.removeHeader('set-cookie');
         return payload;
     });
     app.setErrorHandler((error, request, reply) => {
@@ -127,17 +107,32 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         });
     });
     app.register(fp(async scope => {
-        await scope.register(cookie);
-        const session = createSession(dependencies.config, dependencies.session);
+        await scope.register(cors, {
+            origin: (origin, done) => {
+                if (origin !== undefined && origin !== dependencies.config.PUBLIC_ORIGIN) return done(new HttpError(403, 'origin_forbidden'), false);
+                done(null, origin === dependencies.config.PUBLIC_ORIGIN);
+            },
+            methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
+            allowedHeaders: ['Authorization', 'Content-Type', 'Apollo-Require-Preflight', 'Idempotency-Key'],
+            exposedHeaders: ['Retry-After'],
+            credentials: false,
+        });
         scope.addHook('onRequest', async request => {
             request.userRoles = [];
             if (!request.url.split('?', 1)[0]?.startsWith('/api/')) return;
-            const verified = await session.checkApi(request);
-            request.identity = verified ? { id: verified.userId, sessionId: verified.sessionId, claims: verified.claims ?? {} } : null;
+            const authorization = request.headers.authorization;
+            if (authorization !== undefined) {
+                const bearer = /^Bearer ([^\s,]+)$/i.exec(authorization);
+                if (!bearer) throw new GatewayError(401, 'access_invalid');
+                request.identity = await dependencies.auth.supabase.verify(bearer[1]!);
+            }
+            // Forwarded headers and cookies never establish identity or limiter addresses.
+            for (const header of Object.keys(request.headers)) {
+                if (header.startsWith('x-forwarded-') || ['cookie', 'x-user-id', 'x-session-id', 'x-user-role', 'x-origin-secret', 'x-real-ip', 'forwarded', 'cf-connecting-ip', 'true-client-ip', 'x-client-ip', 'x-apigateway-event', 'x-apigateway-context'].includes(header)) delete request.headers[header];
+            }
             const policy = request.routeOptions.config;
             if (!policy.public) {
-                const identity = actor(request);
-                if (policy.membership !== false) await requireMember(dependencies.db, identity.id);
+                actor(request);
             }
             if (request.identity) request.userRoles = await roles(dependencies.db, request.identity.id);
             if (policy.role && (policy.role === 'super_admin' ? !request.userRoles.includes('super_admin') : !isAdmin(request))) {
@@ -147,7 +142,6 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
                 await requireActiveSession(dependencies.db, request.identity.sessionId);
             }
         });
-        session.registerRoutes(scope);
         registerAccounts(scope, dependencies);
         registerTeams(scope, dependencies);
         registerContent(scope, dependencies);

@@ -194,18 +194,6 @@ test('schema-only selections preserve alias deduplication and privileged resolve
   } finally { await app.close(); }
 });
 
-test('schema-only privileged reads preserve membership admission errors', async () => {
-  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
-    const { app, database } = appFor(['super_admin'], false, { membership });
-    try {
-      const result = await graphql({ schema, source: '{ admins { userId } }', contextValue: {
-        db: database, request: { identity: { id: admin }, userRoles: ['super_admin'] }, reads: new Map(),
-      } });
-      assert.equal(result.errors?.[0]?.extensions.status, membership.fresh ? 403 : 401);
-    } finally { await app.close(); }
-  }
-});
-
 test('GraphQL and REST share pending-team visibility rules', async () => {
   const pending = { ...team, id: 'pending', status: 'pending', owner_account_id: '22222222-2222-4222-8222-222222222222', pending_members: [{ username: 'Alice', status: 'pending' }] };
   const { app } = appFor([], false, { teams: [team, pending] });
@@ -222,18 +210,15 @@ test('GraphQL and REST share pending-team visibility rules', async () => {
   } finally { await app.close(); }
 });
 
-test('standings aggregates preserve membership admission errors', async () => {
-  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
-    const { app, seen } = appFor([], false, { membership });
-    try {
-      for (const url of ['/api/standings', '/api/team-records']) {
-        const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
-        assert.equal(response.statusCode, membership.fresh ? 403 : 401, response.body);
-        assert.equal(response.json().error, membership.fresh ? 'membership_required' : 'membership_refresh_required');
-        assert.ok(seen.keys().every(key => key.includes('auth_gateway')), 'denied membership must not trigger domain reads');
-      }
-    } finally { await app.close(); }
-  }
+test('standings admits authenticated Discord users without guild membership lookups', async () => {
+  const { app, seen } = appFor([], false, { membership: { eligible: false, fresh: false } });
+  try {
+    for (const url of ['/api/standings', '/api/team-records']) {
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+      assert.equal(response.statusCode, 200, response.body);
+    }
+    assert.ok(seen.keys().every(key => !key.includes('memberships')));
+  } finally { await app.close(); }
 });
 
 test('fixed reads preserve expired-session errors', async () => {

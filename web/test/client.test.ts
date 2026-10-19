@@ -5,34 +5,6 @@ import { client, resetClient } from '../src/api/client';
 import { TeamRecordsDocument } from '../src/api/generated/graphql';
 import { auth } from '../src/auth/session';
 
-const restoreGlobal = (key: 'document' | 'localStorage', value: unknown) => {
-  if (value === undefined) Reflect.deleteProperty(globalThis, key);
-  else Object.defineProperty(globalThis, key, { configurable: true, value });
-};
-
-function installBrowserStorage() {
-  const previousDocument = (globalThis as typeof globalThis & { document?: Document }).document;
-  const previousStorage = typeof localStorage === 'undefined' ? undefined : localStorage;
-  const values = new Map<string, string>([['asl_theme', 'light']]);
-  const documentStub = { cookie: 'napl-csrf=csrf', documentElement: { dataset: {} as DOMStringMap } } as Document;
-  const storageStub = {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => { values.set(key, value); },
-  } as Storage;
-  Object.defineProperties(globalThis, {
-    document: { configurable: true, value: documentStub },
-    localStorage: { configurable: true, value: storageStub },
-  });
-  return {
-    document: documentStub,
-    values,
-    restore: () => {
-      restoreGlobal('document', previousDocument);
-      restoreGlobal('localStorage', previousStorage);
-    },
-  };
-}
-
 afterEach(async () => {
   mock.restoreAll();
   await resetClient();
@@ -55,7 +27,6 @@ test('public and current account records with the same id remain separate cache 
 });
 
 test('identity reset keeps a stable client, aborts old requests and ignores late old responses', async () => {
-  const browser = installBrowserStorage();
   const oldClient = client;
   const fetchResponse = Promise.withResolvers<Response>();
   let requestSignal: AbortSignal | undefined;
@@ -85,24 +56,10 @@ test('identity reset keeps a stable client, aborts old requests and ignores late
   fetchResponse.resolve(Response.json({ data: { teamRecords: [] } }));
   await pending;
   assert.deepEqual(newClient.cache.extract(), {});
-  browser.restore();
 });
 
-test('sign-out clears cached identity data and notifies other tabs after the protected logout', async () => {
-  const browser = installBrowserStorage();
-  try {
-    client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: [] } });
-    const calls: string[] = [];
-    mock.method(globalThis, 'fetch', async (url, init) => {
-      calls.push(String(url));
-      assert.equal(init?.method, 'POST');
-      assert.equal(new Headers(init?.headers).get('X-CSRF-Token'), 'csrf');
-      assert.equal(new Headers(init?.headers).get('Apollo-Require-Preflight'), null);
-      return Response.json({ ok: true });
-    });
-    await auth.signOut();
-    assert.deepEqual(calls, ['/auth/logout']);
-    assert.deepEqual(client.cache.extract(), {});
-    assert.match(browser.values.get('napl-session-change') ?? '', /^\d+$/);
-  } finally { browser.restore(); }
+test('local SDK sign-out clears cached identity data without cookies or custom broadcasts', async () => {
+  client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: [] } });
+  await auth.signOut();
+  assert.deepEqual(client.cache.extract(), {});
 });

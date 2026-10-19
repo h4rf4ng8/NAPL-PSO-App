@@ -38,8 +38,6 @@ Media resource versions derive from stored content without a migration. The same
 
 `test/routes/payload.test.ts` checks byte-aware traversal, Unicode/escaped text round trips, selected-season projection, revision-bound raw-field reads and stable media versions. `test/routes/payload-responses.test.ts` exercises actual API responses and complete collection traversal using the synthetic 105-account stress fixture. Existing DTO tests now read the complete selected resource after successful writes and retain private-column assertions. Authentication, ranking, history-cursor and GraphQL tests retain the corresponding behavior assertions through the new contracts.
 
-Matched local SQL/HTTP results, scripted user-action bytes, complete-data transfer costs, source guidance and limitations are recorded in [the payload evidence review](../docs/reviews/api-payload-evidence.md).
-
 Match imports return a bounded result with counts, team names, score, matchId and skippedIndexes (at most 30 input roster positions). The browser reconstructs every skipped name/ID from the exact retained upload; no skipped row is discarded. Import account matching is a separate admin-only paged lookup for the explicit uploaded Strikers IDs.
 
 Numeric stats extensions retain their previous public visibility through the selected card statsUrl. This explicit paged field resource omits private account fields, binds continuation cursors to the source, and binds large field value links to the full stats revision.

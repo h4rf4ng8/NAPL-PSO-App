@@ -348,7 +348,7 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
                     <span>•</span>
                     <span>{fmtDate(a.publishedAt)}</span>
                     <span>•</span>
-                    
+
                     <button onClick={() => onOpenArticle(a.slug)} className="ml-auto flex items-center gap-1" style={{ color: C.brandNavy }}>READ <ChevronRight size={10} /></button>
                   </div>
                 </div>

@@ -153,7 +153,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       {section === 'season' && (
         <SeasonManager
           account={account}
-         
+
           currentSeason={currentSeason}
           onRefresh={refresh}
         />

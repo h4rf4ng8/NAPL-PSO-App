@@ -19,4 +19,3 @@ export const newsSummarySchema = z.object({
   homeTeam: z.object({ id: z.string(), name: z.string(), tag: z.string(), color: z.string().nullable() }).nullable().optional(),
   awayTeam: z.object({ id: z.string(), name: z.string(), tag: z.string(), color: z.string().nullable() }).nullable().optional(),
 });
-

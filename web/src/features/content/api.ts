@@ -10,4 +10,3 @@ export const content={
  saveArticle:(a:Pick<Article,'slug'|'title'|'body'|'excerpt'> & Partial<Pick<Article,'id'|'publishedAt'|'coverImageUrl'>>)=>request<void>('/api/articles','POST',{id:a.id||a.slug,slug:a.slug,title:a.title,coverImageUrl:a.coverImageUrl===undefined?undefined:a.coverImageUrl||null,body:a.body,excerpt:a.excerpt,publishedAt:a.publishedAt}),
  deleteArticle:(id:string)=>request<void>(`/api/articles/${segment(id)}`,'DELETE'),
 };
-

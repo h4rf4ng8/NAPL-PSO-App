@@ -77,7 +77,7 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
           return {
             async willSendResponse({ response, errors, contextValue }) {
               if (response.body.kind !== 'single') return;
-              if (errors?.length && contextValue?.request && !contextValue.request.diagnostic) {
+              if (errors?.length && contextValue?.request) {
                 const internal = errors.find(error => error.extensions.code === 'INTERNAL_SERVER_ERROR');
                 const first = internal ?? errors[0]!;
                 const formatted = errorPayload(first);

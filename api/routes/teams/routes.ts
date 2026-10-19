@@ -83,6 +83,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
     const visibleTeam = async (request: FastifyRequest) => {
         const row = await getTeam(db, parameters(request).id!);
         if (!row || (row.status !== 'approved' && !isAdmin(request) && row.owner_account_id !== request.identity?.id && row.pending_members.every(invitation => invitation.accountId !== request.identity?.id))) throw new HttpError(404, 'not_found');
+        request.resource = { type: 'team', id: row.id };
         return row;
     };
     app.get('/api/teams', {
@@ -173,6 +174,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
             });
             await setTeamSeasons(tx, team.id, isAdmin(request) ? input.seasons ?? [] : []);
             for (const accountId of invitations) await createInvitation(tx, team.id, accountId);
+            request.resource = { type: 'team', id: team.id };
             return teamDto(await needTeam(tx, team.id));
         });
     });
@@ -185,6 +187,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
                 throw new HttpError(403, 'captain_required');
             if (!isAdmin(request) && (input.totw !== undefined || input.totwSetAt !== undefined || input.seasons !== undefined))
                 throw new HttpError(403, 'admin_required');
+            request.resource = { type: 'team', id: row.id };
             if (input.lineup) {
                 const members = new Set([...row.members, ...(row.status === 'pending' ? [row.owner_username] : [])].map(v => v.toLowerCase()));
                 const lineup = Object.values(input.lineup).map(v => v.toLowerCase());
@@ -206,6 +209,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         }).parse(request.body), reviewer = { id: actor(request).id, username: await actorName(db, request) };
         const result = await db.transaction(async (tx) => {
             let row = await needTeam(tx, parameters(request).id!, true);
+            request.resource = { type: 'team', id: row.id };
             if (row.status === input.status)
                 return teamDto(row);
             if (row.status !== 'pending')
@@ -247,6 +251,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
                     throw new HttpError(409, 'not_on_team');
                 if (!isAdmin(request) && team.owner_account_id === player.id)
                     throw new HttpError(409, 'captain_cannot_leave');
+                request.resource = { type: 'team', id: team.id };
                 return moveMember(tx, player, null, reviewer);
             }
             if (!isAdmin(request)) {
@@ -256,6 +261,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
                 if (player.team_id && player.team_id !== team.id)
                     throw new HttpError(409, 'already_on_team');
             }
+            request.resource = { type: 'team', id: team.id };
             return moveMember(tx, player, team, reviewer);
         });
         await notify(webhookUrl, parameters(request).id!, request);
@@ -268,6 +274,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
         return db.transaction(async (tx) => {
             const row = await needTeam(tx, parameters(request).id!, true);
             await respondInvitation(tx, row.id, actor(request).id, accept);
+            request.resource = { type: 'team', id: row.id };
             if (accept && row.status === 'approved') {
                 const player = await needAccount(tx, actor(request).id, true);
                 if (player.team_id)
@@ -284,6 +291,7 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl }: Dependen
     }, async (request) => {
         await db.transaction(async (tx) => {
             const team = await needTeam(tx, parameters(request).id!, true);
+            request.resource = { type: 'team', id: team.id };
             await teamAccounts(tx, team.id);
             await removeTeam(tx, team.id);
         });

@@ -20,6 +20,7 @@ export function registerVoting(app: FastifyInstance, { db }: Dependencies): void
     app.get('/api/voting/periods/:id/:collection', { config: { public: true } }, async request => {
         const collection = z.enum(['candidates', 'winners']).parse(parameters(request).collection);
         const period = await needVotingPeriod(db, parameters(request).id!);
+        request.resource = { type: 'voting_period', id: period.id };
         return page<unknown>(collection === 'candidates' ? period.eligible_players : Object.entries(period.winners && typeof period.winners === 'object' ? period.winners : {}).map(([position, username]) => ({ position, username })), `voting:${period.id}:${collection}`, pageInput(request));
     });
     app.post('/api/voting/periods', { config: { role: 'admin' } }, async (request) => {
@@ -40,16 +41,19 @@ export function registerVoting(app: FastifyInstance, { db }: Dependencies): void
     });
     app.get('/api/voting/periods/:id/votes', async (request) => {
         const period = await needVotingPeriod(db, parameters(request).id!);
+        request.resource = { type: 'voting_period', id: period.id };
         await actorName(db, request);
         return page(await listVotes(db, period, !isAdmin(request) && period.status === 'open' ? actor(request).id : undefined), `votes:${period.id}:${actor(request).id}`, pageInput(request));
     });
     app.get('/api/voting/periods/:id/votes/me', async request => {
         const period = await needVotingPeriod(db, parameters(request).id!);
+        request.resource = { type: 'voting_period', id: period.id };
         await actorName(db, request);
         return listVotes(db, period, actor(request).id);
     });
     app.get('/api/voting/periods/:id/tally', { config: { role: 'admin' } }, async request => {
         const period = await needVotingPeriod(db, parameters(request).id!);
+        request.resource = { type: 'voting_period', id: period.id };
         return voteTally(db, period.id);
     });
     app.put('/api/voting/periods/:id/votes', async (request) => {
@@ -57,6 +61,7 @@ export function registerVoting(app: FastifyInstance, { db }: Dependencies): void
         await actorName(db, request);
         await db.transaction(async (tx) => {
             const period = await needVotingPeriod(tx, parameters(request).id!, true);
+            request.resource = { type: 'voting_period', id: period.id };
             if (period.status !== 'open' || !await votingWindowOpen(tx, period.id)) throw new HttpError(409, 'voting_closed');
             await replaceVotes(tx, period.id, actor(request).id, votes);
         });

@@ -158,9 +158,10 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
             const rows = await tx.client.ruleSection.findMany({ select: { id: true, sort_order: true }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] });
             const index = rows.findIndex(row => row.id === id);
             if (index === -1) throw new HttpError(404, 'not_found');
+            const current = rows[index]!;
+            request.resource = { type: 'rule', id: current.id };
             const adjacent = index + (direction === 'up' ? -1 : 1);
             if (adjacent < 0 || adjacent >= rows.length) return;
-            const current = rows[index]!;
             rows[index] = rows[adjacent]!;
             rows[adjacent] = current;
             const updatedAt = new Date();

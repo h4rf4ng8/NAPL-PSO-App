@@ -40,7 +40,7 @@ async function main() {
   async function request() {
     const started = performance.now();
     try {
-      const response = await fetch(new URL('/api/standings', base), {
+      const response = await fetch(new URL('/api/team-standings', base), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -67,7 +67,7 @@ async function main() {
           elapsedMs, status: response.status,
         };
       }
-      return !response.ok || body?.errors?.length || !body?.data
+      return !response.ok || body?.errors?.length || !Array.isArray(body?.data?.standings?.nodes)
         ? { kind: 'failed', responseSource, elapsedMs, status: response.status }
         : { kind: 'success', responseSource, elapsedMs };
     } catch (error) {

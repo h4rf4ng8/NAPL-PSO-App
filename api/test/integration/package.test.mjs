@@ -153,7 +153,12 @@ test('Lambda ZIP loads outside the repository and supports direct CORS and rejec
         };
         const response = await handler(request, context);
         assert.equal(response.statusCode, 200);
-        assert.ok(Array.isArray(JSON.parse(response.body)));
+        const page = JSON.parse(response.body);
+        assert.ok(Array.isArray(page.nodes));
+        assert.ok(Number.isInteger(page.totalCount));
+        assert.equal(typeof page.pageInfo.hasNextPage, 'boolean');
+        assert.ok(Buffer.byteLength(response.body, 'utf8') <= 10_000);
+        assert.ok(page.nodes.every(row => !Object.hasOwn(row, 'email') && !Object.hasOwn(row, 'pendingImageUrl')));
         const auth = await handler({
           ...request, rawPath: '/api/users/me',
           requestContext: { ...request.requestContext, http: { ...request.requestContext.http, path: '/api/users/me' } },

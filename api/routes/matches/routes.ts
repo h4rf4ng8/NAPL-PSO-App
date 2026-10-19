@@ -65,6 +65,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         const input = approveSubmission.parse(request.body);
         return db.transaction(async (tx) => {
             const old = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: old.id };
             if (old.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await updateSubmission(tx, old.id, {
@@ -79,6 +80,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     }, async (request) => {
         await db.transaction(async (tx) => {
             const row = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: row.id };
             if (row.status === 'approved')
                 throw new HttpError(409, 'approved_submission');
             await deleteSubmission(tx, row.id);
@@ -97,6 +99,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         }).parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
             const row = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: row.id };
             if (row.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await updateSubmission(tx, row.id, {
@@ -112,6 +115,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         const input = approveSubmission.parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
             const sub = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: sub.id };
             if (sub.status === 'approved')
                 return submissionDto(sub);
             if (sub.status !== 'pending')

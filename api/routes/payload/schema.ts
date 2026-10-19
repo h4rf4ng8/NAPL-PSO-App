@@ -148,7 +148,9 @@ export const queryFields = {
       const id = z.uuid().parse(args.id), season = seasonValue(args.season);
       const accounts = await population(context);
       const row = accounts.find(account => account.id === id);
-      return row ? playerCard(row, season) : null;
+      if (!row) return null;
+      context.request.resource = { type: 'account', id: String(row.id) };
+      return playerCard(row, season);
     }) },
   seasons: { type: nonNull(StringPage), args: pageArgs,
     resolve: (_source: unknown, args: { first?: number; after?: string }, context: GraphQLContext) => read(context, 'seasons', async () => {
@@ -172,6 +174,7 @@ export const queryFields = {
       const accounts = await population(context);
       const row = accounts.find(account => account.id === z.uuid().parse(args.id));
       if (!row) throw new HttpError(404, 'not_found');
+      context.request.resource = { type: 'account', id: String(row.id) };
       return page((Array.isArray(row.awards) ? row.awards : []).map((value, index) => trophySummary(value, args.id, 'awards', index)), `awards:${args.id}`, args);
     }) },
   accountChampionships: { type: nonNull(JsonPage), args: { id: { type: new GraphQLNonNull(GraphQLID) }, ...pageArgs },
@@ -179,6 +182,7 @@ export const queryFields = {
       const accounts = await population(context);
       const row = accounts.find(account => account.id === z.uuid().parse(args.id));
       if (!row) throw new HttpError(404, 'not_found');
+      context.request.resource = { type: 'account', id: String(row.id) };
       return page((Array.isArray(row.championships) ? row.championships : []).map((value, index) => trophySummary(value, args.id, 'championships', index)), `championships:${args.id}`, args);
     }) },
   teamSummaries: { type: nonNull(TeamSummaryPage), args: { ...pageArgs, scope: { type: GraphQLString }, status: { type: GraphQLString }, search: { type: GraphQLString } },
@@ -200,6 +204,7 @@ export const queryFields = {
       const teams = await listTeams(context.db, { id: context.request.identity?.id, admin: context.request.userRoles.length > 0 });
       const team = teams.find(row => row.id === args.teamId);
       if (!team) throw new HttpError(404, 'not_found');
+      context.request.resource = { type: 'team', id: team.id };
       const names = new Set(team.members), season = seasonValue(args.season);
       const accounts = await population(context);
       return page(accounts.filter(row => names.has(string(row.username))).map(row => playerCard(row, season)), `team-players:${team.id}:${season}`, args);

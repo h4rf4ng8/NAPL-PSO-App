@@ -161,6 +161,7 @@ test('standings requires sign-in and overview constrains private fields', async 
   try {
     const denied = await app.inject({ method: 'POST', url: '/api/team-standings', payload: { variables: {} } });
     assert.equal(denied.statusCode, 401);
+    assert.deepEqual(denied.json(), { error: 'authentication_required', message: 'authentication_required' });
     for (const token of [alice, admin]) {
       const standings = await app.inject({ method: 'POST', url: '/api/team-standings', headers: { authorization: `Bearer ${token}` }, payload: { variables: {} } });
       assert.equal(standings.statusCode, 200, standings.body);

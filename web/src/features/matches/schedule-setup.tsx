@@ -1,10 +1,14 @@
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { TeamSelect } from '../teams/TeamSelect';
+import { segment } from '../../api/http';
 import { matches as matchApi } from './api';
 
 import type { ScheduledMatch } from './models';
-import type { Team } from '../teams/models';
+import type { TeamSummary as Team } from '../teams/models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { generateRoundRobinSchedule } from '../../utils/league';
@@ -12,15 +16,18 @@ import { generateRoundRobinSchedule } from '../../utils/league';
 // ============ SCHEDULE: GENERATE MODAL ============
 // Admin picks the season name + the teams to include, then this generates
 // the entire fixture list and inserts it in one shot.
-export const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onClose, onGenerated }: { allTeams?: Team[]; existingSeasons?: string[]; onClose: () => void; onGenerated: (season:string) => void }) => {
+export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerated }: { existingSeasons?: string[]; onClose: () => void; onGenerated: (season:string) => void }) => {
   const [seasonName, setSeasonName] = useState(() => {
     // Suggest next season number based on existing
     const nums = existingSeasons.map(s => Math.trunc(Number(s.replaceAll(/\D/g, '')))).filter(n => !Number.isNaN(n));
     const next = nums.length > 0 ? Math.max(...nums) + 1 : 1;
     return `Season ${next}`;
   });
-  const approvedTeams = allTeams.filter(t => t.status === 'approved');
-  const [selectedTeamIds, setSelectedTeamIds] = useState(() => approvedTeams.map(t => t.id));
+  const [teamSearch, setTeamSearch] = useState('');
+  const teamPage = useRestPage<Team>(`/api/teams?status=approved&search=${segment(teamSearch)}`);
+  const approvedTeams = teamPage.data?.nodes ?? [];
+  const [selectedNames, setSelectedNames] = useState<Record<string,string>>({});
+  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [rounds, setRounds] = useState(2); // how many times each pairing is played
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -31,6 +38,7 @@ export const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onC
   else if (season.length > 160) seasonError = 'Season name must be 160 characters or fewer.';
 
   const toggleTeam = (id: string) => {
+    const team = approvedTeams.find(team => team.id === id); if (team) setSelectedNames(previous => ({ ...previous, [id]: team.name }));
     setSelectedTeamIds(prev =>
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     );
@@ -94,7 +102,7 @@ export const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onC
   };
 
   const totalMatches = preview ? preview.reduce((sum, wk) => sum + wk.length, 0) : 0;
-  const teamById = (id: string | null | undefined) => approvedTeams.find(t => t.id === id);
+  const teamById = (id: string | null | undefined) => id ? { name: selectedNames[id] ?? id, tag: selectedNames[id] ?? id } : undefined;
 
   return (
     <ModalShell title="GENERATE SEASON SCHEDULE" onClose={onClose} maxWidth="max-w-2xl">
@@ -114,6 +122,10 @@ export const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onC
           <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
             TEAMS IN THIS SEASON ({selectedTeamIds.length} selected)
           </label>
+          <input aria-label="Search generation teams" placeholder="Search teams" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} />
+          {teamPage.error && <p role="alert">{teamPage.error}<button onClick={teamPage.restart}>Restart teams</button></p>}
+          <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
+          <div>{selectedTeamIds.map(id => <button key={id} onClick={() => toggleTeam(id)}>Remove {selectedNames[id] ?? id}</button>)}</div>
           {approvedTeams.length === 0 ? (
             <div className="font-mono text-xs p-3 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>
               No approved teams yet. Approve teams first before generating a schedule.
@@ -243,7 +255,7 @@ export const GenerateScheduleModal = ({ allTeams = [], existingSeasons = [], onC
 // ============ SCHEDULE: EDIT MATCH MODAL ============
 // Admin opens this on any individual match to set the date/time, enter a
 // score, mark postponed/forfeit, add a stream link, etc.
-export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { match: ScheduledMatch; allTeams?: Team[]; onClose: () => void; onSaved: () => void }) => {
+export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { match: ScheduledMatch; allTeams?: Pick<Team, 'id' | 'name' | 'tag'>[]; onClose: () => void; onSaved: () => void }) => {
   const home = allTeams.find(t => t.id === match.homeTeamId);
   const away = allTeams.find(t => t.id === match.awayTeamId);
   // Convert epoch ms → local 'YYYY-MM-DDTHH:MM' for the datetime-local input
@@ -426,8 +438,7 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
 // week number, home and away teams, and optionally a date/time right away.
 // Useful for exhibition games, makeups, cup games, or building a whole season
 // from scratch after SKIP GENERATION.
-export const AddMatchModal = ({ allTeams = [], existingSeasons = [], onClose, onSaved, defaultSeason = '' }: { allTeams?: Team[]; existingSeasons?: string[]; onClose: () => void; onSaved: (season:string) => void; defaultSeason?: string }) => {
-  const approvedTeams = allTeams.filter(t => t.status === 'approved');
+export const AddMatchModal = ({ existingSeasons = [], onClose, onSaved, defaultSeason = '' }: { existingSeasons?: string[]; onClose: () => void; onSaved: (season:string) => void; defaultSeason?: string }) => {
   const [season, setSeason] = useState(defaultSeason || existingSeasons[0] || '');
   const [week, setWeek] = useState(1);
   const [homeTeamId, setHomeTeamId] = useState('');
@@ -500,27 +511,11 @@ export const AddMatchModal = ({ allTeams = [], existingSeasons = [], onClose, on
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>HOME</label>
-            <select
-              value={homeTeamId}
-              onChange={(e) => setHomeTeamId(e.target.value)}
-              className="w-full px-2 py-2 font-heading tracking-wider rounded"
-              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            >
-              <option value="">— pick team —</option>
-              {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.tag} — {t.name}</option>)}
-            </select>
+            <TeamSelect value={homeTeamId} onChange={setHomeTeamId} label="Home team" />
           </div>
           <div>
             <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>AWAY</label>
-            <select
-              value={awayTeamId}
-              onChange={(e) => setAwayTeamId(e.target.value)}
-              className="w-full px-2 py-2 font-heading tracking-wider rounded"
-              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            >
-              <option value="">— pick team —</option>
-              {approvedTeams.map(t => <option key={t.id} value={t.id}>{t.tag} — {t.name}</option>)}
-            </select>
+            <TeamSelect value={awayTeamId} onChange={setAwayTeamId} label="Away team" />
           </div>
         </div>
 

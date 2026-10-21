@@ -22,7 +22,7 @@ function newsData(input: Partial<Omit<NewsInput, 'id'>>) {
 }
 
 export function listNews(db: Database) {
-  return db.client.news.findMany();
+  return db.client.news.findMany({ orderBy: { id: 'asc' } });
 }
 
 export async function upsertNews(db: Database, input: NewsInput, author: string) {
@@ -55,7 +55,7 @@ function ruleData(input: Partial<Omit<RuleInput, 'id'>>) {
 }
 
 export function listRules(db: Database) {
-  return db.client.ruleSection.findMany({ orderBy: { sort_order: 'asc' } });
+  return db.client.ruleSection.findMany({ orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] });
 }
 
 export async function upsertRule(db: Database, input: RuleInput) {
@@ -88,7 +88,7 @@ function articleData(input: Partial<Omit<ArticleInput, 'id'>>) {
 }
 
 export function listArticles(db: Database) {
-  return db.client.article.findMany();
+  return db.client.article.findMany({ orderBy: { id: 'asc' } });
 }
 
 export function articleBySlug(db: Database, slug: string) {
@@ -125,7 +125,7 @@ function scheduleData(input: Partial<Omit<ScheduleInput, 'id'>>) {
 }
 
 export function listSchedule(db: Database, season?: string) {
-  return db.client.scheduledMatch.findMany({ where: season ? { season_id: season } : undefined });
+  return db.client.scheduledMatch.findMany({ orderBy: { id: 'asc' }, where: season ? { season_id: season } : undefined });
 }
 
 export async function upsertScheduledMatch(db: Database, input: ScheduleInput, updatedAt?: Date) {
@@ -165,7 +165,7 @@ const transferSelect = Prisma.sql`SELECT t.*,a.username AS player_username,COALE
 
 export function listTransfers(db: Database, season?: string): Promise<TransferRow[]> {
   return db.query<TransferRow>(Prisma.sql`${transferSelect}
-    ${season ? Prisma.sql`WHERE t.season_id=${season}` : Prisma.empty}`);
+    ${season ? Prisma.sql`WHERE t.season_id=${season}` : Prisma.empty} ORDER BY t.id`);
 }
 
 async function transferRow(db: Database, id: string): Promise<TransferRow> {

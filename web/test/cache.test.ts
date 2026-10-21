@@ -1,3 +1,4 @@
+import { page } from './page-fixture';
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { firstValueFrom, filter, type Subscription } from 'rxjs';
@@ -8,7 +9,7 @@ import { request } from '../src/api/http';
 const query = TeamRecordsDocument;
 const subscriptions: Subscription[] = [];
 const record = (version: number) => ({ teamId: 'blue', season: 'S1', played: version, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 });
-const response = (version: number) => Response.json({ data: { teamRecords: [record(version)] } });
+const response = (version: number) => Response.json({ data: { teamRecords: page([record(version)]) } });
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 function watch() {
   const observable = client.watchQuery({ query });
@@ -39,12 +40,12 @@ test('native subscriptions react to cache writes and refetch is a one-shot netwo
   mock.method(globalThis, 'fetch', async () => response(++calls));
   const { observable, results, ready } = watch();
   await ready;
-  client.cache.writeQuery({ query, data: { teamRecords: [record(5)] } });
+  client.cache.writeQuery({ query, data: { teamRecords: page([record(5)]) } });
   await tick();
-  assert.deepEqual(results.at(-1)?.data, { teamRecords: [record(5)] });
+  assert.deepEqual(results.at(-1)?.data, { teamRecords: page([record(5)]) });
   await observable.refetch();
   assert.equal(calls, 2);
-  assert.deepEqual((await client.query({ query })).data, { teamRecords: [record(2)] });
+  assert.deepEqual((await client.query({ query })).data, { teamRecords: page([record(2)]) });
   assert.equal(calls, 2);
 });
 
@@ -58,10 +59,10 @@ test('failed commands preserve cached reads; successful commands refetch each ac
   await ready;
   await assert.rejects(request('/api/teams/blue', 'DELETE'));
   assert.equal(reads, 1);
-  assert.deepEqual((await client.query({ query })).data, { teamRecords: [record(1)] });
+  assert.deepEqual((await client.query({ query })).data, { teamRecords: page([record(1)]) });
   await request('/api/teams/blue', 'PATCH', {});
   assert.equal(reads, 2);
-  assert.deepEqual(results.at(-1)?.data, { teamRecords: [record(2)] });
+  assert.deepEqual(results.at(-1)?.data, { teamRecords: page([record(2)]) });
 });
 
 test('a successful command remains successful when its refetch fails and query subscribers see the error', async () => {
@@ -94,7 +95,7 @@ test('successful commands cancel old reads and their late responses cannot overw
   late.resolve(response(1));
   await old;
   await tick();
-  assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: [record(2)] });
+  assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: page([record(2)]) });
   assert.equal(reads, 2);
 });
 
@@ -120,7 +121,7 @@ test('overlapping successful writes keep the final refetch and both command resu
   assert.deepEqual(await Promise.all([first, second]), [{ saved: 1 }, { saved: 2 }]);
   firstRefetch.resolve(response(2));
   await tick();
-  assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: [record(3)] });
+  assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: page([record(3)]) });
   assert.equal(reads, 3);
 });
 
@@ -160,7 +161,7 @@ for (const resets of [1, 2]) {
     subscriptions.push(observable.subscribe(() => {}));
     await firstValueFrom(observable.pipe(filter(result => !result.loading)));
     assert.equal(reads, 2);
-    assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: [record(2)] });
+    assert.deepEqual(client.cache.readQuery({ query }), { teamRecords: page([record(2)]) });
   });
 }
 

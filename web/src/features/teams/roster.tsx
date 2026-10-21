@@ -1,8 +1,9 @@
+import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Check, Edit3, Users, X } from 'lucide-react';
 import { useMemo,useState } from 'react';
 import { teams as teamApi } from './api';
 import type { Account } from '../accounts/models';
-import type { Team } from './models';
+import type { Team, TeamSummary } from './models';
 import { CaptainStar } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
 import { Dialog } from '../../components/Dialog';
@@ -12,12 +13,10 @@ import { DEFAULT_FORMATION, FORMATION_IDS, getFormation, isTeamCaptain, resolveL
 import { POS } from '@napl/contracts/league';
 import { cardTier } from '../../utils/rankings';
 
-export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCaptain = false, onLineupSaved }: { team: Team; allPlayers?: Account[]; onCardClick: (account:Account) => void; isCaptain?: boolean; onLineupSaved?: () => void }) => {
+export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCaptain = false, onLineupSaved }: { team: TeamSummary & Pick<Team, 'formation' | 'lineup'> & { members?: string[] }; allPlayers?: Account[]; onCardClick: (account:Account) => void; isCaptain?: boolean; onLineupSaved?: () => void }) => {
   // Fetch full account records for each roster member
   const members = useMemo(() => {
-    return (team.members || [])
-      .map(u => allPlayers.find(p => p.username.toLowerCase() === u.toLowerCase()))
-      .filter((p):p is Account=>!!p);
+    return team.members ? team.members.map(u => allPlayers.find(p => p.username.toLowerCase() === u.toLowerCase())).filter((p):p is Account=>!!p) : allPlayers;
   }, [team.members, allPlayers]);
 
   // --- EDIT LINEUP STATE ---
@@ -55,7 +54,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
     // Snapshot current resolved lineup (so if nothing was saved, draft starts
     // with the auto-assignment the captain is looking at — easier to tweak).
     // Uses the current formation's slot ids.
-    const snapshot:Record<string,string> = {};
+    const snapshot:Record<string,string> = { ...team.lineup };
     activeFormation.slots.forEach(s => { if(starters[s.id]) snapshot[s.id] = starters[s.id]!.username; });
     setDraftFormation(team.formation || DEFAULT_FORMATION);
     setDraftLineup(snapshot);
@@ -81,7 +80,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
       if (u && byPos[s.pos]) byPos[s.pos].push(u);
     }
     // Fill the new formation's slots in order
-    const newLineup:Record<string,string> = {};
+    const newLineup:Record<string,string> = Object.fromEntries(Object.entries(draftLineup).filter(([key]) => oldSlots.every(slot => slot.id !== key)));
     for (const s of newSlots) {
       const bucket = byPos[s.pos] || [];
       if(bucket.length > 0) newLineup[s.id] = bucket.shift()!;
@@ -411,7 +410,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
 // Stable component identity preserves the roster button while a nested card opens.
 const SLOT_W = 76;
 const SLOT_H = 100;
-const FormationSlot = ({ player, positionLabel, popDown = false, team, onCardClick }: { player: Account | null; positionLabel: string; popDown?: boolean; team: Team; onCardClick: (account: Account) => void }) => {
+const FormationSlot = ({ player, positionLabel, popDown = false, team, onCardClick }: { player: Account | null; positionLabel: string; popDown?: boolean; team: TeamSummary; onCardClick: (account: Account) => void }) => {
   if (!player) {
     return (
       <div
@@ -461,7 +460,7 @@ const FormationSlot = ({ player, positionLabel, popDown = false, team, onCardCli
             }}
           >
             {player.imageUrl ? (
-              <img src={player.imageUrl} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <MediaImage src={mediaUrl(player.imageUrl)} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <div className="font-display text-xl" style={{ color: ringColor }}>
                 {(player.username || '?').slice(0, 1).toUpperCase()}

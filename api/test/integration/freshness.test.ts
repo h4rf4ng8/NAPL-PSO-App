@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createApp, type Dependencies } from '../../app.js';
 import { connectDatabase, Prisma } from '../../plugins/db/client.js';
+import { collectPage } from '../responses.js';
 import type { Row } from '../../plugins/db/client.js';
 import { config } from '../plugins/fixtures.js';
 import { GatewayError } from '../../plugins/auth/errors.js';
@@ -33,7 +34,7 @@ test('independent app instances read committed public account changes without a 
     const headers = {};
     const initial = await first.inject({ url: '/api/accounts', headers });
     assert.equal(initial.statusCode, 200, initial.body);
-    const initialAccount = initial.json<Row[]>().find(row => row.id === accountId);
+    const initialAccount = (await collectPage<Row>(first, '/api/accounts', headers)).find(row => row.id === accountId);
     assert.ok(initialAccount);
     assert.equal(initialAccount.country, originalCountry);
 
@@ -42,7 +43,7 @@ test('independent app instances read committed public account changes without a 
 
     const later = await second.inject({ url: '/api/accounts', headers });
     assert.equal(later.statusCode, 200, later.body);
-    const updatedAccount = later.json<Row[]>().find(row => row.id === accountId);
+    const updatedAccount = (await collectPage<Row>(second, '/api/accounts', headers)).find(row => row.id === accountId);
     assert.equal(updatedAccount?.country, changedCountry);
   } finally {
     try {

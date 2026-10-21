@@ -1,0 +1,23 @@
+import { test, afterEach, after, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import React from 'react';
+import { act, create, type ReactTestRenderer } from 'react-test-renderer';
+import { FullRecord } from '../src/components/FullRecord';
+import { page } from './page-fixture';
+Object.defineProperty(globalThis,'React',{configurable:true,value:React});
+after(()=>{Reflect.deleteProperty(globalThis,'React');});
+afterEach(()=>mock.restoreAll());
+const element=(url:string)=>React.createElement(React.StrictMode,null,React.createElement(FullRecord,{url,label:'Read full trophy'}));
+test('explicit full trophy detail retains a long Unicode label and switches records under StrictMode',async()=>{
+ const full='特別賞'.repeat(90);const calls:string[]=[];
+ mock.method(globalThis,'fetch',async url=>{calls.push(String(url));return Response.json(page([{index:0,key:'awardId',value:String(url).includes('/two')?'Second trophy':full},{index:1,key:'season',value:'S1'}]));});
+ let view:ReactTestRenderer;
+ await act(async()=>{view=create(element('/api/trophy/one?revision=one'));});
+ assert.equal(calls.length,0);
+ await act(async()=>{view!.root.findByType('button').props.onClick();await new Promise(resolve=>setImmediate(resolve));});
+ assert.ok(JSON.stringify(view!.toJSON()).includes(full));assert.equal(calls.length,1);
+ await act(async()=>{view!.update(element('/api/trophy/two?revision=two'));});
+ assert.ok(!JSON.stringify(view!.toJSON()).includes(full));
+ await act(async()=>{view!.root.findByType('button').props.onClick();await new Promise(resolve=>setImmediate(resolve));});
+ assert.ok(JSON.stringify(view!.toJSON()).includes('Second trophy'));assert.equal(calls.length,2);act(()=>view!.unmount());
+});

@@ -8,6 +8,7 @@ import { type Row } from '../../plugins/db/client.js';
 import { object, array } from '../../plugins/db/records.js';
 import { submissionDto } from './dto.js';
 import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews } from './queries.js';
+import { pathSegment, detailUrl, page, pageInput } from '../payload/page.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
         games: 0, wins: 0, draws: 0, losses: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0, motm: 0
@@ -36,7 +37,10 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     app.get('/api/submissions', async (request) => {
         await actorName(db, request);
         const rows = await listSubmissions(db, isAdmin(request) ? undefined : actor(request).id);
-        return rows.map(row => submissionDto(row));
+        return page(rows.map(row => ({ id: row.id, status: row.status, submittedBy: row.submitted_by,
+            submittedAt: row.submitted_at?.getTime() ?? null, reviewedBy: row.reviewed_by, reviewedAt: row.reviewed_at?.getTime() ?? null,
+            detailUrl: detailUrl(`/api/submissions/${pathSegment(row.id)}/detail`, submissionDto(row)),
+        })), `submissions:${isAdmin(request) ? 'admin' : actor(request).id}`, pageInput(request));
     });
     app.post('/api/submissions', {
         config: {
@@ -61,6 +65,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         const input = approveSubmission.parse(request.body);
         return db.transaction(async (tx) => {
             const old = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: old.id };
             if (old.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await updateSubmission(tx, old.id, {
@@ -75,6 +80,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
     }, async (request) => {
         await db.transaction(async (tx) => {
             const row = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: row.id };
             if (row.status === 'approved')
                 throw new HttpError(409, 'approved_submission');
             await deleteSubmission(tx, row.id);
@@ -93,6 +99,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         }).parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
             const row = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: row.id };
             if (row.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await updateSubmission(tx, row.id, {
@@ -108,6 +115,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         const input = approveSubmission.parse(request.body), reviewer = await actorName(db, request);
         return db.transaction(async (tx) => {
             const sub = await needSubmission(tx, parameters(request).id!, true);
+            request.resource = { type: 'submission', id: sub.id };
             if (sub.status === 'approved')
                 return submissionDto(sub);
             if (sub.status !== 'pending')
@@ -155,16 +163,14 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 throw new HttpError(400, 'same_team');
             const home = await needMatchTeam(tx, input.homeTeamId), away = await needMatchTeam(tx, input.awayTeamId);
             let updated = 0, skipped = 0, alreadyImported = 0;
-            const skippedList: Row[] = [];
+            const skippedIndexes: number[] = [];
             const mapped = new Set<string>();
             const md = input.matchData;
-            for (const p of md.players) {
+            for (const [index, p] of md.players.entries()) {
                 const name = input.playerMap[String(p.player_id)];
                 if (!name) {
                     skipped++;
-                    skippedList.push({
-                        strikersName: p.username, playerId: p.player_id, reason: 'No ASL account'
-                    });
+                    skippedIndexes.push(index);
                     continue;
                 }
                 if (mapped.has(name.toLowerCase()))
@@ -190,7 +196,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 updated++;
             }
             return {
-                matchId: md.match_id, updated, skipped, alreadyImported, skippedList, homeTeam: home.name, awayTeam: away.name, score: `${md.score.home} - ${md.score.away}`
+                ok: true, matchId: md.match_id, updated, skipped, alreadyImported, skippedIndexes, homeTeam: home.name, awayTeam: away.name, score: `${md.score.home} - ${md.score.away}`
             };
         });
     });

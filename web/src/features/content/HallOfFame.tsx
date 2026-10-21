@@ -1,201 +1,78 @@
-import { Calendar, Crown, Sparkles, Trophy } from 'lucide-react';
-import { settings as adminApi } from '../admin/api';
-import type { Account, PlayerAward } from '../accounts/models';
-import type { Champions } from '../admin/models';
-import type { Team } from '../teams/models';
-import { AWARD_TYPES, AwardIcon, ChampionTrophy } from '../../components/Icons';
-import { EmptyState } from '../../components/Display';
-import { useResource } from '../../hooks/use-resource';
-import { C } from '../../theme/theme';
+import { mergeSeasonPages } from '../dashboard/season-pages';
+import { useState } from 'react';
+import { useQuery } from '@apollo/client/react';
+import { HallOfFameDocument, DecoratedPlayersDocument, SeasonsDocument, SeasonChampionsDocument } from '../../api/generated/graphql';
+import { z } from 'zod';
+import type { TeamSummary } from '../teams/models';
+import type { PlayerSelection } from '../accounts/StatsView';
+import { AWARD_TYPES, AWARD_BY_ID, AwardIcon, ChampionTrophy } from '../../components/Icons';
+import { PageButtons } from '../../components/PageButtons';
 
-// ============ HALL OF FAME ============
-export const HallOfFameView = ({ allPlayers, allTeams, onPlayerClick }: { allPlayers: Account[]; allTeams: Team[]; onPlayerClick?: (account:Account) => void }) => {
-  const {
-    data: loadedChampions,
-    loading: championsLoading,
-    error: championsError,
-    reload: reloadChampions,
-  } = useResource<Champions | undefined>(() => adminApi.getChampions(), []);
-  const champions: Champions = loadedChampions || {};
-  const teamById = (id: string | null | undefined) => (allTeams || []).find(t => t.id === id);
+const playerSchema = z.object({ id: z.string(), username: z.string(), position: z.string() });
+const winnerSchema = z.object({ player: playerSchema, award: z.object({ awardId: z.string(), season: z.string(), detailUrl: z.string().optional(), previewTruncated: z.boolean().optional() }) });
+const decoratedSchema = z.object({ player: playerSchema, count: z.number() });
+const championSchema = z.object({ season: z.string(), winnerTeam: z.object({ id: z.string(), name: z.string() }).nullable(), runnerUpTeam: z.object({ id: z.string(), name: z.string() }).nullable() });
 
-  // Build a map: { season → { awardId → { player, award } } }
-  const bySeason:Record<string,Record<string,{player:Account;award:PlayerAward}>> = {};
-  allPlayers.forEach(p => {
-    (p.awards || []).forEach(aw => {
-      if (!bySeason[aw.season]) bySeason[aw.season] = {};
-      bySeason[aw.season][aw.awardId] = { player: p, award: aw };
-    });
-  });
-  const seasons = Object.keys(bySeason).sort((a,b)=>b.localeCompare(a));
-  const championSeasons = Object.keys(champions).sort((a,b)=>b.localeCompare(a));
-
-  // Per-player count for "most decorated" leaderboard
-  const decoratedPlayers = allPlayers
-    .filter(p => (p.awards || []).length > 0)
-    .map(p => ({ player: p, count: p.awards.length }))
-    .sort((a, b) => b.count - a.count);
-
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-4">
-        <Crown size={22} style={{ color: C.goldLight }} />
-        <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>HALL OF FAME</h3>
+export function HallOfFameView({ onPlayerClick }: { allTeams?: TeamSummary[]; onPlayerClick?: (player: PlayerSelection) => void }) {
+  const [seasonPageError, setSeasonPageError] = useState('');
+  const [season, setSeason] = useState<string | null>(null);
+  const [awardId, setAwardId] = useState<string | null>(null);
+  const [after, setAfter] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<(string | null)[]>([]);
+  const { data, loading, error, refetch } = useQuery(HallOfFameDocument, { variables: { season, awardId, after } });
+  const { data: seasons, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
+  const [decoratedAfter, setDecoratedAfter] = useState<string | null>(null);
+  const [decoratedPrevious, setDecoratedPrevious] = useState<(string | null)[]>([]);
+  const decorated = useQuery(DecoratedPlayersDocument, { variables: { after: decoratedAfter } });
+  const [championAfter, setChampionAfter] = useState<string | null>(null);
+  const [championPrevious, setChampionPrevious] = useState<(string | null)[]>([]);
+  const champions = useQuery(SeasonChampionsDocument, { variables: { after: championAfter } });
+  const reset = () => { setAfter(null); setPrevious([]); };
+  return <div className="space-y-6">
+    <h3 className="font-display text-3xl">HALL OF FAME</h3>
+    <section><h4 className="font-display text-xl">SEASON CHAMPIONS</h4>
+      {champions.loading && <p role="status">Loading champions…</p>}
+      {champions.error && <p role="alert">{champions.error.message} <button onClick={() => { setChampionAfter(null); setChampionPrevious([]); void champions.refetch({ after: null }).catch(() => {}); }}>Restart champions</button></p>}
+      {champions.data?.seasonChampions.nodes.map((entry, index) => {
+        const info = championSchema.parse(entry);
+        return <div key={index} className="border rounded p-3"><h5>{info.season}</h5>
+          <ChampionTrophy size={24} tone="gold" /> Champion: {info.winnerTeam?.name ?? '—'}<br />
+          <ChampionTrophy size={24} tone="silver" /> Runner-up: {info.runnerUpTeam?.name ?? '—'}
+        </div>;
+      })}
+      <PageButtons loading={champions.loading} canPrevious={championPrevious.length > 0} hasNextPage={champions.data?.seasonChampions.pageInfo.hasNextPage ?? false}
+        previous={() => { setChampionAfter(championPrevious.at(-1) ?? null); setChampionPrevious(championPrevious.slice(0, -1)); }}
+        next={() => { setChampionPrevious([...championPrevious, championAfter]); setChampionAfter(champions.data?.seasonChampions.pageInfo.endCursor ?? null); }} />
+    </section>
+    <section><h4 className="font-display text-xl">MOST DECORATED</h4>
+      {decorated.loading && <p role="status">Loading decorated players…</p>}
+      {decorated.error && <p role="alert">{decorated.error.message}<button onClick={() => { setDecoratedAfter(null); setDecoratedPrevious([]); void decorated.refetch({ after: null }).catch(() => {}); }}>Restart decorated players</button></p>}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">{decorated.data?.decoratedPlayers.nodes.map(row => {
+        const record = decoratedSchema.parse(row);
+        return <button key={record.player.id} onClick={() => onPlayerClick?.({ id: record.player.id })} className="border rounded p-3">{record.player.username} · {record.count} awards</button>;
+      })}</div>
+      <div className="flex gap-3"><button disabled={decorated.loading || decoratedPrevious.length === 0} onClick={() => { setDecoratedAfter(decoratedPrevious.at(-1) ?? null); setDecoratedPrevious(decoratedPrevious.slice(0, -1)); }}>Previous decorated players</button>
+        <button disabled={decorated.loading || !decorated.data?.decoratedPlayers.pageInfo.hasNextPage} onClick={() => { setDecoratedPrevious([...decoratedPrevious, decoratedAfter]); setDecoratedAfter(decorated.data?.decoratedPlayers.pageInfo.endCursor ?? null); }}>Next decorated players</button></div>
+    </section>
+    <section><h4 className="font-display text-xl">WINNERS BY SEASON</h4>
+      <div className="flex gap-3"><select aria-label="Award season" value={season ?? ''} onChange={event => { setSeason(event.target.value || null); reset(); }}><option value="">All seasons</option>{seasons?.seasons.nodes.map(value => <option key={value}>{value}</option>)}</select>
+        <select aria-label="Award type" value={awardId ?? ''} onChange={event => { setAwardId(event.target.value || null); reset(); }}><option value="">All awards</option>{AWARD_TYPES.map(award => <option key={award.id} value={award.id}>{award.name}</option>)}</select>
+{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
+        {seasons?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasons.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
       </div>
-
-      {/* SEASON CHAMPIONS — winner + runner-up per season */}
-      {championsLoading && (
-        <div role="status" className="mb-6 font-mono text-sm" style={{ color: `${C.cream}66` }}>Loading season champions...</div>
-      )}
-      {championsError && (
-        <div role="alert" className="mb-6 flex items-center gap-3 font-mono text-xs" style={{ color: C.redLight }}>
-          <span>Could not load season champions: {championsError}</span>
-          <button
-            type="button"
-            onClick={() => { void reloadChampions(); }}
-            disabled={championsLoading}
-            className="underline disabled:opacity-50"
-          >RETRY</button>
-        </div>
-      )}
-      {!championsLoading && !championsError && championSeasons.length > 0 && (
-        <div className="mb-8">
-          <h4 className="font-display text-xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-            <Trophy size={16} style={{ color: C.goldLight }} /> SEASON CHAMPIONS
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {championSeasons.map(s => {
-              const info = champions[s];
-              const w = info.winnerTeamId ? teamById(info.winnerTeamId) : null;
-              const r = info.runnerUpTeamId ? teamById(info.runnerUpTeamId) : null;
-              return (
-                <div key={s} className="rounded-xl p-4" style={{
-                  background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
-                  border: `1px solid ${C.gold}55`,
-                  boxShadow: `0 2px 10px ${C.gold}22`,
-                }}>
-                  <div className="font-display text-2xl tracking-wider mb-3" style={{ color: C.brandNavy }}>{s}</div>
-                  <div className="flex items-start gap-3 mb-2">
-                    <ChampionTrophy size={32} tone="gold" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.brandNavy}88` }}>CHAMPION</div>
-                      <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.brandNavy }}>
-                        {w ? w.name : <span style={{ fontStyle: 'italic', color: `${C.brandNavy}66` }}>—</span>}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <ChampionTrophy size={28} tone="silver" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.brandNavy}88` }}>RUNNER-UP</div>
-                      <div className="font-heading tracking-wider text-sm truncate" style={{ color: `${C.brandNavy}cc` }}>
-                        {r ? r.name : <span style={{ fontStyle: 'italic', color: `${C.brandNavy}66` }}>—</span>}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {seasons.length === 0 ? (
-        <EmptyState icon={<Trophy size={40} />} text="No individual award winners yet." />
-      ) : (
-        <>
-          {/* MOST DECORATED */}
-          {decoratedPlayers.length > 0 && (
-            <div className="mb-6">
-              <h4 className="font-display text-xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-                <Sparkles size={14} style={{ color: C.goldLight }} /> MOST DECORATED
-              </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {decoratedPlayers.slice(0, 8).map(({ player, count }) => (
-                  <button
-                    key={player.username}
-                    onClick={() => onPlayerClick?.(player)}
-                    className="rounded-lg p-3 text-center transition-all hover:scale-[1.03]"
-                    style={{
-                      background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
-                      border: `1px solid ${C.gold}66`,
-                      boxShadow: `0 2px 8px ${C.gold}33`,
-                    }}
-                  >
-                    <div className="flex justify-center gap-1 mb-2">
-                      {(player.awards || []).slice(0, 4).map((aw, i) => (
-                        <AwardIcon key={i} awardId={aw.awardId} size={20} />
-                      ))}
-                    </div>
-                    <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.cream }}>
-                      {player.username.toUpperCase()}
-                    </div>
-                    <div className="font-mono text-[10px]" style={{ color: `${C.cream}77` }}>
-                      {count} {count === 1 ? 'AWARD' : 'AWARDS'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* SEASONS */}
-          <h4 className="font-display text-xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-            <Calendar size={14} style={{ color: C.goldLight }} /> WINNERS BY SEASON
-          </h4>
-          <div className="space-y-4">
-            {seasons.map(s => (
-              <div key={s} className="rounded-xl p-4" style={{
-                background: C.white,
-                border: `1px solid ${C.gold}55`,
-                boxShadow: `0 2px 12px ${C.gold}22`,
-              }}>
-                <div className="font-display text-2xl tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-                  <span style={{ color: C.goldLight }}>SEASON</span> {s}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {AWARD_TYPES.map(at => {
-                    const winner = bySeason[s][at.id];
-                    return (
-                      <div key={at.id} className="rounded-lg p-3" style={{
-                        background: winner ? `${C.gold}11` : `${C.navyLight}33`,
-                        border: `1px solid ${winner ? C.gold + '55' : C.navyLight}`,
-                        opacity: winner ? 1 : 0.55,
-                      }}>
-                        <div className="flex items-center gap-2 mb-2">
-                          <AwardIcon awardId={at.id} size={28} />
-                          <div>
-                            <div className="font-heading text-[11px] tracking-wider" style={{ color: C.cream }}>{at.name.toUpperCase()}</div>
-                            <div className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>{at.desc.toUpperCase()}</div>
-                          </div>
-                        </div>
-                        {winner ? (
-                          <button
-                            onClick={() => onPlayerClick?.(winner.player)}
-                            className="w-full text-left mt-1 px-2 py-1.5 rounded transition-all hover:scale-[1.02]"
-                            style={{ background: C.white, border: `1px solid ${C.gold}33` }}
-                          >
-                            <div className="font-display text-lg tracking-wider" style={{ color: C.cream }}>
-                              {winner.player.username.toUpperCase()}
-                            </div>
-                            <div className="font-mono text-[10px]" style={{ color: `${C.cream}66` }}>
-                              {winner.player.position}
-                            </div>
-                          </button>
-                        ) : (
-                          <div className="text-center font-mono text-[10px] py-2" style={{ color: `${C.cream}55` }}>
-                            — VACANT —
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
-};
+      {loading && <p role="status">Loading award winners…</p>}
+      {error && <p role="alert">{error.message} <button onClick={() => { reset(); void refetch({ after: null }).catch(() => {}); }}>Restart winners</button></p>}
+      {data?.hallOfFame.nodes.map((row, index) => {
+        const winner = winnerSchema.parse(row);
+        return <div key={`${winner.player.id}-${index}`} className="border rounded p-3">
+          <AwardIcon awardId={winner.award.awardId} size={24} /> {AWARD_BY_ID[winner.award.awardId]?.name ?? winner.award.awardId} · {winner.award.season}
+          <button onClick={() => onPlayerClick?.({ id: winner.player.id, season: winner.award.season })} className="ml-3">{winner.player.username} · {winner.player.position}</button>
+          {winner.award.previewTruncated && <p>Preview shortened; open the complete trophy history on this player’s card.</p>}
+        </div>;
+      })}
+      {data?.hallOfFame.totalCount === 0 && <p>No individual award winners yet.</p>}
+      <div className="flex gap-3"><button disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous winners</button>
+        <button disabled={loading || !data?.hallOfFame.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.hallOfFame.pageInfo.endCursor ?? null); }}>Next winners</button></div>
+    </section>
+  </div>;
+}

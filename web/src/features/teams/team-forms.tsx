@@ -1,10 +1,14 @@
+import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Check, Clock, Shield, X, XCircle } from 'lucide-react';
-import React, { useMemo,useRef,useState } from 'react';
+import React, { useRef,useState } from 'react';
 import { teams as teamApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Team } from './models';
 
 import { Dialog, ModalShell } from '../../components/Dialog';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { segment } from '../../api/http';
 import { C } from '../../theme/theme';
 import { compressImage } from '../../utils/input';
 
@@ -64,7 +68,7 @@ export const EditTeamModal = ({ team, onClose, onSaved }: { team: Team; onClose:
         tag: tag.trim().toUpperCase(),
         color,
         description: description.trim(),
-        logoUrl,
+        ...(logoUrl !== team.logoUrl && { logoUrl }),
         seasons,
       });
       onSaved?.();
@@ -160,7 +164,7 @@ export const EditTeamModal = ({ team, onClose, onSaved }: { team: Team; onClose:
               background: C.navyDeep, border: `1px solid ${C.navyLight}66`,
             }}>
               {logoUrl ? (
-                <img src={logoUrl} alt="" className="w-full h-full object-cover rounded" />
+                <MediaImage src={mediaUrl(logoUrl)} alt="" className="w-full h-full object-cover rounded" />
               ) : (
                 <Shield size={24} style={{ color: `${C.cream}55` }} />
               )}
@@ -195,7 +199,7 @@ export const EditTeamModal = ({ team, onClose, onSaved }: { team: Team; onClose:
   );
 };
 
-export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClose, onSave }: { account: Account; allPlayers?: Account[]; allTeams?: Team[]; onClose: () => void; onSave: () => void }) => {
+export const SubmitTeamModal = ({ account, onClose, onSave }: { account: Account; onClose: () => void; onSave: () => void }) => {
   const [name, setName] = useState('');
   const [tag, setTag] = useState('');
   const [color, setColor] = useState(C.green);
@@ -208,28 +212,8 @@ export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClo
   const [loading, setLoading] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
 
-  // Map username → the team that already claims them (if any), so we can lock those rows
-  const lockedTeamByUser = useMemo(() => {
-    const map:Record<string,Team> = {};
-    (allTeams || []).forEach(t => {
-      if (!(t.status === 'approved' || t.status === 'pending')) {
-        return;
-      }
-
-      (t.members || []).forEach(u => { map[u.toLowerCase()] = t; });
-      (t.pendingMembers || []).forEach(u => { map[u.toLowerCase()] = t; });
-    });
-    return map;
-  }, [allTeams]);
-
-  // Filterable, alphabetized list of candidates (excludes the owner themselves)
-  const candidatePlayers = useMemo(
-    () => (allPlayers || [])
-      .filter(p => p.username.toLowerCase() !== account.username.toLowerCase())
-      .filter(p => !playerFilter || p.username.toLowerCase().includes(playerFilter.toLowerCase()))
-      .sort((a, b) => a.username.localeCompare(b.username)),
-    [allPlayers, account.username, playerFilter]
-  );
+  const candidates = useRestPage<Pick<Account, 'id' | 'username' | 'position' | 'strikersId' | 'teamId'>>(`/api/accounts?search=${segment(playerFilter)}`);
+  const candidatePlayers = (candidates.data?.nodes ?? []).filter(player => player.id !== account.id);
 
   const toggleMember = (username: string) => {
     setError('');
@@ -348,7 +332,7 @@ export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClo
             <div className="rounded-lg flex items-center justify-center shrink-0"
               style={{ width: 56, height: 56, background: C.navyDeep, border: `1px solid ${C.navyLight}66`, overflow: 'hidden' }}>
               {logoUrl
-                ? <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                ? <MediaImage src={mediaUrl(logoUrl)} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 : <Shield size={22} style={{ color: `${C.cream}44` }} />}
             </div>
             <button
@@ -379,7 +363,7 @@ export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClo
               <div className="px-3 py-3 font-body text-xs" style={{ color: `${C.cream}66` }}>No other players to invite yet.</div>
             ) : (
               candidatePlayers.map(p => {
-                const locked = lockedTeamByUser[p.username.toLowerCase()];
+                const locked = p.teamId ? { tag: 'A TEAM' } : null;
                 const noSid = !p.strikersId; // Must have Strikers ID to join a team
                 const checked = selectedMembers.includes(p.username);
                 const disabled = !!locked || noSid;
@@ -422,6 +406,9 @@ export const SubmitTeamModal = ({ account, allPlayers = [], allTeams = [], onClo
               })
             )}
           </div>
+          {candidates.error && <p role="alert">{candidates.error}<button onClick={candidates.restart}>Restart candidates</button></p>}
+          <PageButtons {...candidates} hasNextPage={candidates.data?.pageInfo.hasNextPage ?? false} />
+          <div>{selectedMembers.map(username => <button key={username} onClick={() => toggleMember(username)}>Remove {username}</button>)}</div>
           {selectedMembers.length > 0 && (
             <div className="font-mono text-[10px] tracking-wider mt-1" style={{ color: C.greenLight }}>
               {selectedMembers.length} / 14 invited (admin approves · 15-player cap incl. you)

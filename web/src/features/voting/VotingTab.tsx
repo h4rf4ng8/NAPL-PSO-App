@@ -1,10 +1,13 @@
 import { Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { VOTE_FIELDS, VOTE_POSITIONS, type VoteKey, type VotePosition } from '@napl/contracts/league';
+import { VOTE_FIELDS, type VoteKey, type VotePosition } from '@napl/contracts/league';
 import { voting as votingApi } from './api';
 import type { Account } from '../accounts/models';
 import type { VotingPeriod } from './models';
 import { C } from '../../theme/theme';
+import { useQuery } from '@apollo/client/react';
+import { VotingCandidatesDocument } from '../../api/generated/graphql';
+import { accountStatsSchema } from '@napl/contracts/accounts';
 import { useResource } from '../../hooks/use-resource';
 import { choicesFromVotes, emptyVoteChoices, hasCompleteVote } from './voting-utils';
 
@@ -14,35 +17,15 @@ import { choicesFromVotes, emptyVoteChoices, hasCompleteVote } from './voting-ut
 // configured vote position from the eligible pool, then submit. Once
 // submitted, the tab shows what they voted for and lets them change votes
 // until the period closes.
-export const VotingTab = ({ account, period, allPlayers }: { account: Account; period: VotingPeriod; allPlayers: Account[] }) => {
+export const VotingTab = ({ account, period }: { account: Account; period: Pick<VotingPeriod, 'id' | 'closesAt' | 'status'> }) => {
   const [myVotes, setMyVotes] = useState(emptyVoteChoices);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
-  // Build candidate list per position from the eligible_players list.
-  // Each candidate gets their season stats attached for the voter to inspect.
-  // Excludes the voter themselves (can't vote for yourself).
-  const candidates = useMemo(() => {
-    const result = {} as Record<VotePosition, Account[]>;
-    for (const position of VOTE_POSITIONS) result[position] = [];
-    for (const username of (period.eligiblePlayers || [])) {
-      if (username.toLowerCase() === account.username.toLowerCase()) continue;
-      const p = allPlayers.find(x => x.username.toLowerCase() === username.toLowerCase());
-      if (!p || !VOTE_POSITIONS.includes(p.position as VotePosition)) continue;
-      result[p.position as VotePosition].push(p);
-    }
-    // Sort each list by overall rating (highest first) so star players show on top
-    const sortFn = (a: Account, b: Account) => {
-      return b.ranking.score - a.ranking.score;
-    };
-    for (const position of VOTE_POSITIONS) result[position].sort(sortFn);
-    return result;
-  }, [period, allPlayers, account.username]);
-
   const { data: priorVotes, error: priorVotesError } = useResource(
-    () => votingApi.listTotwVotes(period.id),
+    () => votingApi.myTotwVotes(period.id),
     [period.id],
   );
 
@@ -127,56 +110,8 @@ export const VotingTab = ({ account, period, allPlayers }: { account: Account; p
 
       {/* POSITION COLUMNS */}
       {VOTE_FIELDS.map(({ key, label, pos, needed }) => {
-        const list = candidates[pos] || [];
         const picked = myVotes[key as keyof typeof myVotes];
-        return (
-          <div key={key} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-            <div className="flex items-baseline justify-between mb-2">
-              <div className="font-display text-base tracking-wider" style={{ color: C.brandNavy }}>{label}</div>
-              <div className="font-mono text-[9px] tracking-wider" style={{ color: `${C.brandNavy}66` }}>
-                TOTW NEEDS {needed} · YOU PICK 1
-              </div>
-            </div>
-            {list.length === 0 ? (
-              <div className="font-mono text-xs py-3 text-center" style={{ color: `${C.brandNavy}66` }}>
-                NO ELIGIBLE {label}S
-              </div>
-            ) : (
-              <div className="space-y-1 max-h-72 overflow-y-auto">
-                {list.map(p => {
-                  const isPicked = picked === p.username;
-                  const ov = p.ranking.score;
-                  const s = p.stats || {};
-                  return (
-                    <button
-                      key={p.username}
-                      type="button"
-                      onClick={() => pickFor(key, p.username)}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded text-left transition-colors"
-                      style={{
-                        background: isPicked ? `#2196f322` : C.navyDeep,
-                        border: `1px solid ${isPicked ? '#2196f3' : `${C.navyLight}44`}`,
-                      }}
-                    >
-                      <div className="w-4 h-4 rounded-full flex items-center justify-center shrink-0" style={{
-                        border: `1.5px solid ${isPicked ? '#2196f3' : `${C.cream}55`}`,
-                        background: isPicked ? '#2196f3' : 'transparent',
-                      }}>
-                        {isPicked && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.cream }}>{p.username}</div>
-                        <div className="font-mono text-[9px]" style={{ color: `${C.cream}88` }}>
-                          OVR {ov} · {s.games || 0}G · {s.goals || 0}gls · {s.assists || 0}a
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
+        return <CandidatePosition key={key} periodId={period.id} position={pos} label={label} needed={needed} picked={picked} onPick={username => pickFor(key, username)} />;
       })}
 
       {/* SUBMIT */}
@@ -189,3 +124,26 @@ export const VotingTab = ({ account, period, allPlayers }: { account: Account; p
     </div>
   );
 };
+
+function CandidatePosition({ periodId, position, label, needed, picked, onPick }: { periodId: string; position: VotePosition; label: string; needed: number; picked: string; onPick: (username: string) => void }) {
+  const [after, setAfter] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<(string | null)[]>([]);
+  const { data, loading, error, refetch } = useQuery(VotingCandidatesDocument, { variables: { periodId, position, after } });
+  return <section className="rounded-lg p-3 space-y-2" style={{ background: C.white }}>
+    <h3>{label} · TOTW needs {needed} · You pick 1</h3>
+    {picked && <p>Your selection: {picked}</p>}
+    {loading && <p role="status">Loading candidates…</p>}
+    {error && <p role="alert">{error.message} <button onClick={() => { setAfter(null); setPrevious([]); void refetch({ after: null }).catch(() => {}); }}>Restart candidates</button></p>}
+    {(data?.votingCandidates.nodes ?? []).map(player => {
+      const stats = accountStatsSchema.parse(player.stats);
+      return <button key={player.id} type="button" aria-pressed={picked === player.username} onClick={() => onPick(player.username)} className="block w-full text-left p-2 border rounded">
+        {player.username} · OVR {player.ranking.score} · {stats.games}G · {stats.goals} goals · {stats.assists} assists
+      </button>;
+    })}
+    {data?.votingCandidates.totalCount === 0 && <p>No eligible {label}s</p>}
+    <div className="flex gap-3">
+      <button disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous {label}s</button>
+      <button disabled={loading || !data?.votingCandidates.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.votingCandidates.pageInfo.endCursor ?? null); }}>Next {label}s</button>
+    </div>
+  </section>;
+}

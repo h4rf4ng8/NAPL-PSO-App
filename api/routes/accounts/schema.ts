@@ -9,6 +9,7 @@ import { accountIdSchema, accountMatches, accountOpponents } from './history.js'
 import { POS } from '@napl/contracts/league';
 import { calculateCardStats } from './ranking.js';
 import { getSetting } from '../settings/queries.js';
+import { detailUrl, page } from '../payload/page.js';
 
 const accountPopulation = (context: GraphQLContext) => read(context, 'account-population', async () =>
   loadRankedAccounts(context.db, await read(context, 'weightings', () => getSetting(context.db, 'position_weights'))));
@@ -138,13 +139,15 @@ export const queryFields = {
   accountOpponents: {
     type: nonNull(JSONScalar),
     description: 'Opponent totals for a public account.',
-    args: { id: { type: new GraphQLNonNull(GraphQLID) } },
-    resolve: (_source: unknown, args: { id: string }, context: GraphQLContext) =>
+    args: { id: { type: new GraphQLNonNull(GraphQLID) }, first: { type: GraphQLInt, defaultValue: 10 }, after: { type: GraphQLString } },
+    resolve: (_source: unknown, args: { id: string; first?: number; after?: string }, context: GraphQLContext) =>
       read(context, `account-opponents:${args.id}`, async () => {
         const id = accountIdSchema.parse(args.id);
-        return accountOpponents(context.db, id);
+        const rows = await accountOpponents(context.db, id);
+        return page(rows.map((row, index) => ({ ...row, opponent: row.opponent.slice(0, 160), previewTruncated: row.opponent.length > 160,
+          nameUrl: detailUrl(`/api/accounts/${id}/opponents/${index}/name`, row.opponent) })), `opponents:${id}`, args);
       }),
   },
 };
 
-export const types = { Account, CurrentAccount };
+export const types = { Account, CurrentAccount, Ranking, CardStatCell };

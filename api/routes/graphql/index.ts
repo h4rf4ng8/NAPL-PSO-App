@@ -77,7 +77,7 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
           return {
             async willSendResponse({ response, errors, contextValue }) {
               if (response.body.kind !== 'single') return;
-              if (errors?.length && contextValue?.request && !contextValue.request.diagnostic) {
+              if (errors?.length && contextValue?.request) {
                 const internal = errors.find(error => error.extensions.code === 'INTERNAL_SERVER_ERROR');
                 const first = internal ?? errors[0]!;
                 const formatted = errorPayload(first);
@@ -108,7 +108,7 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
     const query = print(document);
     const variables = z.strictObject(Object.fromEntries((operation.variableDefinitions ?? []).map(variable => [variable.variable.name.value, z.unknown().optional()])));
     const requestBody = z.strictObject({ variables });
-    app.post(url, { config: { public: !['Standings', 'TeamRecords'].includes(name) } }, async (request: FastifyRequest, reply: FastifyReply) => {
+    app.post(url, { config: { public: !['TeamStandings', 'TeamRecords', 'ImportAccountMatches'].includes(name) } }, async (request: FastifyRequest, reply: FastifyReply) => {
       const input = requestBody.safeParse(request.body);
       const headers = new HeaderMap();
       for (const [key, value] of Object.entries(request.headers)) {

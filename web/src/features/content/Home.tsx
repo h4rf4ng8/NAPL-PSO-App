@@ -1,22 +1,34 @@
+import { auth } from '../../auth/session';
 import { Flag, User } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
 import type { Account } from '../accounts/models';
-import type { News } from './models';
-import type { Team } from '../teams/models';
-import { ArticleCard, QuickStat, ResultRow, Section } from '../../components/Display';
+import { useQuery } from '@apollo/client/react';
+import { HomeSummaryDocument, HomeNewsDocument } from '../../api/generated/graphql';
+import { z } from 'zod';
+import { newsSummarySchema } from './models';
+import { LazyText } from './LazyText';
+import { readText } from '../../api/page';
+import { segment } from '../../api/http';
+import { mediaUrl } from '../../components/MediaImage';
+import type { TeamSummary as Team } from '../teams/models';
+import { QuickStat, ResultRow, Section } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { COUNTRIES, flagUrl } from '../../utils/league';
 
+const homeSummarySchema = z.object({ playerCount: z.number(), activeTeamCount: z.number(), topPlayers: z.array(z.object({
+  id: z.string(), username: z.string(), position: z.string(), ranking: z.object({ score: z.number() }), stats: z.object({ games: z.number() }),
+})) });
+
 // ============ HOME (LANDING PAGE) ============
-export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, onJump, onUpdate }: { account: Account; allPlayers: Account[]; allTeams: Team[]; news: News[]; currentSeason: string; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
+export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }: { account: Account; allTeams: Team[]; currentSeason: string | undefined; onJump: (view:string) => void; onUpdate: (account:Account) => void }) => {
   const [editingCountry, setEditingCountry] = useState(false);
   const [countryInput, setCountryInput] = useState('');
   const [countryBusy, setCountryBusy] = useState(false);
   const [countryMsg, setCountryMsg] = useState('');
   const [editingLinks, setEditingLinks] = useState(false);
   const [strikersIdInput, setStrikersIdInput] = useState(account.strikersId || '');
-  const [steamUrlInput, setSteamUrlInput] = useState(account.steamUrl || '');
+  const [steamUrlInput, setSteamUrlInput] = useState('');
   const [linksBusy, setLinksBusy] = useState(false);
   const [linksMsg, setLinksMsg] = useState('');
   // Country picker — players who registered before the country field existed,
@@ -42,8 +54,9 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
     }
     setLinksBusy(true);
     try {
-      const updated = await accountApi.patchAccount(account.id,{strikersId: finalStrikersId, steamUrl: surl || null});
-      onUpdate?.(updated);
+      await accountApi.patchAccount(account.id,{strikersId: finalStrikersId, steamUrl: surl || null});
+      const updated = await auth.getCurrent();
+      if (updated) onUpdate?.(updated);
       setEditingLinks(false);
       setLinksMsg('');
     } catch (error) {
@@ -58,8 +71,9 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
     if (!countryInput) { setCountryMsg('Please pick a country'); return; }
     setCountryBusy(true);
     try {
-      const updated = await accountApi.patchAccount(account.id,{country: countryInput});
-      onUpdate?.(updated);
+      await accountApi.patchAccount(account.id,{country: countryInput});
+      const updated = await auth.getCurrent();
+      if (updated) onUpdate?.(updated);
       setEditingCountry(false);
       setCountryMsg('');
     } catch (error) {
@@ -71,27 +85,21 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
   
   const myRanking = account.ranking;
 
-  const announcements = news.filter(n => n.type === 'announcement').sort((a, b) => {
-    return a.pinned === b.pinned ? b.createdAt - a.createdAt : Number(b.pinned) - Number(a.pinned);
-  }).slice(0, 3);
-
-  const upcomingMatchups = news.filter(n => n.type === 'matchup' && (n.date || 0) >= Date.now())
-    .sort((a, b) => (a.date || 0) - (b.date || 0)).slice(0, 3);
-
-  const recentResults = news.filter(n => n.type === 'result')
-    .sort((a, b) => (b.date || 0) - (a.date || 0)).slice(0, 3);
-
-  // Top 3 players this season per leaderboard score
-  const topPlayers = [...allPlayers]
-    .map(p => ({ player: p, score: p.ranking.score, ranked: p.ranking.ranked }))
-    .filter(x => x.ranked)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+  const { data: summary, error: summaryError } = useQuery(HomeSummaryDocument);
+  const { data: announcementData } = useQuery(HomeNewsDocument, { variables: { kind: 'announcement', first: 3, after: null } });
+  const { data: upcomingData } = useQuery(HomeNewsDocument, { variables: { kind: 'matchup', first: 3, after: null, upcomingOnly: true } });
+  const { data: resultData } = useQuery(HomeNewsDocument, { variables: { kind: 'result', first: 3, after: null } });
+  const overview = summary ? homeSummarySchema.parse(summary.homeSummary) : null;
+  const announcements = (announcementData?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
+  const upcomingMatchups = (upcomingData?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
+  const recentResults = (resultData?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
+  const topPlayers = (overview?.topPlayers ?? []).map(player => ({ player, score: player.ranking.score }));
 
   const teamById = (id: string | null | undefined) => allTeams.find(t => t.id === id);
 
   return (
     <div className="space-y-8">
+      {summaryError && <p role="alert">{summaryError.message}</p>}
       {/* HERO */}
       <div className="rounded-2xl overflow-hidden relative" style={{
         background: `linear-gradient(135deg, ${C.brandNavy} 0%, ${C.brandNavyDeep} 100%)`,
@@ -106,7 +114,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
         }} />
         <div className="relative px-6 py-10 md:py-14 md:px-10">
           <div className="font-mono text-[10px] tracking-[0.4em] mb-2" style={{ color: `${C.white}99` }}>
-            // SEASON {currentSeason} • OFFICIAL LEAGUE HUB
+            // {currentSeason && <>SEASON {currentSeason} • </>}OFFICIAL LEAGUE HUB
           </div>
           <h1 className="font-display tracking-tight leading-[0.9]" style={{
             fontSize: 'clamp(36px, 8vw, 68px)',
@@ -143,8 +151,8 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <QuickStat label="YOUR TIER" value={myRanking.ranked ? myRanking.tier : '—'} accent={C.goldLight} />
         <QuickStat label="GAMES PLAYED" value={account.stats?.games || 0} accent={C.green} />
-        <QuickStat label="LEAGUE PLAYERS" value={allPlayers.length} accent={C.brandNavy} />
-        <QuickStat label="ACTIVE TEAMS" value={allTeams.filter(t => t.status === 'approved').length} accent={C.red} />
+        <QuickStat label="LEAGUE PLAYERS" value={overview?.playerCount ?? "…"} accent={C.brandNavy} />
+        <QuickStat label="ACTIVE TEAMS" value={overview?.activeTeamCount ?? "…"} accent={C.red} />
       </div>
 
       {/* MY PROFILE — email + country */}
@@ -291,8 +299,8 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
                 <div className="flex items-center gap-2 flex-wrap font-body text-sm" style={{ color: C.brandNavy }}>
                   <span style={{ color: `${C.brandNavy}88` }}>Steam:</span>
                   {account.steamUrl ? (
-                    <a href={account.steamUrl} target="_blank" rel="noopener noreferrer" className="font-mono text-xs" style={{ color: C.brandNavy, textDecoration: 'underline' }}>
-                      {account.steamUrl.replace(/^https?:\/\/(www\.)?/, '').slice(0, 40)}
+                    <a href={mediaUrl(account.steamUrl)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs" style={{ color: C.brandNavy, textDecoration: 'underline' }}>
+                      Steam profile
                     </a>
                   ) : (
                     <span className="italic" style={{ color: `${C.brandNavy}66` }}>not set</span>
@@ -300,10 +308,12 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
                 </div>
                 <button
                   onClick={() => {
-                    setEditingLinks(true);
-                    setStrikersIdInput(account.strikersId || '');
-                    setSteamUrlInput(account.steamUrl || '');
+                    setLinksBusy(true); setLinksMsg('');
+                    void readText(`/api/accounts/${segment(account.id)}/links/steamUrl`).then(value => {
+                      setStrikersIdInput(account.strikersId || ''); setSteamUrlInput(value); setEditingLinks(true);
+                    }).catch((error: unknown) => { setLinksMsg(error instanceof Error ? error.message : 'Could not load linked accounts.'); }).finally(() => setLinksBusy(false));
                   }}
+                  disabled={linksBusy}
                   className="font-mono text-[11px] tracking-wider"
                   style={{ color: C.green, textDecoration: 'underline' }}
                 >{(account.strikersId || account.steamUrl) ? 'CHANGE' : '+ Link accounts'}</button>
@@ -321,13 +331,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
             <Section title="LATEST FROM THE LEAGUE" onMore={() => onJump('news')}>
               <div className="space-y-3">
                 {announcements.map(a => (
-                  <ArticleCard key={a.id}
-                    title={a.title}
-                    body={a.body}
-                    pinned={a.pinned}
-                    date={a.createdAt}
-                    author={a.author}
-                  />
+                  <div key={a.id}><h4>{a.title}</h4><LazyText url={a.bodyUrl} label="Read announcement" /></div>
                 ))}
               </div>
             </Section>
@@ -337,7 +341,7 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
             <Section title="RECENT RESULTS" onMore={() => onJump('news')}>
               <div className="space-y-2">
                 {recentResults.map(r => (
-                  <ResultRow key={r.id} r={r} home={teamById(r.homeTeamId)} away={teamById(r.awayTeamId)} />
+                  <ResultRow key={r.id} r={r} home={r.homeTeam ?? teamById(r.homeTeamId)} away={r.awayTeam ?? teamById(r.awayTeamId)} />
                 ))}
               </div>
             </Section>
@@ -350,8 +354,8 @@ export const HomeView = ({ account, allPlayers, allTeams, news, currentSeason, o
             <Section title="UPCOMING">
               <div className="space-y-2">
                 {upcomingMatchups.map(m => {
-                  const home = teamById(m.homeTeamId);
-                  const away = teamById(m.awayTeamId);
+                  const home = m.homeTeam ?? teamById(m.homeTeamId);
+                  const away = m.awayTeam ?? teamById(m.awayTeamId);
                   return (
                     <div key={m.id} className="rounded-lg p-3" style={{
                       background: C.white,

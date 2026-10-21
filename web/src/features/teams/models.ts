@@ -6,3 +6,4 @@ export interface Team {
   reviewedAt: number | null; reviewedBy: string | null; rejectionReason: string | null;
 }
 export interface Transfer { id: string; season: string; playerUsername: string; fromTeamId: string | null; toTeamId: string | null; kind: string; windowType: string | null; createdAt: number | null; createdBy: string | null; }
+export type TeamSummary = Pick<Team, 'id' | 'name' | 'tag' | 'color' | 'ownerUsername' | 'status' | 'logoUrl' | 'totw' | 'totwSetAt'> & Partial<Pick<Team, 'createdAt' | 'reviewedAt' | 'reviewedBy'>> & { memberCount?: number; invitationCount?: number; seasonCount?: number };

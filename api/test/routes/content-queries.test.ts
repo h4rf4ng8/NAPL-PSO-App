@@ -1,3 +1,5 @@
+import { collectPage } from '../responses.js';
+import { newsDto, ruleDto, scheduleDto, transferDto } from '../../routes/content/dto.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { InjectOptions } from 'fastify';
@@ -37,28 +39,24 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
       const before = await db.client.ruleSection.findMany({ where: { id: { in: [first, second] } }, orderBy: { sort_order: 'asc' } });
       assert.deepEqual(before.map(row => row.sort_order), [7, 8]);
       await ok('PUT', '/api/rules/order', { ids: [first, second, first] });
-      const rules = (await ok('GET', '/api/rules')).filter((row: { id: string }) => [first, second].includes(row.id));
+      const rules = (await collectPage<{id:string;sortOrder:number}>(app, '/api/rules')).filter((row: { id: string }) => [first, second].includes(row.id));
       assert.deepEqual(rules.map((row: { id: string; sortOrder: number }) => [row.id, row.sortOrder]), [[second, 1], [first, 2]]);
     });
 
-    await t.test('bulk duplicate IDs return each intermediate write and keep optional fields', async () => {
+    await t.test('bulk duplicate IDs acknowledge committed final writes and keep optional fields', async () => {
       const id = `${prefix}bulk' OR '1'='1`, season = `${prefix}season'; DELETE FROM asl.news; --`;
-      const matches = await ok('POST', '/api/schedule/bulk', { matches: [
+      assert.deepEqual(await ok('POST', '/api/schedule/bulk', { matches: [
         { ...schedule, id, season, notes: 'kept', scheduledDate: 1_700_000_000_000 },
         { ...schedule, id, season, week: 2, scheduledDate: null },
-      ] });
-      assert.deepEqual(matches.map((row: { week: number }) => row.week), [1, 2]);
-      assert.equal(matches[0].scheduledDate, 1_700_000_000_000);
-      assert.equal(matches[1].scheduledDate, null);
-      assert.equal(matches[1].notes, 'kept');
-      assert.equal(matches[1].updatedAt, matches[0].updatedAt);
-      assert.equal(matches[1].matchType, 'regular');
-      assert.equal(matches[1].status, 'scheduled');
-      assert.deepEqual(await ok('GET', `/api/schedule?season=${encodeURIComponent(season)}`), [matches[1]]);
+      ] }), {ok:true});
+      const match=scheduleDto(await db.client.scheduledMatch.findUniqueOrThrow({where:{id}}));
+      assert.equal(match.week,2); assert.equal(match.scheduledDate,null); assert.equal(match.notes,'kept');
+      assert.equal(match.matchType,'regular'); assert.equal(match.status,'scheduled');
+      assert.deepEqual((await collectPage<{id:string}>(app, `/api/schedule?season=${encodeURIComponent(season)}`)).map(row=>row.id),[id]);
       await ok('POST', '/api/schedule', { ...schedule, id: `${prefix}other`, season: `${prefix}other` });
       await ok('DELETE', `/api/schedule/season/${encodeURIComponent(season)}`);
-      assert.equal((await ok('GET', `/api/schedule?season=${encodeURIComponent(season)}`)).length, 0);
-      assert.equal((await ok('GET', `/api/schedule?season=${prefix}other`)).length, 1);
+      assert.equal((await collectPage(app, `/api/schedule?season=${encodeURIComponent(season)}`)).length,0);
+      assert.equal((await collectPage(app, `/api/schedule?season=${prefix}other`)).length,1);
     });
 
     await t.test('season replacement rolls back deletion and partial inserts on repeated IDs', async () => {
@@ -68,7 +66,7 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
       assert.equal((await call('PUT', url, { matches: [
         { ...schedule, id: duplicate }, { ...schedule, id: duplicate, week: 2 },
       ] })).statusCode, 409);
-      const rows = await ok('GET', `/api/schedule?season=${encodeURIComponent(season)}`);
+      const rows = await collectPage<{id:string}>(app, `/api/schedule?season=${encodeURIComponent(season)}`);
       assert.deepEqual(rows.map((row: { id: string }) => row.id), [original]);
       assert.equal(await db.client.scheduledMatch.count({ where: { id: duplicate } }), 0);
     });
@@ -81,22 +79,27 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
       }
       assert.equal(await ok('GET', `/api/articles/slug/${prefix}missing`), null);
       const id = `${prefix}news' OR '1'='1`;
-      const saved = await ok('POST', '/api/news', { id, type: 'announcement', title: null, body: '', date: 1_700_000_000_000 });
+      assert.deepEqual(await ok('POST', '/api/news', { id, type: 'announcement', title: null, body: '', date: 1_700_000_000_000 }), {ok:true,id});
+      const saved=newsDto(await db.client.news.findUniqueOrThrow({where:{id}}));
       assert.equal(saved.title, '');
       assert.equal(saved.body, '');
       assert.equal(saved.notes, '');
       assert.equal(saved.pinned, false);
       await db.client.news.update({ where: { id }, data: { author: 'Original' } });
-      const patched = await ok('PATCH', `/api/news/${encodeURIComponent(id)}`, { date: null });
+      assert.deepEqual(await ok('PATCH', `/api/news/${encodeURIComponent(id)}`, { date: null }),{ok:true,id});
+      const patched=newsDto(await db.client.news.findUniqueOrThrow({where:{id}}));
       assert.equal(patched.author, 'Original');
       assert.equal(patched.date, null);
-      assert.deepEqual(await ok('PATCH', `/api/news/${encodeURIComponent(id)}`, {}), patched);
-      assert.equal((await ok('POST', '/api/news', { id, type: 'announcement' })).author, 'Admin');
+      assert.deepEqual(await ok('PATCH', `/api/news/${encodeURIComponent(id)}`, {}), {ok:true,id});
+      assert.deepEqual(newsDto(await db.client.news.findUniqueOrThrow({where:{id}})),patched);
+      await ok('POST', '/api/news', { id, type: 'announcement' });
+      assert.equal((await db.client.news.findUniqueOrThrow({where:{id}})).author,'Admin');
       assert.equal(await db.client.news.count({ where: { id } }), 1);
       const ruleId = `${prefix}empty_rule`;
       await ok('POST', '/api/rules', { id: ruleId, title: 'Rule', body: 'Body', sortOrder: 9 });
       await db.client.ruleSection.update({ where: { id: ruleId }, data: { updated_at: new Date(0) } });
-      const rule = await ok('PATCH', `/api/rules/${ruleId}`, {});
+      assert.deepEqual(await ok('PATCH', `/api/rules/${ruleId}`, {}),{ok:true,id:ruleId});
+      const rule=ruleDto(await db.client.ruleSection.findUniqueOrThrow({where:{id:ruleId}}));
       assert.ok(rule.updatedAt > 0);
       assert.equal(rule.title, 'Rule');
       assert.equal(rule.body, '');
@@ -106,14 +109,19 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
     await t.test('transfers preserve literal season filters and author fields', async () => {
       const id = `${prefix}transfer' OR '1'='1`, season = `${prefix}transfer'; --`;
       const input = { id, season, playerUsername: 'Admin', kind: 'signing' };
-      const saved = await ok('POST', '/api/transfers', input);
+      assert.deepEqual(await ok('POST', '/api/transfers', input),{ok:true,id});
+      const saved=transferDto(await db.client.transfer.findUniqueOrThrow({where:{id}}));
       assert.equal(saved.createdBy, 'Admin');
       assert.equal(saved.windowType, null);
       await db.client.transfer.update({ where: { id }, data: { created_by: 'Original' } });
-      const patched = await ok('PATCH', `/api/transfers/${encodeURIComponent(id)}`, { windowType: 'cross_league' });
-      assert.equal(patched.createdBy, 'Admin');
-      assert.deepEqual(await ok('GET', `/api/transfers?season=${encodeURIComponent(season)}`), [patched]);
-      const replaced = await ok('POST', '/api/transfers', input);
+      assert.deepEqual(await ok('PATCH', `/api/transfers/${encodeURIComponent(id)}`, { windowType: 'cross_league' }),{ok:true,id});
+      const patched=transferDto(await db.client.transfer.findUniqueOrThrow({where:{id}}));
+      assert.equal(patched.createdBy, 'Original', 'patch preserves the stored historical attribution');
+      const visible=await collectPage<{id:string;createdBy:string}>(app, `/api/transfers?season=${encodeURIComponent(season)}`);
+      assert.deepEqual(visible.map(row=>row.id),[id]);
+      assert.equal(visible[0]!.createdBy,'Admin','public read resolves the current creator account name');
+      await ok('POST', '/api/transfers', input);
+      const replaced=transferDto(await db.client.transfer.findUniqueOrThrow({where:{id}}));
       assert.equal(replaced.createdBy, 'Admin');
       assert.equal(replaced.windowType, 'cross_league');
       assert.equal(replaced.createdAt, saved.createdAt);

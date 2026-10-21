@@ -1,5 +1,6 @@
+import { mediaUrl } from '../MediaImage';
 import React from 'react';
-import type { Account, Team } from '../../api/models';
+import type { Account, TeamSummary as Team } from '../../api/models';
 import { cardTier, getCardStatsForSeason } from '../../utils/rankings';
 import { cardDimensions, cardPalette, cardPath, MetallicDefs, MetallicSurface, CardOutline } from './artwork';
 import { flagUrl, isTeamCaptain } from '../../utils/league';
@@ -11,7 +12,7 @@ export const CardFront = ({ account, team, hideTeam, size }: { account: Account;
   const uid = React.useId().replaceAll(':', '');
   const displayOverall = account.ranking.ranked ? account.ranking.score : 'NR';
   const isTotw = !!team?.totw;
-  const hasAwards = account.awards.length > 0;
+  const hasAwards = (account.awardCount ?? account.awards?.length ?? 0) > 0;
   const isCheater = !!account.cheater;
   const isCaptain = isTeamCaptain(account, team);
   const displayCells = getCardStatsForSeason(account, account._cardSeason || 'all');
@@ -45,7 +46,7 @@ export const CardFront = ({ account, team, hideTeam, size }: { account: Account;
           <rect x="0" y="0" width="320" height="293" fill={`url(#dots-${uid})`} opacity="0.5" />
           {account.imageUrl && (
             <g mask={`url(#ph-mask-${uid})`} opacity="0.62">
-              <image href={account.imageUrl} x="50" y="-10" width="290" height="310" preserveAspectRatio="xMidYMid slice" />
+              <image href={mediaUrl(account.imageUrl)} x="50" y="-10" width="290" height="310" preserveAspectRatio="xMidYMid slice" />
             </g>
           )}
         </g>
@@ -71,7 +72,7 @@ export const CardFront = ({ account, team, hideTeam, size }: { account: Account;
         team.logoUrl ? (
           <g>
             <circle cx="47" cy="222" r="14" fill="#ffffff" stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.55" />
-            <image href={team.logoUrl} x="33" y="208" width="28" height="28" preserveAspectRatio="xMidYMid meet" clipPath={`circle(13px at 14px 14px)`} />
+            <image href={mediaUrl(team.logoUrl)} x="33" y="208" width="28" height="28" preserveAspectRatio="xMidYMid meet" clipPath={`circle(13px at 14px 14px)`} />
           </g>
         ) : (
           <g>

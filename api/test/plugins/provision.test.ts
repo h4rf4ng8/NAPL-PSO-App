@@ -55,8 +55,12 @@ test('new provision uses verified Discord handle, admits without guild membershi
   try {
     const response = await h.call({ providerToken: 'provider' });
     assert.equal(response.statusCode, 200, response.body);
-    assert.equal(response.json().id, userId); assert.equal(response.json().username, 'verified_handle');
-    assert.deepEqual(response.json().roles, []);
+    assert.deepEqual(response.json(), { ok: true, id: userId });
+    assert.equal(h.account()?.username, 'verified_handle');
+    const current = await h.app.inject({ url: '/api/users/me', headers: { authorization: 'Bearer good' } });
+    assert.equal(current.statusCode, 200, current.body);
+    assert.equal(current.json().username, 'verified_handle');
+    assert.deepEqual(current.json().roles, []);
     assert.deepEqual(h.counts, { profile: 1, user: 1, created: 1, updated: 0, transactions: 1, admissions: 1 });
     assert.equal(h.limits.length, 4);
     for (const limit of h.limits as Array<{ key: string }>) assert.match(limit.key, /^[a-f\d]{64}$/);

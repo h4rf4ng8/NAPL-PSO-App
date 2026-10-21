@@ -1,3 +1,4 @@
+import { auth } from '../../auth/session';
 import { XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from './api';
@@ -25,16 +26,9 @@ export const OnboardingModal = ({ account, onComplete }: { account: Account; onC
     if (!position) { setErr('Please choose your primary position.'); return; }
     setBusy(true);
     try {
-      // Uniqueness: refuse if this ID is already linked to another account.
-      // (Same check admins use in PlayersManager.)
-      const all = await accountApi.listAccounts();
-      const clash = all.find(a => a.strikersId && String(a.strikersId) === sid && a.username !== account.username);
-      if (clash) {
-        setErr(`That Strikers Club ID is already linked to ${clash.username}. If this is really you, contact an admin.`);
-        setBusy(false); return;
-      }
-      const updated = await accountApi.patchAccount(account.id,{strikersId: sid, position});
-      onComplete?.(updated);
+      await accountApi.patchAccount(account.id,{strikersId: sid, position});
+      const updated = await auth.getCurrent();
+      if (updated) onComplete?.(updated);
     } catch (error) {
       setErr('Could not save: ' + (error instanceof Error ? error.message : String(error)));
       setBusy(false);

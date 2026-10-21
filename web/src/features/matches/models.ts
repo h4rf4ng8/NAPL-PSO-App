@@ -3,4 +3,4 @@ export interface ScheduledMatch {
   matchType: string; playoffRound: string | null; status: string; homeScore: number | null; awayScore: number | null;
   linkedMatchId: string | null; notes: string; createdAt: number | null; updatedAt: number | null;
 }
-export interface ImportResult { matchId: string; updated: number; skipped: number; alreadyImported: number; skippedList: { strikersName: string; playerId: string; reason: string }[]; homeTeam?: string; awayTeam?: string; score: string; }
+export interface ImportResult { matchId: string; updated: number; skipped: number; alreadyImported: number; skippedIndexes: number[]; homeTeam?: string; awayTeam?: string; score: string; }

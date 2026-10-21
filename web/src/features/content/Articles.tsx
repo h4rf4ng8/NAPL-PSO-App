@@ -1,3 +1,4 @@
+import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { BookOpen, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { content as contentApi } from './api';
@@ -5,9 +6,13 @@ import type { Account } from '../accounts/models';
 import type { Article } from './models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
-import { autoExcerpt, readTime, renderArticleBody, slugify } from '../../utils/content';
+import { readTime, renderArticleBody, slugify } from '../../utils/content';
 import { isAdmin } from '../../utils/league';
 import { useResource } from '../../hooks/use-resource';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { LazyText } from './LazyText';
+import type { ArticleSummary } from './models';
 
 // Article compose/edit modal — admin only
 const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article | null; onClose: () => void; onSaved: () => void }) => {
@@ -39,7 +44,7 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
         publishedAt: article?.publishedAt,
         title: title.trim(),
         slug: slug.trim(),
-        coverImageUrl: coverImageUrl.trim(),
+        ...(coverImageUrl.trim() !== article?.coverImageUrl && { coverImageUrl: coverImageUrl.trim() }),
         body,
         excerpt: excerpt.trim(),
       });
@@ -92,7 +97,7 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
             Optional. Hosted somewhere accessible (Discord CDN, Imgur, etc.).
           </div>
           {coverImageUrl && (
-            <img src={coverImageUrl} alt="Cover preview" className="mt-2 rounded max-h-32 object-cover"
+            <MediaImage src={mediaUrl(coverImageUrl)} alt="Cover preview" className="mt-2 rounded max-h-32 object-cover"
               style={{ border: `1px solid ${C.navyLight}66` }} />
           )}
         </div>
@@ -196,8 +201,8 @@ export const ArticleDetailView = ({ slug, account, onBack }: { slug: string; acc
             background: C.brandNavyDeep,
             maxWidth: '100%',
           }}>
-            <img
-              src={article.coverImageUrl}
+            <MediaImage
+              src={mediaUrl(article.coverImageUrl)}
               alt={article.title}
               style={{
                 display: 'block',
@@ -257,7 +262,9 @@ export const ArticleDetailView = ({ slug, account, onBack }: { slug: string; acc
 
 // Articles list — card grid
 export const ArticlesListView = ({ account, onOpenArticle }: { account: Account | null; onOpenArticle: (slug:string) => void }) => {
-  const { data: articles = [], loading, error, reload: refresh } = useResource(() => contentApi.listArticles(), []);
+  const page = useRestPage<ArticleSummary>('/api/articles');
+  const { loading, error, restart: refresh } = page;
+  const articles = page.data?.nodes ?? [];
   const [composing, setComposing] = useState(false);
   const isAdminUser = isAdmin(account);
 
@@ -284,7 +291,7 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
       </div>
 
       {loading && <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading articles...</div>}
-      {!loading && error && <div role="alert" className="text-center py-8 font-mono text-sm" style={{ color: C.redLight }}>{error}</div>}
+      {!loading && error && <div role="alert" className="text-center py-8 font-mono text-sm" style={{ color: C.redLight }}>{error} <button onClick={page.restart}>Restart page</button></div>}
       {!loading && !error && articles.length === 0 && (
         <div className="text-center py-10 font-mono text-sm rounded" style={{
           color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}66`,
@@ -298,8 +305,7 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
         // is a button, clicking anywhere opens the full article.
         <div className="space-y-3">
           {articles.map(a => (
-            <button key={a.id}
-              onClick={() => onOpenArticle(a.slug)}
+            <div key={a.id}
               className="w-full text-left rounded-xl overflow-hidden transition-all hover:-translate-y-0.5"
               style={{
                 background: C.white,
@@ -310,7 +316,7 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
               <div className="flex items-stretch gap-0" style={{ minHeight: 150 }}>
                 {/* Left: cover image (or placeholder) */}
                 {a.coverImageUrl ? (
-                  <img src={a.coverImageUrl} alt={a.title}
+                  <MediaImage src={mediaUrl(a.coverImageUrl)} alt={a.title}
                     className="object-cover shrink-0"
                     style={{ width: 200, alignSelf: 'stretch' }} />
                 ) : (
@@ -334,7 +340,7 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
                       display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
                       overflow: 'hidden',
                     }}>
-                      {a.excerpt || autoExcerpt(a.body, 220)}
+                      <LazyText url={a.excerptUrl} label="Read excerpt" />
                     </p>
                   </div>
                   <div className="font-mono text-[10px] tracking-widest flex items-center gap-2 mt-3 flex-wrap" style={{ color: `${C.brandNavy}99` }}>
@@ -342,18 +348,17 @@ export const ArticlesListView = ({ account, onOpenArticle }: { account: Account 
                     <span>•</span>
                     <span>{fmtDate(a.publishedAt)}</span>
                     <span>•</span>
-                    <span>{readTime(a.body)} MIN READ</span>
-                    <span className="ml-auto flex items-center gap-1" style={{ color: C.brandNavy }}>
-                      READ <ChevronRight size={10} />
-                    </span>
+
+                    <button onClick={() => onOpenArticle(a.slug)} className="ml-auto flex items-center gap-1" style={{ color: C.brandNavy }}>READ <ChevronRight size={10} /></button>
                   </div>
                 </div>
               </div>
-            </button>
+            </div>
           ))}
         </div>
       )}
 
+      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
       {composing && (
         <ArticleEditorModal
           onClose={() => setComposing(false)}

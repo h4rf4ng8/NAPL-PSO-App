@@ -18,29 +18,6 @@ fragment PublicAccountFields on Account {
   createdAt
 }
 
-fragment CurrentAccountFields on CurrentAccount {
-  id
-  username
-  position
-  teamId
-  imageUrl
-  pendingImageUrl
-  country
-  email
-  roles
-  stats
-  seasonStats
-  ranking { score percentile ranked gamesPlayed tier }
-  cardStats { season cells { label value } }
-  awards
-  championships
-  totwUntil
-  cheater
-  strikersId
-  steamUrl
-  createdAt
-}
-
 query AccountMatches($id: ID!, $first: Int = 25, $after: String, $season: String, $opponent: String) {
   accountMatches(id: $id, first: $first, after: $after, season: $season, opponent: $opponent) {
     nodes
@@ -51,8 +28,8 @@ query AccountMatches($id: ID!, $first: Int = 25, $after: String, $season: String
   }
 }
 
-query AccountOpponents($id: ID!) {
-  accountOpponents(id: $id)
+query AccountOpponents($id: ID!, $first: Int = 10, $after: String) {
+  accountOpponents(id: $id, first: $first, after: $after)
 }
 
 query AccountCardPreviews {

@@ -6,6 +6,7 @@ import { queryFields as settingsFields } from '../settings/schema.js';
 import { queryFields as teamFields } from '../teams/schema.js';
 import { queryFields as matchFields } from '../matches/schema.js';
 import { queryFields as votingFields } from '../voting/schema.js';
+import { queryFields as payloadFields } from '../payload/schema.js';
 
 export const schema = new GraphQLSchema({
   query: new GraphQLObjectType({
@@ -18,6 +19,7 @@ export const schema = new GraphQLSchema({
       ...votingFields,
       ...settingsFields,
       ...adminFields,
+      ...payloadFields,
     },
   }),
 });

@@ -138,12 +138,12 @@ test('fixed GraphQL HTTP uses Apollo native CSRF, strict envelopes and safe cach
 test('authenticated fixed reads require a valid bearer; public reads remain anonymous', async () => {
   const h = harness();
   try {
-    for (const url of ['/api/standings', '/api/team-records']) {
+    for (const url of ['/api/team-standings', '/api/team-records']) {
       assert.equal((await h.app.inject({ method: 'POST', url, payload: { variables: {} } })).statusCode, 401);
       const accepted = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer good' }, payload: { variables: {} } });
       assert.equal(accepted.statusCode, 200, accepted.body);
     }
-    for (const url of ['/api/standings', '/api/team-records']) {
+    for (const url of ['/api/team-standings', '/api/team-records']) {
       const denied = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer expired' }, payload: { variables: {} } });
       assert.equal(denied.statusCode, 401);
       assert.equal(denied.json().error.code, 'access_expired');
@@ -198,8 +198,8 @@ test('warm handlers read committed account changes on later invocations', async 
   try {
     const first = await handler(urlEvent('/api/accounts'), lambdaContext()); h.setUsername('After');
     const second = await handler(urlEvent('/api/accounts'), lambdaContext());
-    assert.equal(JSON.parse(first.body)[0].username, 'Before');
-    assert.equal(JSON.parse(second.body)[0].username, 'After');
+    assert.equal(JSON.parse(first.body).nodes[0].username, 'Before');
+    assert.equal(JSON.parse(second.body).nodes[0].username, 'After');
     assert.equal(h.counts().authStateCalls, 0);
   } finally { await h.app.close(); }
 });
@@ -207,7 +207,7 @@ test('warm handlers read committed account changes on later invocations', async 
 test('GraphQL expired-bearer retry performs no domain reads until renewed and executes once', async () => {
   const h = harness();
   try {
-    const command = { method: 'POST' as const, url: '/api/standings', payload: { variables: {} } };
+    const command = { method: 'POST' as const, url: '/api/leaderboard', payload: { variables: {} } };
     const rejected = await h.app.inject({ ...command, headers: { authorization: 'Bearer expired' } });
     assert.equal(rejected.statusCode, 401); assert.equal(rejected.json().error.code, 'access_expired');
     assert.equal(h.domainReads(), 0);
@@ -225,10 +225,10 @@ test('actual HTTP preserves Apollo context, CSRF, envelope and start/stop lifecy
   const address = await h.app.listen({ host: '127.0.0.1', port: 0 });
   try {
     assert.equal(starts, 1);
-    const response = await fetch(`${address}/api/standings`, { method: 'POST',
+    const response = await fetch(`${address}/api/leaderboard`, { method: 'POST',
       headers: { 'content-type': 'application/json', authorization: 'Bearer good', origin: config.PUBLIC_ORIGIN }, body: JSON.stringify({ variables: {} }),
     });
-    assert.equal(response.status, 200); assert.ok((await response.json()).data.accounts);
+    assert.equal(response.status, 200); assert.ok((await response.json()).data.leaderboard.nodes);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('access-control-allow-origin'), config.PUBLIC_ORIGIN);
     const denied = await fetch(`${address}/api/default-position-weights`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });

@@ -259,3 +259,55 @@ test('filesystem codes are not SQLSTATE while native PostgreSQL codes remain ava
   assert.equal(logs[2].sqlstate,'P0001');
   assert.equal(logs[2].db_code,undefined);
 });
+
+test('resolved REST and fixed GraphQL targets enrich one completion without copying unknown IDs or secrets',()=>{
+ const {logs,response,output}=capture(`
+  const {payloadFixture,fixtureUser}=await import('./test/payload-fixture.ts');
+  const {db}=payloadFixture();
+  db.client.submission={deleteMany:async()=>({count:1})};
+  const resources=createApp({config:{...config,NODE_ENV:'production'},db,auth:{authStore:{admit:async()=>({status:'allowed',retryAfter:0})},supabase:{verify:async()=>({id:fixtureUser,sessionId:fixtureUser,claims:{}}),user:async()=>{throw Error('unused');}},discord:{identity:async()=>{throw Error('unused');}}}});
+  const headers={authorization:'Bearer '+canaries.bearer};
+  const requests=[
+   {url:'/api/teams/t_0'},
+   {url:'/api/accounts/id/'+fixtureUser},
+   {method:'POST',url:'/api/player-card',payload:{variables:{id:fixtureUser}}},
+   {method:'POST',url:'/api/team-players',payload:{variables:{teamId:'t_0'}}},
+   {method:'PATCH',url:'/api/accounts/'+fixtureUser,payload:{steamUrl:'https://example.test/'+canaries.internal}},
+   {method:'PATCH',url:'/api/news/n_0',payload:{body:canaries.internal}},
+   {url:'/api/rules/r_0'},
+   {url:'/api/voting/periods/10000000-0000-4000-8000-000000000001/votes/me'},
+   {method:'POST',url:'/api/rules/r_0/move',payload:{direction:'up'}},
+   {method:'DELETE',url:'/api/submissions/sub_0'},
+   {url:'/api/teams/unknown-target-secret'},
+   {url:'/api/accounts/id/unknown-target-secret'},
+   {url:'/api/accounts/id/99999999-9999-4999-8999-999999999999'},
+   {url:'/api/accounts'},
+   {method:'POST',url:'/api/player-card',payload:{variables:{id:'99999999-9999-4999-8999-999999999999'}}},
+  ];
+  try{const statuses=[];for(const input of requests)statuses.push((await resources.inject({...input,headers})).statusCode);console.error(JSON.stringify(statuses));}finally{await resources.close();}
+ `);
+ assert.deepEqual(response,[200,200,200,200,200,200,200,200,200,200,404,400,404,200,200]);
+ assert.equal(logs.length,15);
+ assert.ok(logs.every(row=>row.event==='api.request.completed'));
+ for(const [index,type,id] of [[0,'team','t_0'],[1,'account','00000000-0000-4000-8000-000000000001'],[2,'account','00000000-0000-4000-8000-000000000001'],[3,'team','t_0'],[4,'account','00000000-0000-4000-8000-000000000001'],[5,'news','n_0'],[6,'rule','r_0'],[7,'voting_period','10000000-0000-4000-8000-000000000001'],[8,'rule','r_0'],[9,'submission','sub_0']] as const){assert.equal(logs[index].resource_type,type);assert.equal(logs[index].resource_id,id);}
+ for(const row of logs.slice(10)){assert.equal(row.resource_id,undefined);assert.equal(row.resource_type,undefined);}
+ assert.ok(!output.includes('unknown-target-secret'));
+ for(const secret of ['synthetic-bearer-credential-canary','synthetic-private-upstream-error-canary'])assert.ok(!output.includes(secret));
+});
+
+test('Apollo warning followed by an unexpected serialization failure completes once at ERROR',()=>{
+ const {logs,output}=capture(`
+  const {ApolloServer}=await import('@apollo/server');
+  const {JSONScalar}=await import('./routes/graphql/scalar.ts');
+  const original=ApolloServer.prototype.executeHTTPGraphQLRequest;
+  ApolloServer.prototype.executeHTTPGraphQLRequest=function(...args){
+   this.logger.warn('Could not store validated document. private-serialization-secret');
+   return original.apply(this,args);
+  };
+  JSONScalar.serialize=()=>{throw new TypeError('private-serialization-secret');};
+  await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json'},payload:{variables:{}}});
+ `);
+ assert.equal(logs.length,1);assert.equal(logs[0].event,'api.request.completed');
+ assert.equal(logs[0].level,'ERROR');assert.equal(logs[0].code,'internal_error');
+ assert.equal(logs[0].error_type,'TypeError');assert.ok(!output.includes('private-serialization-secret'));
+});

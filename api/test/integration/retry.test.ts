@@ -72,7 +72,7 @@ test('real SDK and bearer routes retry concurrent GraphQL/PATCH expiry once with
     payload.country = 'must-not-be-serialized';
     renewal.resolve(Response.json(renewed));
     const [graph] = await pending;
-    assert.ok(Array.isArray(graph.data?.teamRecords));
+    assert.ok(Array.isArray((graph.data?.teamRecords as { nodes?: unknown[] })?.nodes));
     assert.equal(refreshes, 1); assert.equal(commits, 1);
     assert.deepEqual(await database.client.account.findUniqueOrThrow({ where: { id }, select: { country: true } }), { country });
     for (const [path, requests] of attempts) {

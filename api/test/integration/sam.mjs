@@ -81,23 +81,32 @@ try {
   await writeFile(cliEnv.AWS_CONFIG_FILE, '');
   await writeFile(cliEnv.AWS_SHARED_CREDENTIALS_FILE, '');
   const accounts = await invoke('public read through Prisma', event('/api/accounts'), 200);
-  const rows = JSON.parse(accounts.body);
+  const accountPage = JSON.parse(accounts.body);
+  const rows = accountPage.nodes;
+  assert.ok(Array.isArray(rows));
+  assert.ok(Buffer.byteLength(accounts.body, 'utf8') <= 10_000);
+  assert.equal(typeof accountPage.pageInfo.hasNextPage, 'boolean');
   assert.ok(rows.some(row => row.id === '11111111-1111-4111-8111-111111111111'));
   assert.ok(rows.every(row => !Object.hasOwn(row, 'email')));
   await invoke('protected route rejects forged identity headers', event('/api/users/me', { headers: { authorization: 'Bearer forged', 'x-user-role': 'super_admin' } }), 401);
   await invoke('mutation requires bearer', event('/api/teams', { method: 'POST', headers: { 'content-type': 'application/json' }, body: {} }), 401);
   const auth = { origin, 'content-type': 'application/json', 'apollo-require-preflight': 'true' };
-  const dashboard = await invoke('base64 GraphQL preserves public data and rejects its private account field', event('/api/dashboard', {
+  const overview = await invoke('base64 GraphQL preserves public overview without private account data', event('/api/league-overview', {
+    method: 'POST', headers: auth, base64: true, body: { variables: {} },
+  }), 200);
+  const payload = JSON.parse(overview.body);
+  assert.equal(payload.errors, undefined);
+  assert.equal(payload.data.leagueOverview.me, null);
+  assert.ok(Number.isSafeInteger(payload.data.leagueOverview.playerCount));
+  assert.ok(Number.isSafeInteger(payload.data.leagueOverview.activeTeamCount));
+  assert.ok(Array.isArray(payload.data.leagueOverview.tickerNews));
+  assert.ok(Buffer.byteLength(overview.body, 'utf8') <= 10_000);
+  assert.equal(overview.cookies, undefined);
+  const protectedRead = await invoke('base64 protected GraphQL requires bearer', event('/api/team-standings', {
     method: 'POST', headers: auth, base64: true, body: { variables: {} },
   }), 401);
-  const payload = JSON.parse(dashboard.body);
-  assert.equal(payload.errors.length, 1);
-  assert.equal(payload.errors[0].extensions.code, 'authentication_required');
-  assert.equal(payload.errors[0].extensions.status, 401);
-  assert.equal(payload.data.me, null);
-  assert.ok(Array.isArray(payload.data.accounts));
-  assert.ok(Array.isArray(payload.data.teams));
-  assert.equal(dashboard.cookies, undefined);
+  const denied = JSON.parse(protectedRead.body);
+  assert.deepEqual(denied, { error: 'authentication_required', message: 'authentication_required' });
 
   const offline = { ...environment, DATABASE_URL: 'postgresql://api_test:napl_test_only@db:1/napl_test' };
   await invoke('missing bearer fails closed before database access', event('/api/users/me'), 401, offline);

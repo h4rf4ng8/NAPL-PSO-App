@@ -19,6 +19,9 @@ import type { DiscordAuth } from './plugins/discord/client.js';
 import type { AuthStore } from './plugins/session/store.js';
 import { GatewayError } from './plugins/auth/errors.js';
 import type { Config } from './plugins/cfg.js';
+import { registerMedia } from './routes/payload/media.js';
+import { graphqlEndpoints } from '@napl/contracts';
+import { registerDetails } from './routes/payload/details.js';
 declare module 'fastify' {
     interface FastifyRequest {
         identity: Identity | null;
@@ -45,6 +48,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         logger: dependencies.config.NODE_ENV === 'test' ? false : loggerOptions(dependencies.config),
     });
     app.decorateRequest('diagnostic', null);
+    app.decorateRequest('resource', null);
     app.addHook('onRequest', (request, _reply, done) => {
         invocation.run({ ...invocation.getStore(), requestId: request.id, request }, done);
     });
@@ -56,6 +60,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
             ...(!request.routeOptions.url && { code: 'not_found' }),
             duration_ms: Math.round(reply.elapsedTime),
             ...(request.identity && { actor_id: request.identity.id }),
+            ...(request.resource && { resource_type: request.resource.type, resource_id: request.resource.id }),
             ...(invocation.getStore()?.version && { version: invocation.getStore()!.version }),
             ...(diagnostic && { ...diagnostic, level: undefined }),
         });
@@ -66,6 +71,23 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
     });
     app.decorateRequest('identity', null);
     app.decorateRequest('userRoles');
+    const fixedReads = new Set<string>(Object.values(graphqlEndpoints));
+    const resourceTypes = { accounts: 'account', teams: 'team', news: 'news', rules: 'rule', articles: 'article', schedule: 'schedule', transfers: 'transfer', submissions: 'submission', voting: 'voting_period', 'position-requests': 'position_request' } as const;
+    app.addHook('preSerialization', async (request, reply, payload) => {
+        const route = request.routeOptions.url ?? '';
+        const result = object(payload);
+        const family = route.split('/', 3)[2] as keyof typeof resourceTypes;
+        // These handlers return persisted entity DTOs. Never infer targets from request input.
+        if (!request.resource && reply.statusCode >= 200 && reply.statusCode < 300 && Object.hasOwn(resourceTypes, family) && typeof result.id === 'string' && result.id.length > 0 && result.id.length <= 160)
+            request.resource = { type: resourceTypes[family], id: result.id };
+        const writesRecord = /^\/api\/(accounts|users\/me|teams|news|rules|articles|schedule|transfers|submissions|import-match|voting|settings|roles|position-requests)(\/|$)/.test(route);
+        if (!writesRecord || fixedReads.has(route) || ['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return payload;
+        if (reply.statusCode === 204 || reply.statusCode < 200 || reply.statusCode >= 300) return payload;
+        if (payload === null || typeof payload !== 'object' || Buffer.isBuffer(payload)) return payload;
+        // Imports return bounded counts and input indexes needed for the result screen.
+        if (route === '/api/import-match') return payload;
+        return result.ok === false ? payload : { ok: true, ...(typeof result.id === 'string' && { id: result.id }) };
+    });
     app.addHook('onSend', async (request, reply, payload) => {
         reply.header('x-request-id', request.id);
         reply.header('cache-control', 'no-store');
@@ -89,9 +111,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         if (error instanceof ZodError) {
             diagnose(request, error, 'invalid_request', 'info');
             return reply.code(400).send({
-                error: 'invalid_request', message: 'Request validation failed', issues: error.issues.map(index => ({
-                    path: index.path, message: index.message
-                }))
+                error: 'invalid_request', message: 'Request validation failed'
             });
         }
         const problem = error as {
@@ -180,6 +200,8 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         registerVoting(scope, dependencies);
         registerAdmin(scope, dependencies);
         registerSettings(scope, dependencies);
+        registerMedia(scope, dependencies.db);
+        registerDetails(scope, dependencies.db);
         await registerGraphQL(scope, dependencies.db);
     }, { name: 'api-routes' }));
     if (dependencies.close) app.addHook('onClose', dependencies.close);

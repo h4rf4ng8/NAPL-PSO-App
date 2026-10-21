@@ -1,53 +1,46 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { useResource } from '../../hooks/use-resource';
+import { PageButtons } from '../../components/PageButtons';
+import { request } from '../../api/http';
+import { z } from 'zod';
+import type { AdminPlayer } from '../accounts/models';
 import { Check, Trophy } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useState } from 'react';
 import { VOTE_FIELDS, VOTE_POSITIONS } from '@napl/contracts/league';
 import { voting as votingApi } from './api';
-import type { Account } from '../accounts/models';
-import type { Vote, VotingPeriod } from './models';
+import type { VotingPeriod } from './models';
 import { C } from '../../theme/theme';
-import { tallyVotes } from './voting-utils';
+
+type PeriodSummary = Omit<VotingPeriod,'eligiblePlayers'|'winners'> & {eligiblePlayerCount:number;winnerCount:number};
+const tallySchema = z.object({totalVotes:z.number().nonnegative(),positions:z.object({GK:z.array(z.tuple([z.string(),z.number()])),DEF:z.array(z.tuple([z.string(),z.number()])),CM:z.array(z.tuple([z.string(),z.number()])),ST:z.array(z.tuple([z.string(),z.number()]))})});
 
 // ============ TEAM OF THE WEEK VOTING ADMIN ============
 // Admin opens a voting period, picks eligible players, players vote, admin
 // resolves the winners after voting closes. Each period auto-closes at
 // midnight the day after it opens.
-export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Account[]; onRefresh: () => void }) => {
-  const [periods, setPeriods] = useState<VotingPeriod[]>([]);
-  const [votes, setVotes] = useState<Vote[]>([]);   // votes for the current open period
+export const TotwManager = ({ onRefresh }: { onRefresh: () => void }) => {
+  const periodPage = useRestPage<PeriodSummary>('/api/voting/periods');
+  const openPage = useRestPage<PeriodSummary>('/api/voting/periods?status=open');
+  const periods = periodPage.data?.nodes ?? [];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [creating, setCreating] = useState(false);
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]); // usernames
   const [filter, setFilter] = useState('');
-  const requestId = useRef(0);
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(filter));
+  const allPlayers = playerPage.data?.nodes ?? [];
   const minimumEligible = VOTE_FIELDS.reduce((total, field) => total + field.needed, 0);
   const minimumEligibleSummary = VOTE_FIELDS.map(({ needed, pos }) => `${needed} ${pos}`).join(' + ');
   const votePositionSummary = VOTE_FIELDS.map(({ pos }) => `1 ${pos}`).join(' + ');
 
-  const refresh = async () => {
-    const currentRequest = ++requestId.current;
-    try {
-      const p = await votingApi.listTotwPeriods();
-      const open = p.find(x => x.status === 'open');
-      const v = open ? await votingApi.listTotwVotes(open.id) : [];
-      if (requestId.current !== currentRequest) return;
-      setPeriods(p);
-      setVotes(v);
-    } catch (error_) {
-      if (requestId.current === currentRequest) {
-        setError('Could not load voting data: ' + (error_ instanceof Error ? error_.message : String(error_)));
-      }
-    }
-  };
-
-  useEffect(() => {
-    void refresh();
-    return () => { requestId.current += 1; };
-  }, []);
-
-  const currentPeriod = periods.find(p => p.status === 'open');
-  const pastPeriods = periods.filter(p => p.status !== 'open').slice(0, 8);
+  const currentPeriod = openPage.data?.nodes.find(period=>period.status==='open');
+  const pastPeriods = periods.filter(period=>period.status!=='open');
+  const tallyResource = useResource(async()=>currentPeriod
+    ? tallySchema.parse(await request(`/api/voting/periods/${encodeURIComponent(currentPeriod.id)}/tally`))
+    : {totalVotes:0,positions:{GK:[],DEF:[],CM:[],ST:[]}},[currentPeriod?.id]);
+  const tally = tallyResource.data?.positions ?? {GK:[],DEF:[],CM:[],ST:[]};
+  const refresh = async () => { await Promise.all([periodPage.reload(),openPage.reload(),tallyResource.reload()]); };
 
   // Helper: midnight the day after opens_at
   const computeCloseTime = () => {
@@ -57,8 +50,6 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
     return d.getTime();
   };
 
-  // Vote tally for current period, grouped by position
-  const tally = useMemo(() => tallyVotes(votes), [votes]);
 
   const togglePlayer = (username: string) => {
     setSelectedPlayers(prev =>
@@ -125,6 +116,8 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
 
   return (
     <div className="space-y-4">
+      {(periodPage.loading || openPage.loading || tallyResource.loading) && <p role="status">Loading voting data…</p>}
+      {(periodPage.error || openPage.error || tallyResource.error || playerPage.error) && <p role="alert">{periodPage.error || openPage.error || tallyResource.error || playerPage.error}</p>}
       <div className="rounded-xl p-4" style={{
         background: `linear-gradient(135deg, #2196f322 0%, ${C.white} 100%)`,
         border: `1px solid #2196f355`,
@@ -156,7 +149,7 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
                   OPEN · CLOSES {new Date(currentPeriod.closesAt).toLocaleString()}
                 </div>
                 <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
-                  {currentPeriod.eligiblePlayers.length} ELIGIBLE PLAYERS · {votes.length} VOTES CAST
+                  {currentPeriod.eligiblePlayerCount} ELIGIBLE PLAYERS · {tallyResource.data?.totalVotes ?? '…'} VOTES CAST
                 </div>
               </div>
               <button
@@ -202,6 +195,7 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
                   className="w-full rounded px-3 py-2 text-sm"
                   style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
                 />
+                <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
                 <div className="rounded max-h-64 overflow-y-auto" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66` }}>
                   {approvedPlayers.map(p => {
                     const checked = selectedPlayers.includes(p.username);
@@ -253,6 +247,7 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
         )}
       </div>
 
+      <PageButtons {...periodPage} hasNextPage={periodPage.data?.pageInfo.hasNextPage ?? false} />
       {/* PAST PERIODS */}
       {pastPeriods.length > 0 && (
         <div className="rounded-lg p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
@@ -265,7 +260,7 @@ export const TotwManager = ({ allPlayers = [], onRefresh }: { allPlayers?: Accou
                     {p.status.toUpperCase()} · {new Date(p.opensAt).toLocaleDateString()}
                   </div>
                   <div className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>
-                    {p.eligiblePlayers.length} ELIGIBLE{p.winners ? ' · RESOLVED' : ''}
+                    {p.eligiblePlayerCount} ELIGIBLE{p.winnerCount > 0 ? ' · RESOLVED' : ''}
                   </div>
                 </div>
                 <button

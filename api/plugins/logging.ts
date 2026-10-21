@@ -10,7 +10,7 @@ export const invocation = new AsyncLocalStorage<{ requestId: string; version?: s
 export const requestId = () => invocation.getStore()?.requestId ?? randomUUID();
 type Diagnostic = { level: 'info' | 'warn' | 'error'; code: string; upstream?: GatewayError['upstream']; error_type?: string; source?: string; db_code?: string; sqlstate?: string; team_id?: string };
 declare module 'fastify' {
-  interface FastifyRequest { diagnostic: Diagnostic | null; }
+  interface FastifyRequest { diagnostic: Diagnostic | null; resource: { type: 'account' | 'team' | 'position_request' | 'news' | 'rule' | 'article' | 'schedule' | 'transfer' | 'submission' | 'voting_period'; id: string } | null; }
 }
 
 // Only classifications and source locations are safe; messages, causes and SQL contain user data.

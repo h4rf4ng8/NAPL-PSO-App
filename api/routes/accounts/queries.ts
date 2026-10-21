@@ -64,7 +64,7 @@ export function listPositionRequests(database: Database, filter: { accountId?: s
   return database.query<PositionChangeRequest>(Prisma.sql`SELECT * FROM asl.position_change_requests
     WHERE (${filter.accountId ?? null}::text IS NULL OR account_id::text=${filter.accountId ?? null})
       AND (${filter.status || null}::text IS NULL OR status=${filter.status || null})
-    ORDER BY COALESCE(created_at, to_timestamp(0)) DESC`);
+    ORDER BY COALESCE(created_at, to_timestamp(0)) DESC, id`);
 }
 
 export function hasPendingPositionRequest(database: Database, accountId: string) {

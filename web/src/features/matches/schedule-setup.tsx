@@ -5,7 +5,7 @@ import { matches as matchApi } from './api';
 
 import type { ScheduledMatch } from './models';
 import type { Team } from '../teams/models';
-import { ModalShell } from '../../components/Ui';
+import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { generateRoundRobinSchedule } from '../../utils/league';
 

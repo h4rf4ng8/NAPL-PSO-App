@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Account } from '../accounts/models';
-import { ShareableCardModal, TierPreview } from '../../components/PlayerCard';
+import { ShareableCardModal } from '../../components/ShareableCardModal';
+import { TierPreview } from './TierPreview';
 import { C } from '../../theme/theme';
 import { useTheme } from '../../theme/use-theme';
 import { isAdmin } from '../../utils/league';

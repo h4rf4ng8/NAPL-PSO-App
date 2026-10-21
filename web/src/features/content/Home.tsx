@@ -4,7 +4,7 @@ import { accounts as accountApi } from '../accounts/api';
 import type { Account } from '../accounts/models';
 import type { News } from './models';
 import type { Team } from '../teams/models';
-import { ArticleCard, QuickStat, ResultRow, Section } from '../../components/Ui';
+import { ArticleCard, QuickStat, ResultRow, Section } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { COUNTRIES, flagUrl } from '../../utils/league';
 

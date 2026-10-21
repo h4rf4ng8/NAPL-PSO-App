@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account, PositionRequest } from './models';
-import { ModalShell } from '../../components/Ui';
+import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 
 import { POSITIONS } from '../../utils/league';

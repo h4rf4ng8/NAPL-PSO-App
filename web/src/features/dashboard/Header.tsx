@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Account } from '../accounts/models';
 import type { News } from '../content/models';
 import type { VotingPeriod } from '../voting/models';
-import { ASL_LOGO_DIAMOND } from '../../components/Icons';
+import { ASL_LOGO_DIAMOND } from '../../assets/asl-logos';
 import { C, type ThemeMode } from '../../theme/theme';
 import { isAdmin } from '../../utils/league';
 

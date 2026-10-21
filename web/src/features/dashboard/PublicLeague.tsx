@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Account } from '../accounts/models';
 import { accounts } from '../accounts/api';
-import { ASLLogoFull } from '../../components/Icons';
+import { ASLLogoFull } from '../../components/Branding';
 import { C } from '../../theme/theme';
 import { StatsView } from '../accounts';
 import { NewsHub, RulesView } from '../content';

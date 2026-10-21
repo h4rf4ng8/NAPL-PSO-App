@@ -1,3 +1,5 @@
+import { invocation } from './logging.js';
+import { randomUUID } from 'node:crypto';
 import awsLambdaFastify from '@fastify/aws-lambda';
 import type { APIGatewayProxyEventV2, Context } from 'aws-lambda';
 import type { FastifyInstance } from 'fastify';
@@ -22,6 +24,6 @@ export function createHandler(app: FastifyInstance) {
     // Function URLs flatten duplicate keys with commas. Recover them from the raw query,
     // preserving literal commas and empty values, using the adapter's multi-value input.
     const normalized = { ...event, queryStringParameters: undefined, multiValueQueryStringParameters: Object.fromEntries(values) };
-    return proxy(normalized, context);
+    return invocation.run({ requestId: context.awsRequestId || randomUUID(), version: context.functionVersion }, () => proxy(normalized, context));
   };
 }

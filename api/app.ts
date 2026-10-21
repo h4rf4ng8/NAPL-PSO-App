@@ -1,4 +1,5 @@
-import Fastify, { type FastifyInstance } from 'fastify';
+import { diagnose, invocation, loggerOptions, requestId } from './plugins/logging.js';
+import Fastify, { LogController, type FastifyInstance } from 'fastify';
 import { ZodError } from 'zod';
 import type { Database, Row } from './plugins/db/client.js';
 import { object, string } from './plugins/db/records.js';
@@ -38,14 +39,35 @@ export interface Dependencies {
 export function createApp(dependencies: Dependencies): FastifyInstance {
     const app = Fastify({
         bodyLimit: 2_000_000, requestTimeout: 20_000,
-        logger: dependencies.config.NODE_ENV === 'test' ? false : {
-            serializers: { req: request => ({ method: request.method }), res: reply => ({ statusCode: reply.statusCode }) },
-            redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.providerToken', 'res.headers.set-cookie'],
-        },
+        logController: new LogController({ disableRequestLogging: true, requestIdLogLabel: 'request_id' }),
+        requestIdHeader: false,
+        genReqId: requestId,
+        logger: dependencies.config.NODE_ENV === 'test' ? false : loggerOptions(dependencies.config),
+    });
+    app.decorateRequest('diagnostic', null);
+    app.addHook('onRequest', (request, _reply, done) => {
+        invocation.run({ ...invocation.getStore(), requestId: request.id, request }, done);
+    });
+    app.addHook('onResponse', async (request, reply) => {
+        const diagnostic = request.diagnostic;
+        request.log[diagnostic?.level ?? (reply.statusCode >= 500 ? 'error' : 'info')]({
+            event: 'api.request.completed', method: request.method,
+            route: request.routeOptions.url ?? 'unmatched', status: reply.statusCode,
+            ...(!request.routeOptions.url && { code: 'not_found' }),
+            duration_ms: Math.round(reply.elapsedTime),
+            ...(request.identity && { actor_id: request.identity.id }),
+            ...(invocation.getStore()?.version && { version: invocation.getStore()!.version }),
+            ...(diagnostic && { ...diagnostic, level: undefined }),
+        });
+        const current = invocation.getStore();
+        if (!current) return;
+        current.completed = true;
+        delete current.request;
     });
     app.decorateRequest('identity', null);
     app.decorateRequest('userRoles');
-    app.addHook('onSend', async (_request, reply, payload) => {
+    app.addHook('onSend', async (request, reply, payload) => {
+        reply.header('x-request-id', request.id);
         reply.header('cache-control', 'no-store');
         reply.header('x-content-type-options', 'nosniff');
         reply.removeHeader('set-cookie');
@@ -53,21 +75,25 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
     });
     app.setErrorHandler((error, request, reply) => {
         if (error instanceof GatewayError) {
+            diagnose(request, error, error.code, error.status >= 500 ? 'error' : 'info');
             if (error.retryAfter !== undefined) reply.header('retry-after', error.retryAfter);
             return reply.code(error.status).send({ error: { code: error.code } });
         }
         if (error instanceof HttpError) {
+            diagnose(request, error, error.code, error.status >= 500 ? 'error' : 'info');
             if (error.retryAfter !== undefined) reply.header('retry-after', error.retryAfter);
             return reply.code(error.status).send({
                 error: error.code, message: error.message
             });
         }
-        if (error instanceof ZodError)
+        if (error instanceof ZodError) {
+            diagnose(request, error, 'invalid_request', 'info');
             return reply.code(400).send({
                 error: 'invalid_request', message: 'Request validation failed', issues: error.issues.map(index => ({
                     path: index.path, message: index.message
                 }))
             });
+        }
         const problem = error as {
             name?: string;
             cause?: Row;
@@ -78,29 +104,37 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         // Commit failures can expose the adapter error directly rather than inside P2010.
         const adapterCause=object(problem.name === 'DriverAdapterError' ? problem.cause : object(problem.meta?.driverAdapterError).cause);
         const sqlState=string(adapterCause.originalCode)||string(problem.meta?.code);
-        if (typeof problem.statusCode === 'number' && problem.statusCode >= 400 && problem.statusCode < 500)
+        if (typeof problem.statusCode === 'number' && problem.statusCode >= 400 && problem.statusCode < 500) {
+            diagnose(request, error, 'invalid_request', 'info');
             return reply.code(problem.statusCode).send({
                 error: 'invalid_request', message: 'Request rejected'
             });
-        if (sqlState === '23505' || ['P2002', '23505'].includes(problem.code ?? ''))
+        }
+        if (sqlState === '23505' || ['P2002', '23505'].includes(problem.code ?? '')) {
+            diagnose(request, error, 'conflict', 'info');
             return reply.code(409).send({
                 error: 'conflict', message: 'This value is already in use'
             });
-        if (sqlState === '23503' || ['P2003', '23503'].includes(problem.code ?? ''))
+        }
+        if (sqlState === '23503' || ['P2003', '23503'].includes(problem.code ?? '')) {
+            diagnose(request, error, 'reference_conflict', 'info');
             return reply.code(409).send({
                 error: 'reference_conflict', message: 'A related record is missing or still references this record'
             });
-        if (sqlState === '23514' || problem.code === '23514')
+        }
+        if (sqlState === '23514' || problem.code === '23514') {
+            diagnose(request, error, 'invalid_data', 'info');
             return reply.code(400).send({
                 error: 'invalid_data', message: 'The values violate a database constraint'
             });
-        if (problem.code === 'P2034' || adapterCause.kind==='TransactionWriteConflict' || ['40001','40P01'].includes(sqlState))
+        }
+        if (problem.code === 'P2034' || adapterCause.kind==='TransactionWriteConflict' || ['40001','40P01'].includes(sqlState)) {
+            diagnose(request, error, 'concurrent_update', 'info');
             return reply.code(409).send({
                 error: 'concurrent_update', message: 'Another request changed this record; reload and try again'
             });
-        request.log.error({
-            code: problem.code ?? 'unknown'
-        }, 'Request failed');
+        }
+        diagnose(request, error, 'service_unavailable');
         reply.header('retry-after', 1);
         return reply.code(503).send({
             error: 'service_unavailable', message: 'Service temporarily unavailable'
@@ -114,7 +148,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
             },
             methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
             allowedHeaders: ['Authorization', 'Content-Type', 'Apollo-Require-Preflight', 'Idempotency-Key'],
-            exposedHeaders: ['Retry-After'],
+            exposedHeaders: ['Retry-After', 'X-Request-Id'],
             credentials: false,
         });
         scope.addHook('onRequest', async request => {

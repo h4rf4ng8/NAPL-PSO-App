@@ -21,6 +21,7 @@ test('SAM template describes the bounded Lambda and direct browser Function URL'
   const fn = resources.ApiFunction.Properties;
   assert.equal(fn.FunctionName, '${AWS::StackName}-api');
   assert.equal(fn.Runtime, 'nodejs24.x');
+  assert.deepEqual(fn.LoggingConfig, { LogFormat: 'JSON', ApplicationLogLevel: 'INFO', SystemLogLevel: 'INFO' });
   assert.equal(fn.Handler, 'lambda.handler');
   assert.deepEqual(fn.Architectures, ['arm64']);
   assert.equal(fn.MemorySize, 'FunctionMemorySize');
@@ -190,4 +191,34 @@ test('Lambda ZIP loads outside the repository and supports direct CORS and rejec
     }
     await rm(scratch, { recursive: true, force: true });
   }
+});
+
+test('production ZIP emits a correlated safe diagnostic with a bundled source location', async () => {
+  const source = `
+    const { handler } = await import('./dist/lambda.js');
+    const path = '/api/settings/current_season';
+    const response = await handler({version:'2.0',routeKey:'$default',rawPath:path,rawQueryString:'',headers:{'x-request-id':'spoofed'},requestContext:{requestId:'different-url-id',http:{method:'GET',path,sourceIp:'192.0.2.1',protocol:'HTTP/1.1',userAgent:''}},isBase64Encoded:false}, {awsRequestId:'packaged-request',functionVersion:'42'});
+    console.error(JSON.stringify({status:response.statusCode,headers:response.headers}));
+  `;
+  const {stdout, stderr} = await exec(process.execPath, ['--input-type=module', '--eval', source], {
+    cwd: api, timeout: 15_000,
+    env: {
+      ...process.env, NODE_ENV:'production', LOG_LEVEL:'info',
+      PUBLIC_ORIGIN:'https://example.test', SUPABASE_URL:'https://example.supabase.co',
+      SUPABASE_JWKS_URL:'https://example.supabase.co/auth/v1/.well-known/jwks.json',
+      SUPABASE_PUBLISHABLE_KEY:'public', DATABASE_URL:'postgresql://unused:private-database-canary@127.0.0.1:1/test?sslmode=verify-full',
+    },
+  });
+  const logs = stdout.trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].event, 'api.request.completed');
+  assert.equal(logs[0].request_id, 'packaged-request');
+  assert.equal(logs[0].version, '42');
+  assert.equal(logs[0].level, 'ERROR');
+  assert.equal(logs[0].code, 'service_unavailable');
+  assert.match(logs[0].source, /^(?:api\/dist\/)?lambda\.js:\d+:\d+$/);
+  assert.ok(!stdout.includes('private-database-canary'));
+  const response = JSON.parse(stderr);
+  assert.equal(response.status, 503);
+  assert.equal(response.headers['x-request-id'], 'packaged-request');
 });

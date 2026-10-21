@@ -4,10 +4,11 @@ import { ApolloServer, HeaderMap } from '@apollo/server';
 import { ApolloServerPluginLandingPageDisabled, ApolloServerPluginSchemaReportingDisabled, ApolloServerPluginUsageReportingDisabled } from '@apollo/server/plugin/disabled';
 import { GraphQLError, Kind, print, type GraphQLFormattedError } from 'graphql';
 import { z } from 'zod';
-import { graphqlEndpoints } from '@napl/contracts';
+import { graphqlEndpoint, graphqlOperationNames } from '@napl/contracts';
 import type { GraphQLContext } from './context.js';
 import { schema } from './schema.js';
 import { trustedOperations } from './generated/operations.js';
+import { actor, isAdmin, HttpError } from '../../plugins/auth/identity.js';
 import type { Database } from '../../plugins/db/client.js';
 
 function errorPayload(error: GraphQLFormattedError) {
@@ -102,14 +103,20 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
   }
   app.addHook('onClose', async () => { await server.stop(); });
 
-  for (const [name, url] of Object.entries(graphqlEndpoints)) {
-    const document = trustedOperations[name as keyof typeof trustedOperations];
+  const operations = Object.fromEntries(graphqlOperationNames.map(name => {
+    const document = trustedOperations[name];
     const operation = document.definitions.find(definition => definition.kind === Kind.OPERATION_DEFINITION)!;
-    const query = print(document);
-    const variables = z.strictObject(Object.fromEntries((operation.variableDefinitions ?? []).map(variable => [variable.variable.name.value, z.unknown().optional()])));
-    const requestBody = z.strictObject({ variables });
-    app.post(url, { config: { public: !['TeamStandings', 'TeamRecords', 'ImportAccountMatches'].includes(name) } }, async (request: FastifyRequest, reply: FastifyReply) => {
-      const input = requestBody.safeParse(request.body);
+    return [name, { query: print(document), variables: z.strictObject(Object.fromEntries((operation.variableDefinitions ?? []).map(variable => [variable.variable.name.value, z.unknown().optional()]))) }];
+  }));
+  const envelope = z.strictObject({ operationName: z.enum(graphqlOperationNames), variables: z.record(z.string(), z.unknown()) });
+  app.post(graphqlEndpoint, { config: { public: true } }, async (request: FastifyRequest, reply: FastifyReply) => {
+      const input = envelope.safeParse(request.body);
+      const name = input.success ? input.data.operationName : undefined;
+      const operation = name ? operations[name]! : undefined;
+      const valid = input.success && operation!.variables.safeParse(input.data.variables).success;
+      if (name) request.operationName = name;
+      if (valid && name && ['TeamStandings', 'TeamRecords', 'ImportAccountMatches'].includes(name)) actor(request);
+      if (valid && name === 'ImportAccountMatches' && !isAdmin(request)) throw new HttpError(403, 'admin_required');
       const headers = new HeaderMap();
       for (const [key, value] of Object.entries(request.headers)) {
         if (value !== undefined) headers.set(key, Array.isArray(value) ? value.join(', ') : value);
@@ -119,10 +126,10 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
           method: request.method,
           headers,
           search: new URL(request.url, 'http://localhost').search,
-          body: input.success ? { query, operationName: name, variables: input.data.variables } : undefined,
+          body: valid ? { query: operation!.query, operationName: name, variables: input.data.variables } : undefined,
         },
         context: async () => {
-          if (!input.success) throw new GraphQLError('Invalid operation request', {
+          if (!valid) throw new GraphQLError('Invalid operation request', {
             extensions: { code: 'invalid_request', status: 400, http: { status: 400 } },
           });
           return { db, request, reads: new Map<string, Promise<unknown>>() };
@@ -136,5 +143,4 @@ export async function registerGraphQL(app: FastifyInstance, db: Database): Promi
       if (result.body.kind !== 'complete') throw new Error('Unexpected incremental GraphQL response');
       return reply.send(result.body.string);
     });
-  }
 }

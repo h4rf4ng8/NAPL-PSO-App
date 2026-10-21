@@ -30,7 +30,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
         return page(rows.map(row => ({ ...playerSummary(row, filters.season ?? 'all'), strikersId: row.strikersId, cheater: row.cheater,
             ...(isAdmin(request) && { pendingImageUrl: row.pendingImageUrl }) })), `accounts:${JSON.stringify(filters)}:${isAdmin(request)}`, pageInput(request));
     });
-    app.get('/api/accounts/id/:id', async (request) => {
+    app.get('/api/accounts/:id', async (request) => {
         const id = z.uuid().parse(parameters(request).id);
         if (actor(request).id !== id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
@@ -43,7 +43,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
             pendingImageUrl: accountDto(row, true).pendingImageUrl,
             statsUrl: detailUrl(`/api/accounts/${id}/stats`, row.stats) };
     });
-    app.get('/api/accounts/:username', {
+    app.get('/api/accounts/username/:username', {
         config: {
             public: true
         }
@@ -56,12 +56,12 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
         return playerCard(calculated, query(request).season ?? 'all');
     });
-    app.get('/api/users/me', async (request) => {
+    app.get('/api/accounts/me', async (request) => {
         const me = currentAccountDto(await getCurrentAccount(db, actor(request).id), request.userRoles);
         if (me) request.resource = { type: 'account', id: String(me.id) };
         return me ? { ...playerCard(me, query(request).season ?? 'all'), email: me.email, pendingImageUrl: me.pendingImageUrl, roles: me.roles } : null;
     });
-    app.post('/api/users/me', async (request) => {
+    app.post('/api/accounts/me', async (request) => {
         const input = z.strictObject({ providerToken: z.string().min(1).max(4096).optional() }).parse(request.body === undefined ? {} : request.body);
         const identity = actor(request);
         await limiter.provision(clientIp(request), identity.id, identity.sessionId);

@@ -46,7 +46,7 @@ function harness(options: { existing?: boolean; providerUser?: SupabaseUser; lim
     discord: { identity: async token => { assert.equal(token, 'provider'); counts.profile++; return { id: '123', username: 'verified_handle' }; } },
   };
   const app = createApp({ db, config, auth });
-  const call = (body: unknown = {}, token = 'good') => app.inject({ method: 'POST', url: '/api/users/me', headers: { authorization: `Bearer ${token}`, 'x-real-ip': 'not-an-ip' }, payload: body as object });
+  const call = (body: unknown = {}, token = 'good') => app.inject({ method: 'POST', url: '/api/accounts/me', headers: { authorization: `Bearer ${token}`, 'x-real-ip': 'not-an-ip' }, payload: body as object });
   return { app, call, counts, limits, account: () => account };
 }
 
@@ -57,7 +57,7 @@ test('new provision uses verified Discord handle, admits without guild membershi
     assert.equal(response.statusCode, 200, response.body);
     assert.deepEqual(response.json(), { ok: true, id: userId });
     assert.equal(h.account()?.username, 'verified_handle');
-    const current = await h.app.inject({ url: '/api/users/me', headers: { authorization: 'Bearer good' } });
+    const current = await h.app.inject({ url: '/api/accounts/me', headers: { authorization: 'Bearer good' } });
     assert.equal(current.statusCode, 200, current.body);
     assert.equal(current.json().username, 'verified_handle');
     assert.deepEqual(current.json().roles, []);
@@ -112,7 +112,7 @@ test('provision rejects submitted usernames and mismatched authoritative provide
     for (const body of [{ username: 'forged' }, { providerToken: '' }, { providerToken: 42 }, { providerToken: 'provider', id: otherId }, []]) {
       const response = await h.call(body); assert.equal(response.statusCode, 400, response.body);
     }
-    const nullEnvelope = await h.app.inject({ method: 'POST', url: '/api/users/me', payload: 'null', headers: { authorization: 'Bearer good', 'content-type': 'application/json' } });
+    const nullEnvelope = await h.app.inject({ method: 'POST', url: '/api/accounts/me', payload: 'null', headers: { authorization: 'Bearer good', 'content-type': 'application/json' } });
     assert.equal(nullEnvelope.statusCode, 400);
     assert.equal(h.counts.profile, 0); assert.equal(h.counts.user, 0); assert.equal(h.counts.transactions, 0);
   } finally { await h.app.close(); }

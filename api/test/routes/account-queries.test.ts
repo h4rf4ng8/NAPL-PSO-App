@@ -35,13 +35,13 @@ test('account and position request queries preserve UUID text matching, filterin
     assert.deepEqual(own.json().nodes.map((row: { id: string }) => row.id), [ids[1], ids[0]]);
     assert.deepEqual((await call('GET', `/api/position-requests?status=${encodeURIComponent(status + 'x')}`)).json().nodes, []);
 
-    const profile = await call('GET', `/api/accounts/id/${accountId}`);
+    const profile = await call('GET', `/api/accounts/${accountId}`);
     assert.equal(profile.statusCode, 200, profile.body);
     const unchanged = await call('PATCH', `/api/accounts/${accountId}`, admin, {});
     assert.equal(unchanged.statusCode, 200, unchanged.body);
     assert.deepEqual(unchanged.json(), { ok: true, id: accountId });
-    assert.equal((await call('GET', `/api/accounts/id/${accountId}`)).json().username, 'Query Player');
-    assert.equal((await call('GET', `/api/accounts/id/${accountId.toUpperCase()}`)).statusCode, 404);
+    assert.equal((await call('GET', `/api/accounts/${accountId}`)).json().username, 'Query Player');
+    assert.equal((await call('GET', `/api/accounts/${accountId.toUpperCase()}`)).statusCode, 404);
     assert.equal((await call('PATCH', `/api/accounts/${accountId.toUpperCase()}`, admin, {})).statusCode, 404);
     assert.equal((await call('PATCH', `/api/accounts/${accountId}`, bob, { country: 'US' })).statusCode, 403);
     assert.equal((await call('PATCH', `/api/accounts/${accountId}`, admin, { username_lower: 'tampered' })).statusCode, 400);

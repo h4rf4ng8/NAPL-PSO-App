@@ -7,9 +7,9 @@ const source = loggingFixture + `
   try {
     const statuses = [];
     for (let index = 0; index < 10; index++) {
-      statuses.push((await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json'},payload:{variables:{}}})).statusCode);
-      statuses.push((await app.inject({method:'POST',url:'/api/users/me',headers:{authorization:'Bearer '+canaries.bearer},payload:{providerToken:canaries.provider}})).statusCode);
-      statuses.push((await app.inject({url:'/api/users/me'})).statusCode);
+      statuses.push((await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/json'},payload:{operationName:'DefaultPositionWeights',variables:{}}})).statusCode);
+      statuses.push((await app.inject({method:'POST',url:'/api/accounts/me',headers:{authorization:'Bearer '+canaries.bearer},payload:{providerToken:canaries.provider}})).statusCode);
+      statuses.push((await app.inject({url:'/api/accounts/me'})).statusCode);
     }
     console.error(JSON.stringify(statuses));
   } finally { await app.close(); }

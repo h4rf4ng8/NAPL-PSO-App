@@ -59,14 +59,14 @@ test('real SDK and bearer routes retry concurrent GraphQL/PATCH expiry once with
     }, first);
     const payload = { country };
     const pending = Promise.all([
-      request<{ data: { teamRecords: unknown[] } }>('/api/team-records', 'POST', { variables: {} }),
+      request<{ data: { teamRecords: unknown[] } }>('/api/graphql', 'POST', { operationName: 'TeamRecords', variables: {} }),
       request(`/api/accounts/${id}`, 'PATCH', payload),
     ]);
     await refreshStarted.promise;
     for (let i = 0; i < 50 && (attempts.size < 2 || attempts.values().some(value => value.length !== 1)); i++) await tick();
     await tick();
     assert.equal(refreshes, 1); assert.equal(commits, 0);
-    assert.equal(attempts.get('/api/team-records')?.length, 1);
+    assert.equal(attempts.get('/api/graphql')?.length, 1);
     assert.equal(attempts.get(`/api/accounts/${id}`)?.length, 1);
     assert.deepEqual(await database.client.account.findUniqueOrThrow({ where: { id }, select: { country: true } }), original);
     payload.country = 'must-not-be-serialized';

@@ -52,7 +52,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const openEdit = async (match: MatchSummary) => {
     setEditError('');
     try {
-      const [notes, streamUrl] = await Promise.all([readText(match.notesUrl), readText(`/api/schedule/${segment(match.id)}/links/streamUrl`)]);
+      const [notes, streamUrl] = await Promise.all([readText(match.notesUrl), readText(`/api/schedule/${segment(match.id)}/links/stream-url`)]);
       setEditingTeams([match.homeTeam, match.awayTeam].filter((team): team is MatchTeam => !!team));
       setEditing({ ...match, notes, streamUrl });
     } catch (error) { setEditError(error instanceof Error ? error.message : 'Could not load saved match.'); }

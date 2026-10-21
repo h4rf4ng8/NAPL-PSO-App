@@ -1,4 +1,6 @@
-import { useRestPage } from '../../hooks/use-rest-page';
+import { usePageCursor } from '../../hooks/use-page-cursor';
+import { useQuery } from '@apollo/client/react';
+import { TeamSummariesDocument } from '../../api/generated/graphql';
 import { PageButtons } from '../../components/PageButtons';
 import { LazyText } from '../content/LazyText';
 import { loadTeamForEdit } from '../teams/api';
@@ -33,7 +35,13 @@ export const AdminPanel = ({ account }: { account: Account }) => {
   const [tab, setTab] = useState('pending');
   const [currentSeason, setCurrentSeason] = useState('S1');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const teamPage = useRestPage<TeamSummary>(section === 'teams' ? '/api/teams?status='+tab : null);
+  const cursor = usePageCursor(tab);
+  const teamQuery = useQuery(TeamSummariesDocument, { variables: { scope: null, status: tab, search: null, after: cursor.after }, skip: section !== 'teams' });
+  const teamPage = { data: teamQuery.data && { ...teamQuery.data.teamSummaries, nodes: teamQuery.data.teamSummaries.nodes.map(team => ({ ...team, color: team.color ?? '', createdAt: team.createdAt ?? 0 })) }, loading: teamQuery.loading, error: teamQuery.error?.message,
+    restart: () => { cursor.restart(); if (!cursor.after) void teamQuery.refetch().catch(() => {}); },
+    canPrevious: cursor.canPrevious, previous: cursor.previous,
+    next: () => { if (teamQuery.data?.teamSummaries.pageInfo.hasNextPage) cursor.next(teamQuery.data.teamSummaries.pageInfo.endCursor); },
+  };
   const teams = teamPage.data?.nodes ?? [];
 
   const refresh = async () => {

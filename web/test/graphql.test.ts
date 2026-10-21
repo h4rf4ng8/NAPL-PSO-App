@@ -82,10 +82,10 @@ test('account decoder preserves historical account fields and accepts legacy awa
 test('selected season card loads one detail and keeps complete histories absent',async()=>{
  const wire=wireAccount();
  const card={...wire,__typename:'AccountCard',team:null,season:'S2',cardStats:wire.cardStats[0]!.cells,awardPreview:[{awardId:'legacy-mvp',season:'S1'}],championshipPreview:[],awardCount:14,championshipCount:0,previewHasMore:true};
- const calls:RequestInit[]=[];mock.method(globalThis,'fetch',async(url,init)=>{assert.equal(String(url),'http://api.example.test/api/player-card');calls.push(init!);return json({data:{accountCard:card}});});
+ const calls:RequestInit[]=[];mock.method(globalThis,'fetch',async(url,init)=>{assert.equal(String(url),'http://api.example.test/api/graphql');calls.push(init!);return json({data:{accountCard:card}});});
  const variables={id:'p1',season:'S2'};
  const result=await client.query({query:PlayerCardDocument,variables});await client.query({query:PlayerCardDocument,variables});
- assert.equal(calls.length,1);assert.deepEqual(JSON.parse(String(calls[0]!.body)),{variables});
+ assert.equal(calls.length,1);assert.deepEqual(JSON.parse(String(calls[0]!.body)),{operationName:'PlayerCard',variables});
  const selected=mapCardAccount(result.data!.accountCard!);assert.equal(selected.awards,undefined);assert.equal(selected.awardCount,14);assert.equal(selected.awardPreview?.[0]?.awardId,'legacy-mvp');assert.equal(selected.cardStats.length,1);
 });
 

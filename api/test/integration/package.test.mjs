@@ -101,10 +101,10 @@ test('Lambda ZIP loads outside the repository and supports direct CORS and rejec
 
     const { handler } = await import(pathToFileURL(path.join(scratch, 'lambda.js')).href);
     const event = (headers = {}) => ({
-      version: '2.0', routeKey: '$default', rawPath: '/api/users/me', rawQueryString: '', headers,
+      version: '2.0', routeKey: '$default', rawPath: '/api/accounts/me', rawQueryString: '', headers,
       requestContext: {
         accountId: '123456789012', apiId: 'package-test', domainName: 'package-test.lambda-url.us-east-1.on.aws', domainPrefix: 'package-test',
-        http: { method: 'GET', path: '/api/users/me', protocol: 'HTTP/1.1', sourceIp: '203.0.113.8', userAgent: 'package-test' },
+        http: { method: 'GET', path: '/api/accounts/me', protocol: 'HTTP/1.1', sourceIp: '203.0.113.8', userAgent: 'package-test' },
         requestId: randomUUID(), routeKey: '$default', stage: '$default', time: new Date().toUTCString(), timeEpoch: Date.now(),
       },
       isBase64Encoded: false,
@@ -128,10 +128,10 @@ test('Lambda ZIP loads outside the repository and supports direct CORS and rejec
       ...event({
         origin: values.PUBLIC_ORIGIN, 'content-type': 'text/plain',
       }),
-      rawPath: '/api/default-position-weights', body: JSON.stringify({ variables: {} }),
+      rawPath: '/api/graphql', body: JSON.stringify({ operationName: 'DefaultPositionWeights', variables: {} }),
       requestContext: {
         ...event().requestContext,
-        http: { ...event().requestContext.http, method: 'POST', path: '/api/default-position-weights' },
+        http: { ...event().requestContext.http, method: 'POST', path: '/api/graphql' },
       },
     };
     for (let call = 0; call < 2; call++) {
@@ -171,14 +171,14 @@ test('Lambda ZIP loads outside the repository and supports direct CORS and rejec
         assert.ok(Buffer.byteLength(response.body, 'utf8') <= 10_000);
         assert.ok(page.nodes.every(row => !Object.hasOwn(row, 'email') && !Object.hasOwn(row, 'pendingImageUrl')));
         const auth = await handler({
-          ...request, rawPath: '/api/users/me',
-          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, path: '/api/users/me' } },
+          ...request, rawPath: '/api/accounts/me',
+          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, path: '/api/accounts/me' } },
         }, context);
         assert.equal(auth.statusCode, 401);
         const graphql = {
-          ...request, rawPath: '/api/default-position-weights', body: JSON.stringify({ variables: {} }),
+          ...request, rawPath: '/api/graphql', body: JSON.stringify({ operationName: 'DefaultPositionWeights', variables: {} }),
           headers: { ...request.headers, origin: process.env.PUBLIC_ORIGIN, 'content-type': 'application/json' },
-          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, method: 'POST', path: '/api/default-position-weights' } },
+          requestContext: { ...request.requestContext, http: { ...request.requestContext.http, method: 'POST', path: '/api/graphql' } },
         };
         for (let call = 0; call < 2; call++) {
           const result = await handler(graphql, context);

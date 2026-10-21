@@ -133,7 +133,7 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl, storage 
         if (!row?.stream_url || !/^https?:\/\//.test(row.stream_url)) throw new HttpError(404, 'not_found');
         return reply.redirect(new URL(row.stream_url).href);
     });
-    app.get('/api/schedule/:id/links/streamUrl', { config: { role: 'admin' } }, async request => {
+    app.get('/api/schedule/:id/links/stream-url', { config: { role: 'admin' } }, async request => {
         const row = await db.client.scheduledMatch.findUnique({ where: { id: parameters(request).id! } });
         if (!row) throw new HttpError(404, 'not_found');
         return textPage(row.stream_url ?? '', `schedule:${row.id}:stream`, pageInput(request).after);

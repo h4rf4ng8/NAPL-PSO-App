@@ -10,3 +10,5 @@ export async function login(transport:(url:string,init?:RequestInit)=>Promise<Re
  const result=await supabase.auth.signInWithPassword({email:'test@example.test',password:'test'});assert.equal(result.error,null);return value;
 }
 export async function clearSession() {localStorage.clear();await supabase.auth.signOut({scope:'local'});mock.restoreAll();}
+
+export const apiTarget = (url: unknown, init?: RequestInit): string => apiPath(url) === '/api/graphql' ? JSON.parse(String(init?.body)).operationName : apiPath(url);

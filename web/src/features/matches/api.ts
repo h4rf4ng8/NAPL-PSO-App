@@ -8,7 +8,7 @@ export const matches={
  saveScheduledMatch:(match:Partial<ScheduledMatch>)=>request<void>('/api/schedule','POST',{...scheduleFields(match),season:match.season}),
  replaceScheduledSeason:(season:string,rows:(Pick<ScheduledMatch,'id'|'week'|'homeTeamId'|'awayTeamId'> & Partial<Omit<ScheduledMatch,'season'|'createdAt'|'updatedAt'>>)[])=>request<void>(`/api/schedule/season/${segment(season)}`,'PUT',{matches:rows.map(scheduleFields)}),
  deleteScheduledMatch:(id:string)=>request<void>(`/api/schedule/${segment(id)}`,'DELETE'),
- importMatch:(body:unknown)=>request<ImportResult>('/api/import-match','POST',body),
+ importMatch:(body:unknown)=>request<ImportResult>('/api/match-imports','POST',body),
 };
 
 export function mapTeamRecords(data: TeamRecordsQuery) {

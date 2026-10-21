@@ -138,20 +138,20 @@ test('REST and GraphQL account reads expose computed values without private colu
     assert.equal(restAlice.privateNote, undefined);
 
     const graph = await app.inject({
-      method: 'POST', url: '/api/leaderboard', headers: { authorization: `Bearer ${alice}` },
-      payload: { variables: {} },
+      method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` },
+      payload: { operationName: 'Leaderboard', variables: {} },
     });
     assert.equal(graph.statusCode, 200, graph.body);
     const result = graph.json<{ data: { leaderboard: { nodes: Array<Record<string, unknown>> }; defaultPositionWeights: Record<string, unknown> } }>();
     const graphAlice = result.data.leaderboard.nodes.find(row => row.username === 'Alice')!;
     assert.deepEqual(graphAlice.ranking, { ...restAlice.ranking as object, __typename: 'AccountRanking' });
     assert.equal(graphAlice.email, undefined);
-    const weights = await app.inject({ method: 'POST', url: '/api/default-position-weights', payload: { variables: {} } });
+    const weights = await app.inject({ method: 'POST', url: '/api/graphql', payload: { operationName: 'DefaultPositionWeights', variables: {} } });
     assert.ok(weights.json().data.defaultPositionWeights.ST);
     const summaryQueries = [...seen].filter(([key]) => key.includes('SELECT a.id') && key.includes('season_stats'));
     assert.equal(summaryQueries.reduce((sum, [, count]) => sum + count, 0), 2, 'one full-population read per REST and GraphQL request');
 
-    const profile = await app.inject('/api/accounts/Alice');
+    const profile = await app.inject('/api/accounts/username/Alice');
     assert.equal(profile.statusCode, 200, profile.body);
     const profileAlice = profile.json<Record<string, unknown>>();
     assert.equal(profileAlice.matches, undefined);

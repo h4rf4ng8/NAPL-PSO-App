@@ -66,7 +66,7 @@ test('vote commands resolve on success and reject server errors', async () => {
   const votes = { gk: 'Keeper', def: 'Defender', cm: 'Midfielder', st: 'Striker' };
   assert.equal(await voting.submitTotwVotes('period/1', votes), undefined);
   assert.deepEqual(calls, [
-    { url: '/api/voting/periods/period%2F1/votes', method: 'PUT', body: votes },
+    { url: '/api/voting/periods/period%2F1/votes/me', method: 'PUT', body: votes },
   ]);
   mock.method(globalThis, 'fetch', async () => Response.json({ error: { code: 'conflict', message: 'Try again.' } }, { status: 409 }));
   await assert.rejects(voting.submitTotwVotes('period/1', votes), error => error instanceof ApiError && error.status === 409 && error.code === 'conflict' && error.message === 'Try again.');

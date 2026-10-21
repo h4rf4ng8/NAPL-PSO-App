@@ -31,17 +31,18 @@ test('voting uses UUID identity, normalized winners, position snapshots, atomic 
     periodId = created.json().id;
     assert.ok(periodId);
     assert.deepEqual(created.json(), { ok: true,id:periodId });
+    await owner.execute(Prisma.sql`UPDATE asl.totw_voting_periods SET opens_at=clock_timestamp()-interval '1 minute',closes_at=clock_timestamp()+interval '1 hour' WHERE id=${periodId}::uuid`);
     const path = `/api/voting/periods/${periodId}`;
     const winnerSlot = ['CB', 'LB', 'RB'].includes(voter.position) ? 'def' : voter.position.toLowerCase();
     const resolved = await call('PATCH', path, { eligiblePlayers: [...Object.values(votes), voter.username], winners: { [winnerSlot]: voter.username } });
     assert.equal(resolved.statusCode, 200, resolved.body);
     assert.deepEqual(resolved.json(), { ok: true,id:periodId });
     assert.equal(await owner.client.totwWinner.count({where:{period_id:periodId,account_id:alice}}),1,'one patch can register a candidate and choose its winner');
-    assert.equal((await call('PUT', `${path}/votes`, votes, alice)).statusCode, 200);
+    assert.equal((await call('PUT', `${path}/votes/me`, votes, alice)).statusCode, 200);
     const goalie = await owner.client.account.findUniqueOrThrow({ where: { username_lower: 'goalie' } });
     await assert.rejects(owner.client.totwVote.create({ data: { period_id: periodId, voter_account_id: alice, position: 'GK', voted_for_account_id: goalie.id } }), { code: 'P2002' });
     await owner.client.account.update({ where: { id: defenderId }, data: { position: 'ST' } });
-    assert.equal((await call('PUT', `${path}/votes`, votes, alice)).statusCode, 200, 'candidate position is fixed when the period is created');
+    assert.equal((await call('PUT', `${path}/votes/me`, votes, alice)).statusCode, 200, 'candidate position is fixed when the period is created');
     const visible = await call('GET', `${path}/votes/me`, undefined, alice);
     assert.equal(visible.statusCode, 200, visible.body);
     assert.equal(visible.json().length, 4, 'one ballot per account regardless of username case');
@@ -70,7 +71,7 @@ test('voting uses UUID identity, normalized winners, position snapshots, atomic 
     const before = await owner.client.totwVote.findMany({ where: { period_id: periodId }, orderBy: { id: 'asc' } });
     await owner.execute(Prisma.sql `ALTER TABLE asl.totw_votes ADD CONSTRAINT voting_queries_reject CHECK (position <> 'CM') NOT VALID`);
     try {
-      const failed = await call('PUT', `${path}/votes`, votes, alice);
+      const failed = await call('PUT', `${path}/votes/me`, votes, alice);
       assert.equal(failed.statusCode, 400, failed.body);
       assert.deepEqual(await owner.client.totwVote.findMany({ where: { period_id: periodId }, orderBy: { id: 'asc' } }), before);
     } finally {
@@ -78,13 +79,13 @@ test('voting uses UUID identity, normalized winners, position snapshots, atomic 
     }
 
     await owner.execute(Prisma.sql `UPDATE asl.totw_voting_periods SET opens_at=clock_timestamp()+interval '30 seconds' WHERE id=${periodId}::uuid`);
-    assert.equal((await call('PUT', `${path}/votes`, votes, alice)).statusCode, 409);
+    assert.equal((await call('PUT', `${path}/votes/me`, votes, alice)).statusCode, 409);
     await owner.execute(Prisma.sql `UPDATE asl.totw_voting_periods SET opens_at=clock_timestamp()-interval '1 minute',closes_at=clock_timestamp()+interval '300 milliseconds' WHERE id=${periodId}::uuid`);
     const lock = await locks.connect();
     try {
       await lock.query('BEGIN');
       await lock.query('SELECT id FROM asl.totw_voting_periods WHERE id=$1 FOR UPDATE', [periodId]);
-      const pending = call('PUT', `${path}/votes`, votes, alice);
+      const pending = call('PUT', `${path}/votes/me`, votes, alice);
       await new Promise(resolve => setTimeout(resolve, 700));
       await lock.query('COMMIT');
       const closed = await pending;

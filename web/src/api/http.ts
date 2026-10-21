@@ -1,9 +1,8 @@
 import type { Session } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { graphqlEndpoints } from '@napl/contracts';
+import { graphqlEndpoint } from '@napl/contracts';
 import { apiOrigin, sessionUserId, sessionVersion, supabase } from '../auth/client';
 
-const readEndpoints = new Set<string>(Object.values(graphqlEndpoints));
 
 export class ApiError extends Error {
   constructor(public status:number, public code:string, message:string) { super(message); }
@@ -29,7 +28,7 @@ const errorResponseSchema = z.object({
 export async function request<T>(path:string, method='GET', body?:unknown, signal?:AbortSignal):Promise<T> {
   if(!path.startsWith('/api/'))throw new Error('Invalid API path');
   const payload=JSON.stringify(body);
-  const graphql=readEndpoints.has(path);
+  const graphql=path === graphqlEndpoint;
   const mutates=!graphql&&!['GET','HEAD'].includes(method);
   const version = sessionVersion();
   const userId = sessionUserId();

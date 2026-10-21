@@ -1,3 +1,4 @@
+import { apiTarget } from './auth-fixture';
 import assert from 'node:assert/strict';
 import { after, afterEach, before, mock, test } from 'node:test';
 import React, { createElement } from 'react';
@@ -21,9 +22,9 @@ afterEach(async () => {
   await resetClient();
 });
 const savedPage=(value:unknown)=>({nodes:value===null?[{index:0,key:null,value:null}]:Object.entries(value as Record<string,unknown>).map(([key,value],index)=>({index,key,value})),totalCount:value===null?1:Object.keys(value as object).length,pageInfo:{endCursor:null,hasNextPage:false}});
-const previewPath = '/api/account-card-previews';
+const previewPath = 'AccountCardPreviews';
 const savedPath = '/api/settings/position_weights';
-const defaultPath = '/api/default-position-weights';
+const defaultPath = 'DefaultPositionWeights';
 const text = () => renderer!.root.findAll(node => typeof node.type === 'string')
   .flatMap(node => node.children.filter(child => typeof child === 'string')).join(' ');
 const flush = async () => { await act(async () => { await new Promise<void>(resolve => setImmediate(resolve)); }); };
@@ -34,7 +35,7 @@ async function mount() {
 function transport(saved: () => Response | Promise<Response>, previews = () => Promise.resolve(Response.json({ data: { accountCardPreviews: [] } }))) {
   const calls: string[] = [];
   mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
-    const path = String(input).replace('http://api.example.test','');
+    const path = apiTarget(input, init);
     calls.push(path);
     assert.equal(init?.method, path === savedPath ? 'GET' : 'POST');
     if (path !== savedPath) assert.equal((init?.headers as Record<string, string>)['Apollo-Require-Preflight'], 'true');

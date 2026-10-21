@@ -12,7 +12,7 @@ import type { Database } from '../../plugins/db/client.js';
 import { string, array, object } from '../../plugins/db/records.js';
 import { accountDto } from '../accounts/dto.js';
 import { teamDto, type TeamRecord } from './dto.js';
-import { listTeams, getTeam, needTeam, getAccount, needAccount, findAccount, hasOwnedTeam, createTeam, updateTeam, removeTeam, teamAccounts, updateAccountTeam, currentSeason, createTransfer, teamFields, setTeamSeasons, createInvitation, respondInvitation } from './queries.js';
+import { getTeam, needTeam, getAccount, needAccount, findAccount, hasOwnedTeam, createTeam, updateTeam, removeTeam, teamAccounts, updateAccountTeam, currentSeason, createTransfer, teamFields, setTeamSeasons, createInvitation, respondInvitation } from './queries.js';
 import { ensureSeason } from '../settings/queries.js';
 import { checkBlockedName } from '../name-validation.js';
 import { pathSegment, detailUrl, page, pageInput, requireRevision, textPage } from '../payload/page.js';
@@ -78,7 +78,7 @@ const summary = (team: ReturnType<typeof teamDto>) => ({ id: team.id, name: team
     createdAt: team.createdAt, reviewedAt: team.reviewedAt, reviewedBy: team.reviewedBy,
     memberCount: team.members.length, invitationCount: team.invitations.length, seasonCount: team.seasons.length,
 });
-const editor = (row: TeamRecord, storage?: ImageStorage) => ({ ...teamDto(row),
+const editor = (row: TeamRecord, storage?: ImageStorage) => ({ ...teamDto(row, true),
     logoUrl: (row.logo_url?.startsWith('data:image/') || (row.logo_url && storage?.reference(row.logo_url)?.bucket === PRIVATE_BUCKET)) ? teamDto(row).logoUrl : row.logo_url,
     logoStoredImage: Boolean(row.logo_url?.startsWith('data:image/') || (row.logo_url && storage?.reference(row.logo_url))),
 });
@@ -89,39 +89,25 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl, storage }:
         request.resource = { type: 'team', id: row.id };
         return row;
     };
-    app.get('/api/teams', {
-        config: {
-            public: true
-        }
-    }, async (request) => {
-        const self = request.identity ? await getAccount(db, request.identity.id) : null;
-        const filters = z.object({ scope: z.enum(['mine']).optional(), status: z.enum(['approved', 'pending', 'rejected']).optional(), search: z.string().max(100).optional() }).parse(request.query);
-        if (filters.scope === 'mine') actor(request);
-        const teams = await listTeams(db, { id: self?.id, admin: isAdmin(request) });
-        const rows = teams.filter(team => (!filters.status || team.status === filters.status)
-            && (!filters.search || `${team.name} ${team.tag}`.toLowerCase().includes(filters.search.toLowerCase()))
-            && (filters.scope !== 'mine' || team.ownerUsername === self?.username || team.members.includes(self?.username ?? '') || team.invitations.some(invitation => invitation.username === self?.username)));
-        return page(rows.map(team => ({ ...summary(team), viewerInvitation: team.invitations.find(invitation => invitation.username === self?.username)?.status ?? null,
-            ...((isAdmin(request) || team.ownerUsername === self?.username) && { editorUrl: detailUrl(`/api/teams/${pathSegment(team.id)}/editor`, team) }),
-        })), `teams:${JSON.stringify(filters)}:${request.identity?.id ?? 'anonymous'}`, pageInput(request));
-    });
     app.get('/api/teams/:id', {
         config: {
             public: true
         }
     }, async (request) => {
         const source = await visibleTeam(request);
-        const team = teamDto(source);
+        const privateFields = isAdmin(request) || source.owner_account_id === request.identity?.id;
+        const team = teamDto(source, privateFields);
         return { ...summary(team), formation: team.formation, lineupUrl: detailUrl(`/api/teams/${pathSegment(team.id)}/lineup`, team.lineup),
             viewerInvitation: source.pending_members.find(invitation => invitation.accountId === request.identity?.id)?.status ?? null,
             ...((isAdmin(request) || source.owner_account_id === request.identity?.id) && { editorUrl: detailUrl(`/api/teams/${pathSegment(team.id)}/editor`, team) }),
-            descriptionUrl: `/api/teams/${pathSegment(team.id)}/text/description`, rejectionReasonUrl: `/api/teams/${pathSegment(team.id)}/text/rejectionReason`,
+            descriptionUrl: `/api/teams/${pathSegment(team.id)}/text/description`,
+            ...(privateFields && { rejectionReasonUrl: `/api/teams/${pathSegment(team.id)}/text/rejectionReason` }),
         };
     });
     app.get('/api/teams/:id/editor', async request => {
         const row = await visibleTeam(request);
         if (!isAdmin(request) && row.owner_account_id !== actor(request).id) throw new HttpError(404, 'not_found');
-        requireRevision(teamDto(row), request);
+        requireRevision(teamDto(row, true), request);
         return fieldPage(editor(row, storage), `/api/teams/${pathSegment(row.id)}/editor`, request);
     });
     app.get('/api/teams/:id/editor/fields/:field', async request => {
@@ -140,7 +126,10 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl, storage }:
     });
     app.get('/api/teams/:id/text/:field', { config: { public: true } }, async request => {
         const field = z.enum(['description', 'rejectionReason']).parse(parameters(request).field);
-        const team = teamDto(await visibleTeam(request));
+        const source = await visibleTeam(request);
+        const privateFields = isAdmin(request) || source.owner_account_id === request.identity?.id;
+        if (field === 'rejectionReason' && !privateFields) throw new HttpError(404, 'not_found');
+        const team = teamDto(source, privateFields);
         return textPage(team[field] ?? '', `team:${team.id}:${field}`, pageInput(request).after);
     });
     app.get('/api/teams/:id/:collection', { config: { public: true } }, async request => {

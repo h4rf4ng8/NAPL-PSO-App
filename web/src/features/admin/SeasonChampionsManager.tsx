@@ -1,3 +1,6 @@
+import { usePageCursor } from '../../hooks/use-page-cursor';
+import { useQuery } from '@apollo/client/react';
+import { TeamSummariesDocument } from '../../api/generated/graphql';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { request } from '../../api/http';
@@ -19,7 +22,12 @@ import { C } from '../../theme/theme';
 // SeasonChampions Manager
 export const SeasonChampionsManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
   const [teamSearch,setTeamSearch] = useState('');
-  const teamPage = useRestPage<TeamSummary>('/api/teams?status=approved&search='+encodeURIComponent(teamSearch));
+  const cursor = usePageCursor(teamSearch);
+  const teamQuery = useQuery(TeamSummariesDocument, { variables: { scope: null, status: 'approved', search: teamSearch, after: cursor.after } });
+  const teamPage = { data: teamQuery.data && { ...teamQuery.data.teamSummaries, nodes: teamQuery.data.teamSummaries.nodes.map(team => ({ ...team, color: team.color ?? '', createdAt: team.createdAt ?? 0 })) }, loading: teamQuery.loading, error: teamQuery.error?.message,
+    canPrevious: cursor.canPrevious, previous: cursor.previous,
+    next: () => { if (teamQuery.data?.teamSummaries.pageInfo.hasNextPage) cursor.next(teamQuery.data.teamSummaries.pageInfo.endCursor); },
+  };
   const [savedTeams,setSavedTeams] = useState<TeamSummary[]>([]);
   const allTeams = [...savedTeams,...(teamPage.data?.nodes ?? []).filter(team=>savedTeams.every(saved=>saved.id!==team.id))];
   const [loaded,setLoaded] = useState(false);

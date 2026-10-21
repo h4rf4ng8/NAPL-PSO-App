@@ -1,14 +1,15 @@
+import { usePageCursor } from '../../hooks/use-page-cursor';
+import type { TeamSummary as Team } from '../teams/models';
+import { useQuery } from '@apollo/client/react';
+import { TeamSummariesDocument } from '../../api/generated/graphql';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
-import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { TeamSelect } from '../teams/TeamSelect';
-import { segment } from '../../api/http';
 import { matches as matchApi } from './api';
 
 import type { ScheduledMatch } from './models';
-import type { TeamSummary as Team } from '../teams/models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { generateRoundRobinSchedule } from '../../utils/league';
@@ -24,7 +25,13 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
     return `Season ${next}`;
   });
   const [teamSearch, setTeamSearch] = useState('');
-  const teamPage = useRestPage<Team>(`/api/teams?status=approved&search=${segment(teamSearch)}`);
+  const cursor = usePageCursor(teamSearch);
+  const teamQuery = useQuery(TeamSummariesDocument, { variables: { scope: null, status: 'approved', search: teamSearch, after: cursor.after } });
+  const teamPage = { data: teamQuery.data && { ...teamQuery.data.teamSummaries, nodes: teamQuery.data.teamSummaries.nodes.map(team => ({ ...team, color: team.color ?? '', createdAt: team.createdAt ?? 0 })) }, loading: teamQuery.loading, error: teamQuery.error?.message,
+    restart: () => { cursor.restart(); if (!cursor.after) void teamQuery.refetch().catch(() => {}); },
+    canPrevious: cursor.canPrevious, previous: cursor.previous,
+    next: () => { if (teamQuery.data?.teamSummaries.pageInfo.hasNextPage) cursor.next(teamQuery.data.teamSummaries.pageInfo.endCursor); },
+  };
   const approvedTeams = teamPage.data?.nodes ?? [];
   const [selectedNames, setSelectedNames] = useState<Record<string,string>>({});
   const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);

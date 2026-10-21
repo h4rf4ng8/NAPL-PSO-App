@@ -35,6 +35,8 @@
     "@types/aws-lambda": "8.10.161",
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "esbuild": "0.25.12",
     "prisma": "7.10.0",
     "tsx": "^4.20.0",

@@ -1,7 +1,9 @@
+import { usePageCursor } from '../../hooks/use-page-cursor';
+import { useQuery } from '@apollo/client/react';
+import { TeamSummariesDocument } from '../../api/generated/graphql';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { readText } from '../../api/page';
-import type { TeamSummary } from '../teams/models';
 import { User, Users } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
@@ -21,7 +23,12 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
   const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
   const allPlayers = playerPage.data?.nodes ?? [];
   const [teamSearch,setTeamSearch] = useState('');
-  const teamPage = useRestPage<TeamSummary>('/api/teams?search='+encodeURIComponent(teamSearch));
+  const cursor = usePageCursor(teamSearch);
+  const teamQuery = useQuery(TeamSummariesDocument, { variables: { scope: null, status: null, search: teamSearch, after: cursor.after } });
+  const teamPage = { data: teamQuery.data && { ...teamQuery.data.teamSummaries, nodes: teamQuery.data.teamSummaries.nodes.map(team => ({ ...team, color: team.color ?? '', createdAt: team.createdAt ?? 0 })) }, loading: teamQuery.loading, error: teamQuery.error?.message,
+    canPrevious: cursor.canPrevious, previous: cursor.previous,
+    next: () => { if (teamQuery.data?.teamSummaries.pageInfo.hasNextPage) cursor.next(teamQuery.data.teamSummaries.pageInfo.endCursor); },
+  };
   const allTeams = teamPage.data?.nodes ?? [];
   const pendingPage = useRestPage<PositionRequest & {reasonUrl:string}>('/api/position-requests?status=pending');
   const pendingPosRequests = pendingPage.data?.nodes ?? [];

@@ -1,10 +1,11 @@
+import type { GraphQLOperationName } from '@napl/contracts';
 import type { FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { APIGatewayProxyEventV2 } from 'aws-lambda';
 import { GatewayError } from './auth/errors.js';
 
 declare module 'fastify' {
-    interface FastifyRequest { awsLambda?: { event?: APIGatewayProxyEventV2 }; }
+    interface FastifyRequest { operationName: GraphQLOperationName | null; awsLambda?: { event?: APIGatewayProxyEventV2 }; }
 }
 
 export const params = (request: FastifyRequest) => z.record(z.string(), z.string()).parse(request.params);

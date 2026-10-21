@@ -89,11 +89,11 @@ try {
   assert.equal(typeof accountPage.pageInfo.hasNextPage, 'boolean');
   assert.ok(rows.some(row => row.id === '11111111-1111-4111-8111-111111111111'));
   assert.ok(rows.every(row => !Object.hasOwn(row, 'email')));
-  await invoke('protected route rejects forged identity headers', event('/api/users/me', { headers: { authorization: 'Bearer forged', 'x-user-role': 'super_admin' } }), 401);
+  await invoke('protected route rejects forged identity headers', event('/api/accounts/me', { headers: { authorization: 'Bearer forged', 'x-user-role': 'super_admin' } }), 401);
   await invoke('mutation requires bearer', event('/api/teams', { method: 'POST', headers: { 'content-type': 'application/json' }, body: {} }), 401);
   const auth = { origin, 'content-type': 'application/json', 'apollo-require-preflight': 'true' };
-  const overview = await invoke('base64 GraphQL preserves public overview without private account data', event('/api/league-overview', {
-    method: 'POST', headers: auth, base64: true, body: { variables: {} },
+  const overview = await invoke('base64 GraphQL preserves public overview without private account data', event('/api/graphql', {
+    method: 'POST', headers: auth, base64: true, body: { operationName: 'LeagueOverview', variables: {} },
   }), 200);
   const payload = JSON.parse(overview.body);
   assert.equal(payload.errors, undefined);
@@ -103,14 +103,14 @@ try {
   assert.ok(Array.isArray(payload.data.leagueOverview.tickerNews));
   assert.ok(Buffer.byteLength(overview.body, 'utf8') <= 10_000);
   assert.equal(overview.cookies, undefined);
-  const protectedRead = await invoke('base64 protected GraphQL requires bearer', event('/api/team-standings', {
-    method: 'POST', headers: auth, base64: true, body: { variables: {} },
+  const protectedRead = await invoke('base64 protected GraphQL requires bearer', event('/api/graphql', {
+    method: 'POST', headers: auth, base64: true, body: { operationName: 'TeamStandings', variables: {} },
   }), 401);
   const denied = JSON.parse(protectedRead.body);
   assert.deepEqual(denied, { error: 'authentication_required', message: 'authentication_required' });
 
   const offline = { ...environment, DATABASE_URL: 'postgresql://api_test:napl_test_only@db:1/napl_test' };
-  await invoke('missing bearer fails closed before database access', event('/api/users/me'), 401, offline);
+  await invoke('missing bearer fails closed before database access', event('/api/accounts/me'), 401, offline);
   const dbUnavailable = await invoke('database failure returns controlled 503', event('/api/accounts'), 503, offline);
   assert.equal(JSON.parse(dbUnavailable.body).error, 'service_unavailable');
 

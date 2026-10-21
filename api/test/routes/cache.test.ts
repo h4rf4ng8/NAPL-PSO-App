@@ -85,7 +85,7 @@ test('current account returns null for a missing row and rejects absent authenti
   assert.equal(calls, 2, 'one population read and one weighting read');
   const app = createApp({ db, verify: async id => ({ id, sessionId: id, claims: { sub: id } }) });
   try {
-    const response = await app.inject('/api/users/me');
+    const response = await app.inject('/api/accounts/me');
     assert.equal(response.statusCode, 401);
     assert.equal(response.json().error, 'authentication_required');
     assert.equal(calls, 2);

@@ -40,14 +40,14 @@ async function main() {
   async function request() {
     const started = performance.now();
     try {
-      const response = await fetch(new URL('/api/team-standings', base), {
+      const response = await fetch(new URL('/api/graphql', base), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
           authorization: `Bearer ${accessToken}`,
           'apollo-require-preflight': 'true',
         },
-        body: JSON.stringify({ variables: {} }),
+        body: JSON.stringify({ operationName: 'TeamStandings', variables: {} }),
         signal: AbortSignal.timeout(timeoutMs),
       });
       let body = null;

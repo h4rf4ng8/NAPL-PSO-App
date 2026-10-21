@@ -52,7 +52,7 @@ test('native subscriptions react to cache writes and refetch is a one-shot netwo
 test('failed commands preserve cached reads; successful commands refetch each active query once', async () => {
   let reads = 0;
   mock.method(globalThis, 'fetch', async (url, init) => {
-    if (String(url).replace('http://api.example.test','') === '/api/team-records') return response(++reads);
+    if (String(url).replace('http://api.example.test','') === '/api/graphql') return response(++reads);
     return init?.method === 'DELETE' ? Response.json({ error: 'forbidden' }, { status: 403 }) : new Response(null, { status: 204 });
   });
   const { ready, results } = watch();
@@ -69,7 +69,7 @@ test('upload credentials leave active reads intact until the image save succeeds
   let reads = 0;
   mock.method(globalThis, 'fetch', async url => {
     const path = String(url).replace('http://api.example.test', '');
-    return path === '/api/team-records' ? response(++reads) : Response.json({ ok: true });
+    return path === '/api/graphql' ? response(++reads) : Response.json({ ok: true });
   });
   const { ready, results } = watch();
   await ready;
@@ -84,7 +84,7 @@ test('upload credentials leave active reads intact until the image save succeeds
 test('a successful command remains successful when its refetch fails and query subscribers see the error', async () => {
   let reads = 0;
   mock.method(globalThis, 'fetch', async url => {
-    if (String(url).replace('http://api.example.test','') !== '/api/team-records') return Response.json({ saved: true });
+    if (String(url).replace('http://api.example.test','') !== '/api/graphql') return Response.json({ saved: true });
     return ++reads === 1 ? response(1) : Response.json({ errors: [{ message: 'refresh failed' }] });
   });
   const { ready, results } = watch();
@@ -99,7 +99,7 @@ test('successful commands cancel old reads and their late responses cannot overw
   const started = Promise.withResolvers<void>();
   let reads = 0;
   mock.method(globalThis, 'fetch', async url => {
-    if (String(url).replace('http://api.example.test','') !== '/api/team-records') return new Response(null, { status: 204 });
+    if (String(url).replace('http://api.example.test','') !== '/api/graphql') return new Response(null, { status: 204 });
     if (++reads === 1) { started.resolve(); return late.promise; }
     return response(2);
   });
@@ -122,7 +122,7 @@ test('overlapping successful writes keep the final refetch and both command resu
   let reads = 0;
   let writes = 0;
   mock.method(globalThis, 'fetch', async url => {
-    if (String(url).replace('http://api.example.test','') !== '/api/team-records') return commands[writes++]!.promise;
+    if (String(url).replace('http://api.example.test','') !== '/api/graphql') return commands[writes++]!.promise;
     if (++reads === 2) { firstStarted.resolve(); return firstRefetch.promise; }
     return response(reads);
   });

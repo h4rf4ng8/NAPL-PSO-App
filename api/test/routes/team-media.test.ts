@@ -104,3 +104,41 @@ test('database team media preserves approved/hidden owner/admin/invitee access a
     } finally { await app.close(); await db.close(); }
   }
 });
+
+test('moderation text is owner/admin-only across descriptors, HEAD, continuation and legacy projections', async t => {
+  const { payloadFixture, fixtureUser } = await import('../payload-fixture.js');
+  const { listTeams } = await import('../../routes/teams/queries.js');
+  const f = payloadFixture(), row = f.teams[0]!;
+  row.owner_account_id = fixtureUser;
+  row.status = 'approved';
+  row.rejection_reason = 'Private moderation note. '.repeat(1000);
+  Object.assign(f.db.client.team, { findUnique: async () => row });
+  Object.assign(f.db.client.teamJoinRequest, { findMany: async () => [{ team_id: row.id, account_id: invitee, status: 'declined', reviewed_at: null }] });
+  const original = f.db.query;
+  const roles = new Map([[admin, 'admin'], [outsider, 'super_admin']]);
+  f.db.query = (async sql => {
+    if (!sql.sql.includes('FROM auth_gateway.user_roles')) return original(sql);
+    const role = roles.get(String(sql.values[0]));
+    return role ? [{role}] : [];
+  }) as Database['query'];
+  const app = createApp({ db: f.db, verify }); t.after(() => app.close());
+  const route = `/api/teams/${row.id}`, text = route + '/text/rejectionReason';
+  const first = await app.inject({url:text,headers:headers(fixtureUser)});
+  assert.equal(first.statusCode,200,first.body);
+  const cursor = first.json().pageInfo.endCursor;
+  assert.ok(first.json().pageInfo.hasNextPage);
+  for (const user of [undefined,invitee,'66666666-6666-4666-8666-666666666666']) {
+    const detail=await app.inject({url:route,headers:headers(user)});
+    assert.equal(detail.statusCode,200,detail.body);
+    assert.equal(detail.json().rejectionReasonUrl,undefined);
+    for(const method of ['GET','HEAD'] as const) for(const url of [text,text+'?after='+encodeURIComponent(cursor)]) assert.equal((await app.inject({method,url,headers:headers(user)})).statusCode,404);
+    const legacy=await listTeams(f.db,{id:user,admin:false});
+    assert.equal(legacy.find(team=>team.id===row.id)?.rejectionReason,undefined);
+  }
+  for(const user of [fixtureUser,admin,outsider]) {
+    const detail=await app.inject({url:route,headers:headers(user)});
+    assert.equal(detail.json().rejectionReasonUrl,text);
+    assert.equal((await app.inject({url:text,headers:headers(user)})).statusCode,200);
+    assert.equal((await app.inject({url:detail.json().editorUrl,headers:headers(user)})).statusCode,200,'private editor revision must match detail');
+  }
+});

@@ -1,6 +1,6 @@
 import { ApolloLink } from '@apollo/client';
 import { Observable } from 'rxjs';
-import { graphqlEndpoints } from '@napl/contracts';
+import { graphqlEndpoint, graphqlOperationNames } from '@napl/contracts';
 import { request } from './http';
 import { mapCurrentCard, mapCardAccount, mapAccountMatchPage, mapAccountOpponents, mapAccountCardPreviews, mapDefaultPositionWeights } from '../features/accounts/api';
 import { accountStatsSchema, accountRankingSchema } from '@napl/contracts/accounts';
@@ -9,7 +9,7 @@ import type { LeagueOverviewQuery, LeaderboardQuery, PlayerCardQuery, HomeNewsQu
 import { newsSummarySchema } from '../features/content/models';
 import { mapTeamRecords } from '../features/matches/api';
 
-const endpoints = new Map<string, string>(Object.entries(graphqlEndpoints));
+const operations = new Set<string>(graphqlOperationNames);
 const validate = {
   LeagueOverview: (data: LeagueOverviewQuery) => { if (data.leagueOverview.me) mapCurrentCard(data.leagueOverview.me); },
   Leaderboard: (data: LeaderboardQuery) => { for (const row of data.leaderboard.nodes) { accountStatsSchema.parse(row.stats); accountRankingSchema.parse(row.ranking); } },
@@ -24,13 +24,13 @@ const validate = {
 
 // Named reads use Apollo preflight protection and share session renewal with REST.
 export const gatewayLink = new ApolloLink(operation => new Observable(subscriber => {
-  const path = endpoints.get(operation.operationName ?? '');
-  if (!path) {
+  if (!operations.has(operation.operationName ?? '')) {
     subscriber.error(new Error(`Unknown GraphQL operation: ${operation.operationName}`));
     return;
   }
   const controller = new AbortController();
-  void request<ApolloLink.Result>(path, 'POST', {
+  void request<ApolloLink.Result>(graphqlEndpoint, 'POST', {
+    operationName: operation.operationName,
     variables: operation.variables,
   }, controller.signal).then(result => {
     // Decode opaque JSON before Apollo can notify subscribers or write the cache.

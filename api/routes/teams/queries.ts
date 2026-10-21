@@ -24,7 +24,7 @@ async function teamRecords(database: Database, teams: Team[]): Promise<TeamRecor
 export async function listTeams(database: Database, viewer: { id?: string; admin: boolean }) {
   const rows = await teamRecords(database, await database.client.team.findMany({ orderBy: { id: 'asc' } }));
   // Invitations remain visible after a response so applicants can see the review.
-  return rows.filter(row => row.status === 'approved' || viewer.admin || row.owner_account_id === viewer.id || row.pending_members.some(invitation => invitation.accountId === viewer.id)).map(row => teamDto(row));
+  return rows.filter(row => row.status === 'approved' || viewer.admin || row.owner_account_id === viewer.id || row.pending_members.some(invitation => invitation.accountId === viewer.id)).map(row => teamDto(row, Boolean(viewer.admin || row.owner_account_id === viewer.id)));
 }
 
 export async function getTeam(database: Database, id: string, lock = false): Promise<TeamRecord | null> {

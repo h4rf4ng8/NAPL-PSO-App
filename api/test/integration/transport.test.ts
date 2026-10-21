@@ -74,7 +74,7 @@ const lambdaContext = () => ({ callbackWaitsForEmptyEventLoop: true }) as Contex
 test('CORS preflight and rejected origins run before JWT or database access', async () => {
   const h = harness();
   try {
-    const response = await h.app.inject({ method: 'OPTIONS', url: '/api/users/me', headers: {
+    const response = await h.app.inject({ method: 'OPTIONS', url: '/api/accounts/me', headers: {
       origin: config.PUBLIC_ORIGIN, 'access-control-request-method': 'POST',
       'access-control-request-headers': 'Authorization,Content-Type,Apollo-Require-Preflight,Idempotency-Key', authorization: 'Bearer invalid',
     } });
@@ -83,7 +83,7 @@ test('CORS preflight and rejected origins run before JWT or database access', as
     assert.equal(response.headers['access-control-allow-credentials'], undefined);
     assert.match(String(response.headers['access-control-allow-headers']), /Authorization/);
     for (const origin of ['https://attacker.example', `${config.PUBLIC_ORIGIN}/`, 'null']) {
-      const denied = await h.app.inject({ method: 'POST', url: '/api/default-position-weights', headers: { origin, authorization: 'Bearer good' }, payload: { variables: {} } });
+      const denied = await h.app.inject({ method: 'POST', url: '/api/graphql', headers: { origin, authorization: 'Bearer good' }, payload: { operationName: 'DefaultPositionWeights', variables: {} } });
       assert.equal(denied.statusCode, 403);
       assert.equal(denied.json().error, 'origin_forbidden');
     }
@@ -95,12 +95,12 @@ test('only bearer JWT identity is accepted and no-Origin requests use normal aut
   const h = harness();
   try {
     assert.equal((await h.app.inject('/api/accounts')).statusCode, 200);
-    const forged = await h.app.inject({ url: '/api/users/me', headers: {
+    const forged = await h.app.inject({ url: '/api/accounts/me', headers: {
       cookie: 'napl-access=good', 'x-user-id': userId, 'x-session-id': sessionId, 'x-user-role': 'super_admin',
     } });
     assert.equal(forged.statusCode, 401);
     for (const authorization of ['Basic good', 'Bearer', 'Bearer good,bad', 'Bearer invalid', 'Bearer expired']) {
-      const denied = await h.app.inject({ url: '/api/users/me', headers: { authorization } });
+      const denied = await h.app.inject({ url: '/api/accounts/me', headers: { authorization } });
       assert.equal(denied.statusCode, 401, denied.body);
       assert.equal(denied.json().error.code, authorization === 'Bearer expired' ? 'access_expired' : 'access_invalid');
     }
@@ -116,7 +116,7 @@ test('fixed GraphQL HTTP uses Apollo native CSRF, strict envelopes and safe cach
   const h = harness();
   try {
     for (const extra of [{}, { 'apollo-require-preflight': 'true' }]) {
-      const response = await h.app.inject({ method: 'POST', url: '/api/default-position-weights', headers: extra, payload: { variables: {} } });
+      const response = await h.app.inject({ method: 'POST', url: '/api/graphql', headers: extra, payload: { operationName: 'DefaultPositionWeights', variables: {} } });
       assert.equal(response.statusCode, 200, response.body);
       assert.ok(response.json().data.defaultPositionWeights);
       assert.equal(response.headers['set-cookie'], undefined);
@@ -124,9 +124,9 @@ test('fixed GraphQL HTTP uses Apollo native CSRF, strict envelopes and safe cach
     }
     const reads = h.counts().databaseReads;
     for (const preflight of [undefined, '', 'true']) {
-      const response = await h.app.inject({ method: 'POST', url: '/api/default-position-weights',
+      const response = await h.app.inject({ method: 'POST', url: '/api/graphql',
         headers: { 'content-type': 'text/plain', ...(preflight !== undefined && { 'apollo-require-preflight': preflight }) },
-        payload: JSON.stringify({ variables: {} }),
+        payload: JSON.stringify({ operationName: 'DefaultPositionWeights', variables: {} }),
       });
       assert.equal(response.statusCode, 400, response.body);
       assert.equal(response.json().errors[0].extensions.code, preflight ? 'invalid_request' : 'BAD_REQUEST');
@@ -138,13 +138,13 @@ test('fixed GraphQL HTTP uses Apollo native CSRF, strict envelopes and safe cach
 test('authenticated fixed reads require a valid bearer; public reads remain anonymous', async () => {
   const h = harness();
   try {
-    for (const url of ['/api/team-standings', '/api/team-records']) {
-      assert.equal((await h.app.inject({ method: 'POST', url, payload: { variables: {} } })).statusCode, 401);
-      const accepted = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer good' }, payload: { variables: {} } });
+    for (const name of ['TeamStandings', 'TeamRecords']) {
+      assert.equal((await h.app.inject({ method: 'POST', url: '/api/graphql', payload: { operationName: name, variables: {} } })).statusCode, 401);
+      const accepted = await h.app.inject({ method: 'POST', url: '/api/graphql', headers: { authorization: 'Bearer good' }, payload: { operationName: name, variables: {} } });
       assert.equal(accepted.statusCode, 200, accepted.body);
     }
-    for (const url of ['/api/team-standings', '/api/team-records']) {
-      const denied = await h.app.inject({ method: 'POST', url, headers: { authorization: 'Bearer expired' }, payload: { variables: {} } });
+    for (const name of ['TeamStandings', 'TeamRecords']) {
+      const denied = await h.app.inject({ method: 'POST', url: '/api/graphql', headers: { authorization: 'Bearer expired' }, payload: { operationName: name, variables: {} } });
       assert.equal(denied.statusCode, 401);
       assert.equal(denied.json().error.code, 'access_expired');
     }
@@ -207,7 +207,7 @@ test('warm handlers read committed account changes on later invocations', async 
 test('GraphQL expired-bearer retry performs no domain reads until renewed and executes once', async () => {
   const h = harness();
   try {
-    const command = { method: 'POST' as const, url: '/api/leaderboard', payload: { variables: {} } };
+    const command = { method: 'POST' as const, url: '/api/graphql', payload: { operationName: 'Leaderboard', variables: {} } };
     const rejected = await h.app.inject({ ...command, headers: { authorization: 'Bearer expired' } });
     assert.equal(rejected.statusCode, 401); assert.equal(rejected.json().error.code, 'access_expired');
     assert.equal(h.domainReads(), 0);
@@ -225,15 +225,15 @@ test('actual HTTP preserves Apollo context, CSRF, envelope and start/stop lifecy
   const address = await h.app.listen({ host: '127.0.0.1', port: 0 });
   try {
     assert.equal(starts, 1);
-    const response = await fetch(`${address}/api/leaderboard`, { method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer good', origin: config.PUBLIC_ORIGIN }, body: JSON.stringify({ variables: {} }),
+    const response = await fetch(`${address}/api/graphql`, { method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: 'Bearer good', origin: config.PUBLIC_ORIGIN }, body: JSON.stringify({ operationName: 'Leaderboard', variables: {} }),
     });
     assert.equal(response.status, 200); assert.ok((await response.json()).data.leaderboard.nodes);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal(response.headers.get('access-control-allow-origin'), config.PUBLIC_ORIGIN);
-    const denied = await fetch(`${address}/api/default-position-weights`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
+    const denied = await fetch(`${address}/api/graphql`, { method: 'POST', headers: { 'content-type': 'text/plain' }, body: '{}' });
     assert.equal(denied.status, 400); assert.equal((await denied.json()).errors[0].extensions.code, 'BAD_REQUEST');
-    const malformed = await fetch(`${address}/api/default-position-weights`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ admins { userId } }', variables: {} }) });
+    const malformed = await fetch(`${address}/api/graphql`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ admins { userId } }', variables: {} }) });
     assert.equal(malformed.status, 400); assert.equal((await malformed.json()).errors[0].extensions.code, 'invalid_request');
   } finally { await h.app.close(); }
   assert.equal(stops, 1);

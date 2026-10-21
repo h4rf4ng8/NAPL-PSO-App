@@ -1,7 +1,7 @@
 import { Activity, ChevronLeft, ChevronRight, Shield } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Account } from '../accounts/models';
-import { EmptyState, ResultBadge } from '../../components/Ui';
+import { EmptyState, ResultBadge } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { useQuery } from '@apollo/client/react';
 import { AccountMatchesDocument } from '../../api/generated/graphql';

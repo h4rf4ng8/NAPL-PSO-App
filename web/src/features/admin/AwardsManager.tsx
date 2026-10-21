@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
 import type { Account, PlayerAward } from '../accounts/models';
 import { AWARD_BY_ID, AWARD_TYPES, AwardIcon } from '../../components/Icons';
-import { EmptyState } from '../../components/Ui';
+import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { AWARD } from '@napl/contracts/accounts';
 

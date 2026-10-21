@@ -5,7 +5,7 @@ import { accounts as accountApi } from '../accounts/api';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Team } from '../teams/models';
-import { EmptyState } from '../../components/Ui';
+import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { isSuperAdmin } from '../../utils/league';
 

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { content as contentApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Article } from './models';
-import { ModalShell } from '../../components/Ui';
+import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { autoExcerpt, readTime, renderArticleBody, slugify } from '../../utils/content';
 import { isAdmin } from '../../utils/league';

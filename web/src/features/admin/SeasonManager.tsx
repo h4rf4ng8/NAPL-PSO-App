@@ -2,7 +2,7 @@ import { Calendar, Clock, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
-import { EmptyState } from '../../components/Ui';
+import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
 
 

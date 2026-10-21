@@ -4,7 +4,8 @@ import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Champions } from './models';
 import type { Team } from '../teams/models';
-import { Dialog, EmptyState } from '../../components/Ui';
+import { Dialog } from '../../components/Dialog';
+import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
 
 

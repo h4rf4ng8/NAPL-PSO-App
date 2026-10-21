@@ -3,7 +3,7 @@ import type { Account } from '../accounts/models';
 import type { Team } from '../teams/models';
 import { AWARD_BY_ID, AwardIcon } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
-import { Metric, RecordBox } from '../../components/Ui';
+import { Metric, RecordBox } from '../../components/Display';
 import { C } from '../../theme/theme';
 import { getStatsForSeason } from '../../utils/rankings';
 

@@ -4,5 +4,6 @@
 @import './styles/layout.css';
 @import './styles/components/chrome.css';
 @import './styles/components/cards.css';
+@import './styles/components/dialogs.css';
 @import './styles/components/formations.css';
 @import './styles/motion.css';

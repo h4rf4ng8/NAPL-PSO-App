@@ -1,3 +1,4 @@
+import { diagnose } from '../../plugins/logging.js';
 import type { FastifyRequest } from 'fastify';
 import { GraphQLError } from 'graphql';
 import { ZodError } from 'zod';
@@ -18,6 +19,7 @@ export async function read<T>(context: GraphQLContext, key: string, load: () => 
       catch (error: unknown) {
         const expected = error instanceof HttpError;
         const status = error instanceof ZodError ? 400 : (expected && error.status < 500 ? error.status : 503);
+        diagnose(context.request, error, status === 503 ? 'service_unavailable' : (expected ? error.code : 'invalid_request'), status >= 500 ? 'error' : 'info');
         throw new GraphQLError('Request failed', { extensions: {
           status,
           code: status === 503 ? 'service_unavailable' : (expected ? error.code : 'invalid_request'),

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  LOG_LEVEL: z.enum(['debug', 'info']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   PORT: z.coerce.number().pipe(z.int().min(1).max(65_535)).default(3000),
   HOST: z.string().default('127.0.0.1'),

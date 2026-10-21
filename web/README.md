@@ -26,21 +26,20 @@ The React application provides public league pages, member dashboards, and admin
 | [src/hooks/](src/hooks/) | Tracks loading, data, and errors for REST consumers; GraphQL consumers use Apollo hooks. |
 | [src/components/](src/components/), [src/styles/](src/styles/), and [src/theme/](src/theme/) | Provide shared UI elements, styling, and theme preferences. |
 | [scripts/codegen.ts](scripts/codegen.ts) | Checks API-owned queries and generates server execution documents and browser typed documents. |
-| [api/proxy.ts](api/proxy.ts) and [server/proxy.ts](server/proxy.ts) | Forward production requests to Lambda with AWS signatures and the origin secret. Credentials stay on the server. |
 | [../pkgs/contracts/](../pkgs/contracts/) | Shares domain types and validation rules with the API. |
 
 ## How It Works
 
 ### Opening the App
 
-The app first checks the current session. Visitors start on Teams and can browse Stats, Schedule, News, Transfers, and Rules. Standings appears only in the signed-in dashboard. Choosing Discord sign-in redirects the browser through the API and Supabase Auth. After sign-in, session cookies accompany later requests. Signing out clears cached data and tells other tabs to reload their session.
+The app first checks the current session. Visitors start on Teams and can browse Stats, Schedule, News, Transfers, and Rules. Standings appears only in the signed-in dashboard. Choosing Discord sign-in starts Supabase SDK OAuth with PKCE. The frontend handles `/auth/callback`; later API requests carry bearer tokens and omit cookies. Signing out clears cached data and tells other tabs to reload their session.
 
 | Implementation | Used by | Responsibility |
 | --- | --- | --- |
 | [auth](src/auth/session.ts) | [App](src/App.tsx) | Loads the account and handles sign-in and sign-out actions. |
-| [request](src/api/http.ts) | Authentication, feature API calls, and the [GraphQL transport](src/api/link.ts) | Sends JSON with cookies, adds Apollo's preflight header to named GraphQL reads, and retains signed CSRF tokens for REST writes. Shares one session-renewal request and retries each original request at most once. |
+| [request](src/api/http.ts) | Authentication, feature API calls, and the [GraphQL transport](src/api/link.ts) | Sends JSON directly with a bearer access token and credentials omitted. Adds Apollo's preflight header to named GraphQL reads. Obtains a fresh SDK token before requests and permits one shared refresh/retry only for definitive expiry. |
 
-Browser requests use relative `/api` and `/auth` URLs. The [Vite configuration](vite.config.ts) forwards them locally; the [Vercel routes](vercel.json) send them through the server forwarding code in production. Database access and permission checks belong to the API.
+Browser requests resolve API paths against `VITE_API_URL` and call Lambda directly. Vite and Vercel serve the SPA, including `/auth/callback`; Supabase SDK handles the callback. Database access and permission checks belong to the API.
 
 ### Reading League Data
 
@@ -67,7 +66,7 @@ Feature API modules send changes as HTTP commands. For example, the [match impor
 
 Successful league changes clear cached reads and cancel older queries. Apollo refetches active GraphQL queries; REST screens retain their explicit reloads. Refetch failures do not make a successful command fail. See [request handling](src/api/http.ts), [cache reset](src/api/client.ts), and the [administrator refresh](src/features/admin/AdminPanel.tsx).
 
-REST writes, including `/auth/refresh` and `/auth/logout`, retain signed CSRF protection. A logical write keeps its original URL, method, serialized body, and idempotency key across the single permitted retry. The API does not consume `Idempotency-Key`; this header does not deduplicate arbitrary repeated writes or guarantee exactly-once execution. Session renewal is shared by GraphQL and REST; cancellation of one GraphQL waiter cannot cancel renewal needed by another request. Ordinary conflicts, server failures, and network failures are not replayed. The import workflow remains available; the unreachable manual submission/review frontend was removed, while its API endpoints remain supported.
+A logical write retains its URL, method, body and idempotency key across one retry allowed only after a definitive token-expiry response. SDK refresh coordinates concurrent requests and tabs. A network failure, AWS boundary error or ambiguous write result is never replayed. `Idempotency-Key` does not guarantee server-side deduplication. Signed CSRF tokens and the API auth routes have been removed. Public reads remain available while signed out.
 
 ## REST Hook Audit
 
@@ -96,7 +95,7 @@ Custom helpers remain only where they supply application behavior beyond React o
 
 | Helper or family | Reason to exist |
 | --- | --- |
-| `request`, CSRF/error decoders, `ApiError` | One cookie-aware HTTP path, bounded shared renewal, REST CSRF rotation, stable write retries, and consistent errors from REST/GraphQL responses. |
+| `request`, error decoders, `ApiError` | One bearer HTTP path, bounded shared SDK renewal, stable permitted retries, and consistent REST/GraphQL errors. |
 | `optional`, `segment` | Preserve REST 404-to-null behavior and encode individual URL path/query values. |
 | `gatewayLink` | Route the fixed operation allowlist, send variables only, validate opaque response data before caching, and propagate cancellation. A standard `HttpLink` would send query documents rejected by this API. |
 | `resetClient`, `resetQueries` | Separate identity clearing (stop departing observers without refetch) from successful-write invalidation (refetch active reads; expose read failures separately). |
@@ -113,9 +112,9 @@ GraphQL reads use Apollo hooks directly. Do not add custom fetch hooks for Graph
 
 ## Running Locally
 
-Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure the hosted services in `api/.env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the local Lambda API and HTTP adapter. The API uses the configured hosted Supabase Auth and database, so local sign-in and authorized changes affect that database; Compose does not create or seed a local database.
+Complete the [initial setup](../README.md#docker-compose): install dependencies, run `pnpm run setup:env`, configure hosted services in `api/.env` and public browser settings in `web/.env`, then start `./scripts/dev.sh` from the repository root. The [web Dockerfile](Dockerfile) runs the frontend alongside the local Lambda API and HTTP adapter. The API uses the configured hosted Supabase Auth and database, so local sign-in and authorized changes affect that database; Compose does not create or seed a local database.
 
-Open `http://localhost:5173` with the same `PUBLIC_ORIGIN` in `api/.env`; changes under `web/src` reload in the browser. Compose reads `web/.env` and supplies the internal API target. Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. The browser does not need `VITE_SUPABASE_*` settings or Discord credentials.
+Open `http://localhost:5173` with the same `PUBLIC_ORIGIN` in `api/.env`; changes under `web/src` reload in the browser. Compose reads `web/.env` and sets the browser-reachable API URL to `http://localhost:3000`. Follow the [hosted Discord setup](../README.md#discord-sign-in-with-compose) to allow the local callback in Supabase. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` for the same hosted project. Discord credentials stay in Supabase Dashboard.
 
 Rebuild the web image with `./scripts/dev.sh -d web` after changing configuration or dependencies outside `web/src`.
 
@@ -126,7 +125,7 @@ pnpm run dev:api
 pnpm run dev
 ```
 
-Open `http://localhost:5173`. Vite reads `web/.env`, documented in the [web environment example](.env.example). Set `ORIGIN_SECRET` to match `api/.env` and use `LOCAL_API_URL` for the local API target. These settings are server-only; never prefix secrets with `VITE_`.
+Open `http://localhost:5173`. Vite reads `web/.env`, documented in the [web environment example](.env.example). Set `VITE_API_URL=http://localhost:3000` and matching public Supabase values. Production builds must receive these three `VITE_*` values before Vite runs; never prefix secrets with `VITE_`.
 
 ## Checks
 
@@ -136,9 +135,9 @@ Run from the repository root after setup:
 | --- | --- |
 | `pnpm run gql:generate` | Regenerate GraphQL documents and response types. |
 | `pnpm run gql:check` | Check that generated GraphQL files match the current queries and schema. |
-| `pnpm --filter @napl/web run typecheck` | Check browser and server TypeScript. |
-| `pnpm --filter @napl/web test` | Run the [web tests](test/), including requests, caching, UI logic, and forwarding. |
-| `pnpm --filter @napl/web run build` | Build browser assets and check the server forwarding bundle. |
+| `pnpm --filter @napl/web run typecheck` | Check browser TypeScript. |
+| `pnpm --filter @napl/web test` | Run the [web tests](test/), including bearer requests, caching, auth lifecycle and UI logic. |
+| `pnpm --filter @napl/web run build` | Build static browser assets. |
 
 ## Related Documentation
 

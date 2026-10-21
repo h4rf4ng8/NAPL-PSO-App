@@ -33,7 +33,7 @@ async function mount() {
 function transport(saved: () => Response | Promise<Response>, previews = () => Promise.resolve(Response.json({ data: { accountCardPreviews: [] } }))) {
   const calls: string[] = [];
   mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
-    const path = String(input);
+    const path = String(input).replace('http://api.example.test','');
     calls.push(path);
     assert.equal(init?.method, path === savedPath ? 'GET' : 'POST');
     if (path !== savedPath) assert.equal((init?.headers as Record<string, string>)['Apollo-Require-Preflight'], 'true');

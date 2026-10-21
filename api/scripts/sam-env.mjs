@@ -3,7 +3,6 @@ import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { readConfig } from '../plugins/cfg.js';
-import { CookieCrypto } from '../plugins/session/crypto.js';
 
 const apiDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const defaultEnvPath = path.resolve(apiDir, '.env');
@@ -12,20 +11,11 @@ const parameterEnv = {
   DatabaseUrl: 'DATABASE_URL',
   SupabaseUrl: 'SUPABASE_URL',
   SupabasePublishableKey: 'SUPABASE_PUBLISHABLE_KEY',
-  SupabaseSecretKey: 'SUPABASE_SECRET_KEY',
   SupabaseJwksUrl: 'SUPABASE_JWKS_URL',
   PublicOrigin: 'PUBLIC_ORIGIN',
-  CookieKeys: 'COOKIE_KEYS',
-  DiscordClientId: 'DISCORD_CLIENT_ID',
-  DiscordClientSecret: 'DISCORD_CLIENT_SECRET',
-  DiscordGuildId: 'DISCORD_GUILD_ID',
-  OriginSecret: 'ORIGIN_SECRET',
   DiscordTransferWebhook: 'DISCORD_TRANSFER_WEBHOOK',
 };
 const deploymentParameters = {
-  VercelTeamSlug: 'VERCEL_TEAM_SLUG',
-  VercelProjectName: 'VERCEL_PROJECT_NAME',
-  ExistingVercelOidcProviderArn: 'EXISTING_VERCEL_OIDC_PROVIDER_ARN',
   RolePermissionsBoundaryArn: 'APPLICATION_ROLE_BOUNDARY_ARN',
 };
 
@@ -55,28 +45,11 @@ export async function prepareSamParams({ environment = process.env, envPath = de
   const merged = { ...(await readLocalEnv(envPath)), ...environment, NODE_ENV: 'production' };
   let config;
   try {
-    if (!merged.COOKIE_KEYS?.trim()) throw new Error('COOKIE_KEYS is required');
     config = readConfig(merged);
   } catch (error) {
-    if (error.message === 'COOKIE_KEYS is required') throw error;
     throw safeValidationError(error);
   }
-  try { new CookieCrypto(config.COOKIE_KEYS); }
-  catch { throw new Error('COOKIE_KEYS is invalid'); }
-
   const deploymentInputs = Object.fromEntries(Object.entries(deploymentParameters).map(([parameter, name]) => [parameter, merged[name]?.trim() ?? '']));
-  const missingIdentity = ['VercelTeamSlug', 'VercelProjectName'].filter(name => deploymentInputs[name] === '');
-  if (missingIdentity.length > 0) throw new Error(`Invalid deployment parameter(s): ${missingIdentity.join(', ')}`);
-  if (!/^[a-z0-9][a-z0-9-]{0,62}$/.test(deploymentInputs.VercelTeamSlug) || !/^[a-z0-9][a-z0-9-]{0,99}$/.test(deploymentInputs.VercelProjectName)) {
-    throw new Error('Invalid VercelTeamSlug or VercelProjectName deployment parameter');
-  }
-  if (deploymentInputs.ExistingVercelOidcProviderArn) {
-    const providerArn = /^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:oidc-provider\/oidc\.vercel\.com\/([a-z0-9][a-z0-9-]{0,62})$/;
-    const match = deploymentInputs.ExistingVercelOidcProviderArn.match(providerArn);
-    if (!match || match[2] !== deploymentInputs.VercelTeamSlug) {
-      throw new Error('ExistingVercelOidcProviderArn must be an AWS OIDC provider ARN for VercelTeamSlug');
-    }
-  }
   if (!/^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:policy\/[A-Za-z0-9+=,.@_/-]+$/.test(deploymentInputs.RolePermissionsBoundaryArn)) {
     throw new Error('RolePermissionsBoundaryArn must be the ApplicationRoleBoundaryArn from the bootstrap stack');
   }

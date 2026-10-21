@@ -1,6 +1,6 @@
 import { afterEach, mock, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ApiError, resetCsrf } from '../src/api/http';
+import { ApiError } from '../src/api/http';
 import { accounts } from '../src/features/accounts/api';
 import { settings } from '../src/features/admin/api';
 import { content } from '../src/features/content/api';
@@ -8,13 +8,12 @@ import { matches } from '../src/features/matches/api';
 import { teams } from '../src/features/teams/api';
 import { voting } from '../src/features/voting/api';
 
-Object.defineProperty(globalThis, 'document', { configurable: true, value: { cookie: 'napl-csrf=test' } });
-afterEach(() => { mock.restoreAll(); resetCsrf(); });
+afterEach(() => { mock.restoreAll(); });
 
 function captureCommands() {
   const calls: { url: string; method: string | undefined; body: unknown }[] = [];
   mock.method(globalThis, 'fetch', async (url, options) => {
-    calls.push({ url: String(url), method: options?.method, body: JSON.parse(String(options?.body)) });
+    calls.push({ url: String(url).replace('http://api.example.test',''), method: options?.method, body: JSON.parse(String(options?.body)) });
     return new Response(null, { status: 204 });
   });
   return calls;
@@ -76,7 +75,7 @@ test('vote commands resolve on success and reject server errors', async () => {
 test('award commands use stable identities, accept 204 and surface conflicts without replay', async () => {
   const calls: Array<{ url: string; method: string | undefined; body: unknown }> = [];
   mock.method(globalThis, 'fetch', async (url, options) => {
-    calls.push({ url: String(url), method: options?.method, body: options?.body });
+    calls.push({ url: String(url).replace('http://api.example.test',''), method: options?.method, body: options?.body });
     return new Response(null, { status: 204 });
   });
   assert.equal(await accounts.assignAward('account/1', 'glove', 'S1/playoffs'), undefined);
@@ -99,7 +98,7 @@ test('award commands use stable identities, accept 204 and surface conflicts wit
 test('administrator reads return roles and propagate authorization failures', async () => {
   const roles = [{ userId: 'admin-id', username: 'Admin', role: 'admin' }];
   mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(String(url), '/api/roles');
+    assert.equal(String(url).replace('http://api.example.test',''), '/api/roles');
     assert.equal(options?.method, 'GET');
     return Response.json(roles);
   });

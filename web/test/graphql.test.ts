@@ -2,7 +2,7 @@ import { afterEach, mock, test } from 'node:test';
 import { gql, type OperationVariables, type TypedDocumentNode } from '@apollo/client';
 import { firstValueFrom, filter } from 'rxjs';
 import assert from 'node:assert/strict';
-import { ApiError, request, resetCsrf } from '../src/api/http';
+import { ApiError } from '../src/api/http';
 import { client, resetClient } from '../src/api/client';
 import { StandingsDocument, MemberLeagueDataDocument, TeamRecordsDocument, AccountMatchesDocument, AccountOpponentsDocument, AccountCardPreviewsDocument, DefaultPositionWeightsDocument } from '../src/api/generated/graphql';
 import { mapMemberLeague, mapPublicLeague } from '../src/features/dashboard/api';
@@ -26,13 +26,11 @@ const loadAccountOpponents = async () => mapAccountOpponents(await graphql(Accou
 const loadAccountCardPreviews = async () => mapAccountCardPreviews(await graphql(AccountCardPreviewsDocument, {}));
 const loadDefaultPositionWeights = async () => mapDefaultPositionWeights(await graphql(DefaultPositionWeightsDocument, {}));
 
-const cookie = { value: '' };
-Object.defineProperty(globalThis, 'document', { configurable: true, value: { get cookie() { return cookie.value; } } });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const invalidHistoryResponse = (field: string) => async () => json({ data: {
   accounts: [{ ...wireAccount(), [field]: [{}] }], teams: [], teamRecords: [],
 } });
-afterEach(async () => { await resetClient(); mock.restoreAll(); cookie.value = ''; resetCsrf(); });
+afterEach(async () => { await resetClient(); mock.restoreAll(); });
 
 const account = {
   id: 'p1', username: 'Alice', position: 'ST', teamId: null, imageUrl: null, country: null,
@@ -60,11 +58,10 @@ const memberData = () => ({ data: {
 } });
 
 test('maintained reads use their own endpoints and reuse completed responses', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const calls: { url: string; body: unknown }[] = [];
   mock.method(globalThis, 'fetch', async (url, init) => {
     const body = JSON.parse(String(init?.body));
-    calls.push({ url: String(url), body });
+    calls.push({ url: String(url).replace('http://api.example.test',''), body });
     return json({ data: { ...memberData().data,
       accounts: [{ ...wireAccount(), seasonStats: null }],
       me: { ...wireAccount(), ...me, __typename: 'CurrentAccount', ranking: wireAccount().ranking, cardStats: wireAccount().cardStats, seasonStats: null },
@@ -99,7 +96,7 @@ test('unknown operations fail before any network request', async () => {
 test('standings uses its named endpoint in one read and requests only public account fields', async () => {
   const calls: { url: string; init: RequestInit }[] = [];
   mock.method(globalThis, 'fetch', async (url, init) => {
-    calls.push({ url: String(url), init: init ?? {} });
+    calls.push({ url: String(url).replace('http://api.example.test',''), init: init ?? {} });
     return json({ data: { accounts: [{ ...wireAccount() }], teams: [], teamRecords: [] } });
   });
 
@@ -113,12 +110,11 @@ test('standings uses its named endpoint in one read and requests only public acc
   assert.equal(headers.get('X-CSRF-Token'), null);
   assert.equal(headers.get('Idempotency-Key'), null);
   assert.equal(headers.get('Content-Type'), 'application/json');
-  assert.equal(calls[0]!.init.credentials, 'same-origin');
+  assert.equal(calls[0]!.init.credentials, 'omit');
   assert.deepEqual(JSON.parse(String(calls[0]!.init.body)), { variables: {} });
 });
 
 test('account history loaders request one bounded filtered page and validate summaries', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const requests: { query: string; variables: Record<string, unknown> }[] = [];
   const match = { id: 'm1', date: 1, season: 'S2', opponent: 'Blue', result: 'W', goals: 1, assists: 0,
     passes: 5, tackles: 2, deflects: 0, catches: 0, cleanSheet: false, motm: false };
@@ -134,7 +130,6 @@ test('account history loaders request one bounded filtered page and validate sum
 });
 
 test('tier previews load all server computed cards in one GraphQL request', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const calls: unknown[] = [];
   mock.method(globalThis, 'fetch', async (_url, init) => {
     calls.push(init);
@@ -149,7 +144,6 @@ test('tier previews load all server computed cards in one GraphQL request', asyn
 });
 
 test('tier preview GraphQL failures surface without retrying or per card requests', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   let calls = 0;
   mock.method(globalThis, 'fetch', async () => {
     calls++;
@@ -160,16 +154,14 @@ test('tier preview GraphQL failures surface without retrying or per card request
 });
 
 test('history loader errors are surfaced for retry UI', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   mock.method(globalThis, 'fetch', async () => json({ data: { accountOpponents: [{ opponent: 'Blue', games: -1 }] } }));
   await assert.rejects(loadAccountOpponents(), /Invalid GraphQL opponent summary data/);
 });
 
 test('member dashboard loads once without role assignments and preserves private account data', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const requests: { query: string; variables: object }[] = [];
   mock.method(globalThis, 'fetch', async (url, init) => {
-    assert.equal(String(url), '/api/dashboard');
+    assert.equal(String(url).replace('http://api.example.test',''), '/api/dashboard');
     requests.push(JSON.parse(String(init?.body)));
     return json(memberData());
   });
@@ -184,13 +176,11 @@ test('member dashboard loads once without role assignments and preserves private
 });
 
 test('GraphQL errors reject partial HTTP 200 data', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   mock.method(globalThis, 'fetch', async () => json({ data: { accounts: [] }, errors: [{ message: 'roles unavailable' }] }));
   await assert.rejects(graphql(StandingsDocument, {}), /roles unavailable/);
 });
 
-test('GraphQL uses same-origin authenticated transport and does not retry failed reads', async () => {
-  cookie.value = '__Host-napl-csrf=csrf-value';
+test('GraphQL uses direct bearer transport and does not retry failed reads', async () => {
   const calls: RequestInit[] = [];
   mock.method(globalThis, 'fetch', async (_url, init) => {
     calls.push(init ?? {});
@@ -198,86 +188,12 @@ test('GraphQL uses same-origin authenticated transport and does not retry failed
   });
   await assert.rejects(loadPublicLeague(), error => error instanceof ApiError && error.status === 503);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0]!.credentials, 'same-origin');
+  assert.equal(calls[0]!.credentials, 'omit');
   assert.equal(new Headers(calls[0]!.headers).get('Apollo-Require-Preflight'), 'true');
   assert.equal(new Headers(calls[0]!.headers).get('X-CSRF-Token'), null);
 });
 
-test('Apollo and REST reads share one session renewal and retry each request once', async () => {
-  cookie.value = 'napl-csrf=before';
-  const renewal = Promise.withResolvers<Response>();
-  const started = Promise.withResolvers<void>();
-  const calls: { path: string; headers: Headers }[] = [];
-  mock.method(globalThis, 'fetch', async (url, init) => {
-    const path = String(url);
-    calls.push({ path, headers: new Headers(init?.headers) });
-    if (path === '/auth/refresh') { started.resolve(); return renewal.promise; }
-    const attempts = calls.filter(call => call.path === path).length;
-    if (attempts === 1) return json({ errors: [{ extensions: { code: 'session_expired' } }] }, 401);
-    return json(path === '/api/team-records' ? { data: { teamRecords: [] } } : []);
-  });
-  const pending = Promise.all([client.query({ query: TeamRecordsDocument }), request('/api/accounts')]);
-  await started.promise;
-  await new Promise<void>(resolve => setImmediate(resolve));
-  cookie.value = 'napl-csrf=after';
-  renewal.resolve(json({ ok: true }));
-  const [result, accounts] = await pending;
-  assert.deepEqual(result.data, { teamRecords: [] });
-  assert.deepEqual(accounts, []);
-  assert.equal(calls.filter(call => call.path === '/auth/refresh').length, 1);
-  for (const path of ['/api/team-records', '/api/accounts']) assert.equal(calls.filter(call => call.path === path).length, 2);
-  assert.equal(calls.find(call => call.path === '/auth/refresh')!.headers.get('X-CSRF-Token'), 'before');
-  for (const call of calls) {
-    if (call.path !== '/api/team-records') continue;
-    assert.equal(call.headers.get('Apollo-Require-Preflight'), 'true');
-    assert.equal(call.headers.get('X-CSRF-Token'), null);
-  }
-});
-
-test('cancelling an Apollo read during shared renewal prevents its retry without cancelling REST', async () => {
-  cookie.value = 'napl-csrf=present';
-  const renewal = Promise.withResolvers<Response>();
-  const started = Promise.withResolvers<void>();
-  const calls: string[] = [];
-  let graphSignal: AbortSignal | null | undefined;
-  mock.method(globalThis, 'fetch', async (url, init) => {
-    const path = String(url);
-    calls.push(path);
-    if (path === '/auth/refresh') { assert.equal(init?.signal, undefined); started.resolve(); return renewal.promise; }
-    if (path === '/api/team-records') graphSignal = init?.signal;
-    return calls.filter(value => value === path).length === 1 ? json({ error: 'access_expired' }, 401) : json([]);
-  });
-  const graph = Promise.allSettled([client.query({ query: TeamRecordsDocument })]);
-  const rest = request('/api/accounts');
-  await started.promise;
-  await new Promise<void>(resolve => setImmediate(resolve));
-  await resetClient();
-  assert.equal(graphSignal?.aborted, true);
-  renewal.resolve(json({ ok: true }));
-  await graph;
-  assert.deepEqual(await rest, []);
-  assert.equal(calls.filter(path => path === '/api/team-records').length, 1);
-  assert.equal(calls.filter(path => path === '/api/accounts').length, 2);
-  assert.equal(calls.filter(path => path === '/auth/refresh').length, 1);
-  assert.deepEqual(client.cache.extract(), {});
-});
-
-for (const refreshFails of [false, true]) {
-  test(`Apollo session renewal terminates when ${refreshFails ? 'refresh fails' : 'the retry is still expired'}`, async () => {
-    cookie.value = 'napl-csrf=present';
-    const calls: string[] = [];
-    mock.method(globalThis, 'fetch', async url => {
-      const path = String(url);
-      calls.push(path);
-      return path === '/auth/refresh' && !refreshFails ? json({ ok: true }) : json({ error: 'membership_refresh_required' }, 401);
-    });
-    await assert.rejects(client.query({ query: TeamRecordsDocument }), error => error instanceof ApiError && error.code === 'membership_refresh_required');
-    assert.deepEqual(calls, refreshFails ? ['/api/team-records', '/auth/refresh'] : ['/api/team-records', '/auth/refresh', '/api/team-records']);
-  });
-}
-
 test('schema-null fields and new role names have safe UI defaults', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   mock.method(globalThis, 'fetch', async () => json({ data: {
     ...memberData().data,
     accounts: [{ ...wireAccount(), stats: {}, createdAt: null }],
@@ -290,7 +206,6 @@ test('schema-null fields and new role names have safe UI defaults', async () => 
 });
 
 test('malformed opaque JSON fails before cache writes or subscriber delivery', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   mock.method(globalThis, 'fetch', async () => json({ data: {
     accounts: [{ ...wireAccount(), awards: [{ arbitrary: true }] }], teams: [], teamRecords: [],
   } }));
@@ -312,7 +227,6 @@ test('legacy numeric Strikers IDs normalize only when finite', () => {
 });
 
 test('account decoder preserves historical account fields and accepts legacy award ids', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   const match = { id: 'm1', date: 1, season: 'S1', opponent: 'Blue', result: 'W', goals: 1, assists: 0,
     passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheet: true, motm: false, strikersMatchId: 123, historicalFlag: true };
   const award = { awardId: 'golden-keeper-legacy', season: 'S1', source: 'import', legacyRank: 1 };
@@ -326,7 +240,6 @@ test('account decoder preserves historical account fields and accepts legacy awa
 });
 
 test('account decoder rejects empty opaque records for each historical JSON field', async () => {
-  cookie.value = 'napl-csrf=csrf-value';
   for (const field of ['awards', 'championships'] as const) {
     mock.method(globalThis, 'fetch', invalidHistoryResponse(field));
     await assert.rejects(loadPublicLeague(), /Invalid GraphQL account JSON/);
@@ -356,7 +269,6 @@ test('team and voting records validate boundaries while preserving arbitrary key
 
 test('Apollo deduplicates concurrent reads and reuses complete responses beyond 30 seconds', async context => {
   context.mock.timers.enable({ apis: ['Date'], now: 100 });
-  cookie.value = 'napl-csrf=csrf-value';
   let calls = 0;
   mock.method(globalThis, 'fetch', async () => {
     calls++;

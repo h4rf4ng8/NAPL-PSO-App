@@ -4,20 +4,10 @@ import { readFile, writeFile } from 'node:fs/promises';
 const percentile = (values, p) => values.length > 0 ? Math.round(values.toSorted((a, b) => a - b)[Math.ceil(values.length * p) - 1]) : null;
 const rate = (count, total) => total ? Number((count / total).toFixed(4)) : null;
 
-function cookieHeader(cookiePairs) {
-  const cookies = new Map();
-  for (const pair of cookiePairs) {
-    if (!pair) continue;
-    const split = pair.indexOf('=');
-    if (split > 0) cookies.set(pair.slice(0, split).trim(), pair.slice(split + 1).trim());
-  }
-  return [...cookies].map(([name, value]) => `${name}=${value}`).join('; ');
-}
-
 async function main() {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     console.log(`Bounded staging burst check (no retries; max 1,850 requests).\n\n` +
-      `Set LOAD_STAGE=staging, LOAD_BASE_URL=https://<isolated-staging-project-host>, LOAD_DB_CONNECTION_BUDGET=<integer>, and LOAD_COOKIE=<authenticated session cookie>.\n` +
+      `Set LOAD_STAGE=staging, LOAD_BASE_URL=https://<isolated-staging-project-host>, LOAD_DB_CONNECTION_BUDGET=<integer>, and LOAD_ACCESS_TOKEN=<authenticated access token>.\n` +
       `Optional: LOAD_ROUNDS=1..5 (default 1), LOAD_TIMEOUT_MS=1000..60000 (default 35000),\n` +
       `LOAD_LAMBDA_RESERVED_CONCURRENCY=<integer>,\n` +
       `LOAD_MEASUREMENTS_FILE=<JSON>, LOAD_REPORT=<path>.\n` +
@@ -29,8 +19,8 @@ async function main() {
   const target = base && new URL(base);
   const host = target?.hostname;
   if (!target || process.env.LOAD_STAGE !== 'staging' || target.protocol !== 'https:' ||
-      !(host.includes('staging') || host.endsWith('.vercel.app'))) {
-    throw new Error('Refusing load traffic: set LOAD_STAGE=staging and LOAD_BASE_URL to an HTTPS isolated-staging Vercel URL.');
+      !(host.includes('staging') || /^[a-z0-9]+\.lambda-url\.[a-z]{2}(?:-[a-z]+)+-\d\.on\.aws$/.test(host))) {
+    throw new Error('Refusing load traffic: set LOAD_STAGE=staging and LOAD_BASE_URL to an HTTPS isolated-staging API URL.');
   }
   const budget = Number(process.env.LOAD_DB_CONNECTION_BUDGET);
   if (!Number.isSafeInteger(budget) || budget < 1) throw new Error('Set LOAD_DB_CONNECTION_BUDGET to the available staging database connection budget.');
@@ -43,38 +33,19 @@ async function main() {
   assert.ok(Number.isSafeInteger(rounds) && rounds >= 1 && rounds <= 5, 'LOAD_ROUNDS must be an integer from 1 to 5');
   const timeoutMs = Number(process.env.LOAD_TIMEOUT_MS ?? 35_000);
   assert.ok(Number.isSafeInteger(timeoutMs) && timeoutMs >= 1000 && timeoutMs <= 60_000, 'LOAD_TIMEOUT_MS must be from 1000 to 60000');
-  const origin = target.origin;
-  const suppliedCookie = process.env.LOAD_COOKIE;
-  if (!suppliedCookie) throw new Error('LOAD_COOKIE must contain an authenticated staging session; standings reads require sign-in.');
+  const accessToken = process.env.LOAD_ACCESS_TOKEN;
+  if (!accessToken) throw new Error('LOAD_ACCESS_TOKEN must contain an authenticated staging access token.');
   const reports = [];
 
-  async function csrfHeaders() {
-    const response = await fetch(new URL('/auth/csrf', base), {
-      headers: suppliedCookie ? { cookie: suppliedCookie } : {},
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    if (!response.ok) throw new Error(`CSRF bootstrap failed with HTTP ${response.status}.`);
-    const body = await response.json();
-    assert.equal(typeof body.csrfToken, 'string', 'CSRF response did not include csrfToken');
-    const setCookies = response.headers.getSetCookie?.() ?? [response.headers.get('set-cookie') ?? ''];
-    const csrfPair = setCookies.map(value => value.split(';', 1)[0]).find(pair => pair?.slice(pair.indexOf('=') + 1) === body.csrfToken);
-    assert.ok(csrfPair, 'CSRF response did not set a cookie matching csrfToken');
-    const csrfName = csrfPair.slice(0, csrfPair.indexOf('='));
-    const priorCookies = suppliedCookie ? suppliedCookie.split(';') : [];
-    const mergedCookie = cookieHeader([...priorCookies.filter(pair => !pair.trim().startsWith(`${csrfName}=`)), csrfPair]);
-    return { cookie: mergedCookie, csrfToken: body.csrfToken };
-  }
-
-  async function request(csrf) {
+  async function request() {
     const started = performance.now();
     try {
       const response = await fetch(new URL('/api/standings', base), {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          origin,
-          'x-csrf-token': csrf.csrfToken,
-          cookie: csrf.cookie,
+          authorization: `Bearer ${accessToken}`,
+          'apollo-require-preflight': 'true',
         },
         body: JSON.stringify({ variables: {} }),
         signal: AbortSignal.timeout(timeoutMs),
@@ -86,7 +57,7 @@ async function main() {
         // Non-JSON responses still contribute their HTTP status.
       }
       const elapsedMs = performance.now() - started;
-      // The signed Vercel proxy preserves AWS response headers. An AWS request id
+      // An AWS request id
       // proves an AWS boundary response, but does not prove that Lambda ran.
       const responseSource = response.headers.has('x-amzn-requestid') ? 'awsBoundary' : 'unknown';
       if (response.status === 429) {
@@ -107,11 +78,11 @@ async function main() {
     }
   }
 
-  async function runBurst(concurrency, csrf) {
+  async function runBurst(concurrency) {
     const start = Promise.withResolvers();
     const workers = Array.from({ length: concurrency }, async () => {
       await start.promise;
-      return request(csrf);
+      return request();
     });
     start.resolve();
     const outcomes = await Promise.all(workers);
@@ -136,10 +107,9 @@ async function main() {
     };
   }
 
-  const csrf = await csrfHeaders();
   for (const concurrency of levels) {
     const bursts = [];
-    for (let round = 0; round < rounds; round++) bursts.push(await runBurst(concurrency, csrf));
+    for (let round = 0; round < rounds; round++) bursts.push(await runBurst(concurrency));
     const latencies = bursts.flatMap(item => item.successfulLatencies);
     const total = bursts.reduce((sum, item) => sum + item.attempts, 0);
     const successesCount = bursts.reduce((sum, item) => sum + item.successes, 0);
@@ -173,7 +143,7 @@ async function main() {
     ? JSON.parse(await readFile(process.env.LOAD_MEASUREMENTS_FILE, 'utf8')) : null;
   const report = {
     target: { hostname: host, stage: 'staging' },
-    inputs: { concurrency: levels, rounds, requestTimeoutMs: timeoutMs, databaseConnectionBudget: budget, lambdaReservedConcurrency: reservedConcurrency ?? 'unknown', operation: 'Standings query; read-only', cookieProvided: Boolean(suppliedCookie) },
+    inputs: { concurrency: levels, rounds, requestTimeoutMs: timeoutMs, databaseConnectionBudget: budget, lambdaReservedConcurrency: reservedConcurrency ?? 'unknown', operation: 'Standings query; read-only', accessTokenProvided: Boolean(accessToken) },
     observations: {
       databaseConnections: measurements?.databaseConnections ?? 'unknown',
       databaseFailures: measurements?.databaseFailures ?? 'unknown',
@@ -181,7 +151,7 @@ async function main() {
       lambdaThrottles: measurements?.lambdaThrottles ?? 'unknown',
     },
     results: reports,
-    note: 'Client latency covers the browser-facing request through the Vercel proxy, including response-body parsing. An AWS request-id indicates an AWS boundary response only; it does not prove Lambda execution. Other responses are source unknown. Edge execution cannot be inferred from Vercel routing headers. Collect database and Lambda throttle metrics separately; missing observations remain unknown.',
+    note: 'Client latency covers the browser-facing request to the API, including response-body parsing. An AWS request-id indicates an AWS boundary response only; it does not prove Lambda execution. Other responses are source unknown. Collect database and Lambda throttle metrics separately; missing observations remain unknown.',
   };
   const out = process.env.LOAD_REPORT ?? `/tmp/napl-staging-load-${Date.now()}.json`;
   await writeFile(out, JSON.stringify(report, null, 2));

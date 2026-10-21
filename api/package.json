@@ -9,7 +9,7 @@
     "dev": "node --env-file-if-exists=.env --import tsx --watch dev.ts",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test --test-concurrency=1 test/plugins/*.test.ts test/routes/*.test.ts test/integration/*.test.ts",
+    "test": "node --import tsx --import ../web/test/setup.mjs --test --test-concurrency=1 test/plugins/*.test.ts test/routes/*.test.ts test/integration/*.test.ts",
     "prisma:generate": "prisma generate",
     "test:db": "bash test/integration/run.sh --api",
     "test:package": "node --test test/integration/package.test.mjs"
@@ -17,7 +17,6 @@
   "dependencies": {
     "@apollo/server": "5.5.1",
     "@fastify/aws-lambda": "6.4.2",
-    "@fastify/cookie": "^11.0.2",
     "@napl/contracts": "workspace:*",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
@@ -27,7 +26,8 @@
     "ipaddr.js": "^2.2.0",
     "jose": "^6.0.0",
     "pg": "^8.16.0",
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "@fastify/cors": "11.3.1"
   },
   "devDependencies": {
     "@apollo/client": "4.3.3",

@@ -34,21 +34,12 @@ export class RateLimiter {
     }
   }
 
-  async endpoint(endpoint: 'login' | 'callback' | 'refresh' | 'logout' | 'csrf', ip: string, userId?: string, sessionId?: string): Promise<void> {
-    const minute = 60_000;
-    const settings = {
-      login: { ip: 20, window: 10 * minute, global: 120 },
-      callback: { ip: 60, window: 10 * minute, global: 240 },
-      refresh: { ip: 600, window: 5 * minute, global: 1000 },
-      logout: { ip: 120, window: minute, global: 1000 },
-      csrf: { ip: 120, window: minute, global: 1000 },
-    }[endpoint];
-    const limits: Limit[] = [
-      { key: `${endpoint}:global`, count: settings.global, windowMs: minute },
-      { key: `${endpoint}:ip:${normalizeIp(ip)}`, count: settings.ip, windowMs: settings.window },
-    ];
-    if (userId && endpoint === 'refresh') limits.push({ key: `refresh:user:${userId}`, count: 30, windowMs: 5 * minute });
-    if (sessionId && endpoint === 'refresh') limits.push({ key: `refresh:session:${sessionId}`, count: 12, windowMs: 5 * minute });
-    await this.admit(limits);
+  async provision(ip: string, userId: string, sessionId: string): Promise<void> {
+    await this.admit([
+      { key: 'provision:global', count: 120, windowMs: 60_000 },
+      { key: `provision:ip:${normalizeIp(ip)}`, count: 20, windowMs: 600_000 },
+      { key: `provision:user:${userId}`, count: 10, windowMs: 600_000 },
+      { key: `provision:session:${sessionId}`, count: 10, windowMs: 600_000 },
+    ]);
   }
 }

@@ -56,6 +56,8 @@ Resources:
               Bool:
                 aws:SecureTransport: false
 
+  # Retain legacy Vercel role/provider management until the app stack deletes those resources.
+  # Remove this compatibility access only after cutover and the rollback window close.
   # CI may update app-role policies, but cannot give those roles broader AWS access.
   ApplicationRoleBoundary:
     Type: AWS::IAM::ManagedPolicy
@@ -266,7 +268,7 @@ Resources:
                     iam:PassedToService: cloudformation.amazonaws.com
               - Sid: CheckLiveAlias
                 Effect: Allow
-                Action: [lambda:GetFunctionUrlConfig, lambda:InvokeFunction]
+                Action: [lambda:GetFunctionUrlConfig, lambda:GetPolicy]
                 Resource: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${ApplicationStackName}-api:live
 
 Outputs:

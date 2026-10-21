@@ -44,7 +44,7 @@ jobs:
           | --- | --- |
           | Lint | ESLint, Prisma generation, GraphQL freshness, type-checking, and both SAM templates. |
           | Test | API and web integration tests against disposable PostgreSQL. |
-          | Build | Shared contracts, Lambda package, frontend/proxy, and verification of the finished Lambda ZIP. |
+          | Build | Shared contracts, Lambda package, static frontend, and verification of the finished Lambda ZIP. |
           | Deploy | On main only: deployment parameters, temporary AWS credentials, deployment, smoke test, and cleanup. |
           SUMMARY
 
@@ -91,7 +91,11 @@ jobs:
         run: pnpm --filter @napl/contracts run build
       - name: Build Lambda package
         run: pnpm --filter @napl/api run build
-      - name: Build frontend and proxy
+      - name: Build static frontend
+        env:
+          VITE_API_URL: https://api.example.test
+          VITE_SUPABASE_URL: https://supabase.example.test
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-build-only
         run: pnpm --filter @napl/web run build
       - name: Verify built Lambda package against disposable PostgreSQL
         run: bash api/test/integration/run.sh --package
@@ -147,20 +151,11 @@ jobs:
       - name: Prepare protected deployment parameters
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          COOKIE_KEYS: ${{ secrets.COOKIE_KEYS }}
-          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
-          DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
           DISCORD_TRANSFER_WEBHOOK: ${{ secrets.DISCORD_TRANSFER_WEBHOOK }}
-          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
           SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
-          DISCORD_CLIENT_ID: ${{ vars.DISCORD_CLIENT_ID }}
-          DISCORD_GUILD_ID: ${{ vars.DISCORD_GUILD_ID }}
-          VERCEL_TEAM_SLUG: ${{ vars.VERCEL_TEAM_SLUG }}
-          VERCEL_PROJECT_NAME: ${{ vars.VERCEL_PROJECT_NAME }}
-          EXISTING_VERCEL_OIDC_PROVIDER_ARN: ${{ vars.EXISTING_VERCEL_OIDC_PROVIDER_ARN }}
           APPLICATION_ROLE_BOUNDARY_ARN: ${{ vars.APPLICATION_ROLE_BOUNDARY_ARN }}
         run: |
           pnpm run env:sam
@@ -204,7 +199,7 @@ jobs:
       - name: Smoke test deployed Lambda
         if: steps.release.outputs.current == 'true'
         env:
-          ORIGIN_SECRET: ${{ secrets.ORIGIN_SECRET }}
+          PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
         run: |
           FUNCTION_URL=$(aws cloudformation describe-stacks \
             --stack-name napl-api \
@@ -214,7 +209,8 @@ jobs:
           node api/scripts/smoke-deploy.mjs \
             --function-name napl-api-api:live \
             --region "$AWS_REGION" \
-            --url "$FUNCTION_URL"
+            --url "$FUNCTION_URL" \
+            --origin "$PUBLIC_ORIGIN"
       - name: Remove deployment parameters
         if: always()
         run: rm -f api/.env.sam.json api/.env.sam.yaml

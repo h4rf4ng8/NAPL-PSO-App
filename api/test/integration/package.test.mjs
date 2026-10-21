@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -60,6 +60,52 @@ test('SAM template describes the bounded Lambda and direct browser Function URL'
   assert.equal(fn.Environment.Variables.DISCORD_TRANSFER_WEBHOOK[2], 'AWS::NoValue');
   assert.ok(Object.values(resources).every(resource => !['AWS::ApiGateway::RestApi', 'AWS::CloudFront::Distribution'].includes(resource.Type)));
   assert.ok(Object.keys(fn).every(key => !['VpcConfig', 'ProvisionedConcurrencyConfig'].includes(key)));
+});
+
+test('only AWS deployment adds the verified CA and preserves the tested application bytes', async () => {
+  const workflow = parse(await readFile(path.join(root, '.github/workflows/ci-cd.yml'), 'utf8'));
+  const steps = workflow.jobs.deploy.steps;
+  const index = steps.findIndex(step => step.name === 'Add verified database CA to AWS deployment package');
+  const step = steps[index];
+  assert.equal(step.if, "steps.release.outputs.current == 'true'");
+  for (const name of ['Download tested Lambda package', 'Skip commits superseded on main']) {
+    const prior = steps.findIndex(candidate => candidate.name === name);
+    assert.ok(prior !== -1 && prior < index);
+  }
+  assert.ok(index < steps.findIndex(candidate => candidate.name === 'Deploy application stack'));
+  assert.ok(steps.every(candidate => !candidate.uses?.startsWith('actions/upload-artifact@')));
+  for (const [name, job] of Object.entries(workflow.jobs)) {
+    if (name !== 'deploy') assert.ok(!JSON.stringify(job).includes('prod-ca-2021.crt'));
+  }
+  const scratch = await mkdtemp(path.join(tmpdir(), 'napl-deploy-package-'));
+  try {
+    await mkdir(path.join(scratch, 'api/dist'), { recursive: true });
+    const deploymentZip = path.join(scratch, 'api/dist/api.zip');
+    await cp(zip, deploymentZip);
+    const fixture = path.join(scratch, 'download.crt');
+    const bytes = 'synthetic CA download for deployment packaging test\n';
+    await writeFile(fixture, bytes);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    const run = step.run
+      .replace('https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt', () => pathToFileURL(fixture).href)
+      .replace("--proto '=https'", "--proto '=file'")
+      .replace('700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7', () => digest);
+    const options = { cwd: scratch, env: { ...process.env, RUNNER_TEMP: scratch, PATH: `${process.env.PATH}:/sbin` } };
+    await exec('bash', ['-c', run], options);
+    const listing = await exec('unzip', ['-Z1', deploymentZip]);
+    assert.deepEqual(listing.stdout.trim().split('\n').toSorted((left, right) => left.localeCompare(right)), ['lambda.js', 'package.json', 'prod-ca-2021.crt']);
+    for (const entry of ['lambda.js', 'package.json']) {
+      const before = await exec('unzip', ['-p', zip, entry], { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 });
+      const after = await exec('unzip', ['-p', deploymentZip, entry], { encoding: 'buffer', maxBuffer: 20 * 1024 * 1024 });
+      assert.deepEqual(after.stdout, before.stdout);
+    }
+    await cp(zip, deploymentZip);
+    await writeFile(fixture, 'tampered download');
+    await assert.rejects(exec('bash', ['-c', run], options));
+    assert.deepEqual(await readFile(deploymentZip), await readFile(zip));
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });
 
 test('Lambda ZIP loads outside the repository and supports direct CORS and rejects missing bearer before upstream access', async () => {

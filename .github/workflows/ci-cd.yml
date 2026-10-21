@@ -175,6 +175,16 @@ jobs:
             echo 'current=false' >> "$GITHUB_OUTPUT"
             echo '::notice::Skipping deployment because main has a newer commit'
           fi
+      - name: Add verified database CA to AWS deployment package
+        if: steps.release.outputs.current == 'true'
+        run: |
+          set -euo pipefail
+          ca="$RUNNER_TEMP/prod-ca-2021.crt"
+          curl --fail --silent --show-error --connect-timeout 10 --max-time 30 --proto '=https' \
+            https://supabase-downloads.s3-ap-southeast-1.amazonaws.com/prod/ssl/prod-ca-2021.crt \
+            --output "$ca"
+          printf '%s  %s\n' '700723581420dd1ac98fd7e9ac529f0ef210eadcaf87fc868a3ad7d114c2f3b7' "$ca" | sha256sum -c - > /dev/null
+          zip -qj api/dist/api.zip "$ca"
       - name: Obtain temporary AWS credentials
         if: steps.release.outputs.current == 'true'
         uses: aws-actions/configure-aws-credentials@v6.3.0
@@ -214,4 +224,4 @@ jobs:
             --origin "$PUBLIC_ORIGIN"
       - name: Remove deployment parameters
         if: always()
-        run: rm -f api/.env.sam.json api/.env.sam.yaml
+        run: rm -f api/.env.sam.json api/.env.sam.yaml "$RUNNER_TEMP/prod-ca-2021.crt"

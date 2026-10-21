@@ -9,7 +9,7 @@ test('one restricted login can read application data and maintain membership', {
   const db = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.API_TEST_DATABASE_URL, max: 1 }) });
   const store = new PostgresMembershipStore(db);
   try {
-    const accounts = await db.$queryRaw<Array<{ username: string }>>`SELECT username FROM public.accounts WHERE id = '11111111-1111-4111-8111-111111111111'::uuid`;
+    const accounts = await db.$queryRaw<Array<{ username: string }>>`SELECT username FROM asl.accounts WHERE id = '11111111-1111-4111-8111-111111111111'::uuid`;
     assert.deepEqual(accounts, [{ username: 'Alice' }]);
     await store.save(userId, '123456789', true);
     assert.equal(await store.fresh(userId), true);

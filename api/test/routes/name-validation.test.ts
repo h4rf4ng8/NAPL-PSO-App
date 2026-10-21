@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { checkBlockedName } from '../../routes/name-validation.js';
 import { createApp } from '../helper.js';
-import { Prisma, type Database, type Row } from '../../plugins/db/client.js';
+import { type Database, type Row } from '../../plugins/db/client.js';
 import { provisionAccount } from '../../routes/accounts/queries.js';
 
 test('blocked name check catches leetspeak, separators, and repeated letters', () => {
@@ -15,27 +15,45 @@ test('blocked name check keeps short words within ordinary names allowed', () =>
   assert.equal(checkBlockedName('Passionate'), null);
 });
 
-test('provisioning replaces a blocked OAuth username with the safe fallback', async () => {
+test('provisioning requires a verified Discord handle and never writes generated username_lower', async () => {
   const id = '11111111-1111-4111-8111-111111111111';
+  let saved: Record<string, unknown> | undefined;
   const database: Database = {
     client: { account: {
       findUnique: async () => null,
-      create: async ({ data }: { data: { username: string; username_lower: string } }) => ({ id, ...data }),
+      create: async ({ data }: { data: Record<string, unknown> }) => { saved = data; return { id, ...data }; },
     } } as unknown as Database['client'],
-    query: async <T extends Row>(sql: Prisma.Sql) => (sql.sql.includes('INSERT INTO')
-      ? [{ id, username: 'Player', username_lower: 'player' }]
-      : []) as T[],
-    execute: async () => 0,
-    transaction: async work => work(database),
-    close: async () => {},
+    query: async () => [], execute: async () => 0,
+    transaction: async work => work(database), close: async () => {},
   };
-  const account = await provisionAccount(database, {
-    id, sessionId: id, claims: { sub: id, user_metadata: { username: 'sh1t' } },
-  });
-  assert.equal(account.username, 'Player');
+  const identity = { id, sessionId: id, claims: { sub: id, user_metadata: { username: 'untrusted' } } };
+  await assert.rejects(provisionAccount(database, identity), /discord_profile_required/);
+  await assert.rejects(provisionAccount(database, identity, 'Invalid Name'), /invalid_discord_username/);
+  const username = 'a'.repeat(32);
+  const account = await provisionAccount(database, identity, username);
+  assert.equal(account.username, username);
+  assert.equal(saved?.username_lower, undefined);
 });
 
-test('API rejects blocked account and team names and keeps rename permissions', async () => {
+test('a matching Discord handle cannot claim an existing account or its team ownership', async () => {
+  const id = '11111111-1111-4111-8111-111111111111';
+  const existing = { id: '22222222-2222-4222-8222-222222222222', username: 'taken_handle', team_id: 'owned-team' };
+  let writes = 0;
+  const database: Database = {
+    client: { account: {
+      findUnique: async ({ where }: { where: { id?: string } }) => where.id ? null : existing,
+      create: async () => { writes++; throw new Error('must not create'); },
+      update: async () => { writes++; throw new Error('must not attach'); },
+    } } as unknown as Database['client'],
+    query: async () => [], execute: async () => 0,
+    transaction: async work => work(database), close: async () => {},
+  };
+  await assert.rejects(provisionAccount(database, { id, sessionId: id, claims: { sub: id } }, 'taken_handle'), /discord_username_conflict/);
+  assert.equal(writes, 0, 'identity stays attached to its verified UUID, never a handle match');
+  assert.equal(existing.team_id, 'owned-team');
+});
+
+test('API rejects blocked team names and exposes no manual rename endpoint', async () => {
   const userId = '11111111-1111-4111-8111-111111111111';
   let adminMode = false;
   let transactionCalls = 0;
@@ -62,23 +80,15 @@ test('API rejects blocked account and team names and keeps rename permissions', 
     const call = (method: 'POST' | 'PATCH', url: string, payload: object) => app.inject({
       method, url, headers: { authorization: `Bearer ${userId}` }, payload,
     });
-    const rename = await call('POST', `/api/accounts/${userId}/rename`, { username: 'Sh1t' });
-    assert.equal(rename.statusCode, 400);
-    assert.match(rename.json<{ message: string }>().message, /username isn't allowed/i);
-    assert.equal((await call('POST', '/api/accounts/22222222-2222-4222-8222-222222222222/rename', { username: 'Alicia' })).statusCode, 403);
-    assert.equal(transactionCalls, 0, 'blocked account names fail before writes');
+    assert.equal((await call('POST', `/api/accounts/${userId}/rename`, { username: 'Alicia' })).statusCode, 404);
+    assert.equal(transactionCalls, 0);
     adminMode = true;
-    const adminRename = await app.inject({
-      method: 'POST', url: `/api/accounts/${userId}/rename`,
-      headers: { authorization: `Bearer ${userId}` }, payload: { username: 'Cunt' },
-    });
-    assert.equal(transactionCalls, 1, `admins pass the blocked-name check and reach the write; response=${adminRename.statusCode}`);
     assert.equal((await call('POST', '/api/teams', { id: 'blocked-name', name: 'F_u_c_k FC', tag: 'FC' })).statusCode, 400);
     assert.equal((await call('POST', '/api/teams', { id: 'blocked', name: 'Fine Team', tag: 'SH1T' })).statusCode, 400);
     const update = await call('PATCH', '/api/teams/team', { name: 'Fine Team', tag: 'FUCK' });
     assert.equal(update.statusCode, 400);
     assert.match(update.json<{ message: string }>().message, /team name or tag/i);
-    assert.equal(transactionCalls, 1, 'blocked team names fail before writes');
+    assert.equal(transactionCalls, 0, 'blocked team names fail before writes');
   } finally {
     await app.close();
   }

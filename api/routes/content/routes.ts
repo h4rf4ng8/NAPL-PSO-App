@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { articleInput, newsInput, ruleInput, scheduleInput, transferInput, id } from '@napl/contracts';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import type { Dependencies } from '../../app.js';
-import { actorName } from '../../plugins/auth/identity.js';
+import { actor, actorName } from '../../plugins/auth/identity.js';
 import { params as parameters, query } from '../../plugins/request.js';
 import * as queries from './queries.js';
 import { newsDto, ruleDto, articleDto, scheduleDto, transferDto } from './dto.js';
@@ -159,7 +159,7 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
     }, async (request) => {
         const input = transferInput.parse(request.body);
         const name = await actorName(db, request);
-        return db.transaction(async (tx) => transferDto(await queries.upsertTransfer(tx, { ...input, id: input.id ?? crypto.randomUUID() }, name)));
+        return db.transaction(async (tx) => transferDto(await queries.upsertTransfer(tx, { ...input, id: input.id ?? crypto.randomUUID() }, name, actor(request).id)));
     });
     app.patch('/api/transfers/:id', {
         config: {

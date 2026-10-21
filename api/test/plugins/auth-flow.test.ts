@@ -24,6 +24,7 @@ test('PostgreSQL auth state across independent API instances', { skip: !process.
   let rejectMembership = false;
   let verifyCalls = 0;
   let logoutCalls = 0;
+  const provisioned: Array<[string, string]> = [];
   const dependencies: SessionDependencies = {
     authStore: stores[0]!,
     supabase: {
@@ -38,12 +39,12 @@ test('PostgreSQL auth state across independent API instances', { skip: !process.
       logout: async () => { logoutCalls++; },
     },
     discord: {
-      identity: async () => '123456789',
+      identity: async () => ({ id: '123456789', username: 'discord_player' }),
       membership: async () => { membershipChecks++; if (rejectMembership) throw new GatewayError(503, 'discord_unavailable', 1); return true; },
       refresh: async () => ({ access_token: 'new-discord', refresh_token: 'new-discord-refresh', expires_in: 600, scope: 'guilds.members.read identify' }),
     },
     membership: { fresh: async () => null, save: async () => {} },
-    provision: async () => {},
+    provision: async (token, username) => { provisioned.push([token, username]); },
   };
   const first = await buildTestServer(config, dependencies);
   const second = await buildTestServer(config, { ...dependencies, authStore: stores[1]! });
@@ -113,6 +114,7 @@ test('PostgreSQL auth state across independent API instances', { skip: !process.
       const callback = await second.inject({ url, headers: callbackHeaders });
       assert.equal(callback.statusCode, 302, callback.body);
       assert.equal(callback.headers.location, `${config.PUBLIC_ORIGIN}/`);
+      assert.deepEqual(provisioned, [['fresh-access', 'discord_player']]);
       const replay = await first.inject({ url, headers: callbackHeaders });
       assert.equal(replay.statusCode, 401);
       assert.equal(replay.json().error.code, 'login_transaction_used');

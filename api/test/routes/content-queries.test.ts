@@ -19,8 +19,16 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
     assert.equal(response.statusCode, 200, response.body);
     return response.json();
   };
-  const schedule = { week: 1, homeTeamId: 'home', awayTeamId: 'away' };
+  const schedule = { week: 1, homeTeamId: `${prefix}home`, awayTeamId: `${prefix}away` };
   try {
+    await db.client.team.createMany({ data: [{ id: `${prefix}home`, name: 'Content Home', tag: 'CH', owner_account_id: admin }, { id: `${prefix}away`, name: 'Content Away', tag: 'CA', owner_account_id: admin }] });
+    await t.test('foreign keys reject invalid content references and same-team matches', async () => {
+      assert.equal((await call('POST', '/api/news', { id: `${prefix}invalid_news`, type: 'result', homeTeamId: `${prefix}missing_team` })).statusCode, 409);
+      assert.equal((await call('POST', '/api/schedule', { ...schedule, id: `${prefix}invalid_schedule`, season: 'S1', awayTeamId: schedule.homeTeamId })).statusCode, 400);
+      assert.equal((await call('POST', '/api/transfers', { id: `${prefix}invalid_transfer`, season: 'S1', playerUsername: `${prefix}missing_player`, kind: 'signing' })).statusCode, 409);
+      assert.equal(await db.client.news.count({ where: { id: `${prefix}invalid_news` } }), 0);
+    });
+
     await t.test('reordering is atomic and repeated rule IDs take their last index', async () => {
       const first = `${prefix}rule' OR '1'='1`, second = `${prefix}rule_second`;
       await ok('POST', '/api/rules', { id: first, title: 'First', sortOrder: 7 });
@@ -34,7 +42,7 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
     });
 
     await t.test('bulk duplicate IDs return each intermediate write and keep optional fields', async () => {
-      const id = `${prefix}bulk' OR '1'='1`, season = `${prefix}season'; DELETE FROM public.news; --`;
+      const id = `${prefix}bulk' OR '1'='1`, season = `${prefix}season'; DELETE FROM asl.news; --`;
       const matches = await ok('POST', '/api/schedule/bulk', { matches: [
         { ...schedule, id, season, notes: 'kept', scheduledDate: 1_700_000_000_000 },
         { ...schedule, id, season, week: 2, scheduledDate: null },
@@ -97,13 +105,13 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
 
     await t.test('transfers preserve literal season filters and author fields', async () => {
       const id = `${prefix}transfer' OR '1'='1`, season = `${prefix}transfer'; --`;
-      const input = { id, season, playerUsername: 'Player', kind: 'signing' };
+      const input = { id, season, playerUsername: 'Admin', kind: 'signing' };
       const saved = await ok('POST', '/api/transfers', input);
       assert.equal(saved.createdBy, 'Admin');
       assert.equal(saved.windowType, null);
       await db.client.transfer.update({ where: { id }, data: { created_by: 'Original' } });
       const patched = await ok('PATCH', `/api/transfers/${encodeURIComponent(id)}`, { windowType: 'cross_league' });
-      assert.equal(patched.createdBy, 'Original');
+      assert.equal(patched.createdBy, 'Admin');
       assert.deepEqual(await ok('GET', `/api/transfers?season=${encodeURIComponent(season)}`), [patched]);
       const replaced = await ok('POST', '/api/transfers', input);
       assert.equal(replaced.createdBy, 'Admin');
@@ -117,6 +125,9 @@ test('content mutations preserve ordering, literal identifiers, defaults and rol
       db.client.scheduledMatch.deleteMany({ where: { id: { startsWith: prefix } } }),
       db.client.transfer.deleteMany({ where: { id: { startsWith: prefix } } }),
     ]);
+    await db.client.team.deleteMany({ where: { id: { startsWith: prefix } } });
+    await db.client.teamSeason.deleteMany({ where: { season_id: { startsWith: prefix } } });
+    await db.client.season.deleteMany({ where: { id: { startsWith: prefix } } });
     await app.close();
     await db.close();
   }

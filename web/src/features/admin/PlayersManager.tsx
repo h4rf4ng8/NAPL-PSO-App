@@ -1,4 +1,4 @@
-import { Edit3, User, Users } from 'lucide-react';
+import { User, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
 import { teams as teamApi } from '../teams/api';
@@ -15,8 +15,6 @@ import { ALL_POSITIONS, POSITIONS } from '@napl/contracts/league';
 // Players Manager
 export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _currentSeason = 'S1', onRefresh }: { allPlayers: Account[]; allTeams?: Team[]; currentSeason?: string; onRefresh: () => void }) => {
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<Account | null>(null);   // account being renamed
-  const [newName, setNewName] = useState('');
   const [teamEditing, setTeamEditing] = useState<Account | null>(null); // account whose team is being changed
   const [sidEditing, setSidEditing] = useState<Account | null>(null); // account whose Strikers ID is being changed
   const [newSid, setNewSid] = useState('');
@@ -71,33 +69,6 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
   const filtered = allPlayers
     .filter(p => !search || p.username.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => a.username.toLowerCase().localeCompare(b.username.toLowerCase()));
-
-  const startEdit = (player: Account) => {
-    setEditing(player);
-    setNewName(player.username);
-    setError('');
-  };
-
-  const saveRename = async () => {
-    if(!editing)return;
-    setError('');
-    const trimmed = newName.trim();
-    if (trimmed === editing.username) { setEditing(null); return; }
-    if (trimmed.length < 3) { setError('Must be at least 3 characters'); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) { setError('Letters, numbers, underscores only'); return; }
-    // NOTE: admins bypass the profanity filter on purpose — they're the ones cleaning things up.
-    setBusy(true);
-    try {
-      await accountApi.renameAccount(editing.id, trimmed);
-      setInfo(`✓ Renamed to ${trimmed}`);
-      setEditing(null);
-      onRefresh?.();
-      setTimeout(() => setInfo(''), 3000);
-    } catch (error_) {
-      setError('Could not rename: ' + (error_ instanceof Error ? error_.message : String(error_)));
-    }
-    setBusy(false);
-  };
 
   // Reassign (or remove) a player's team. newTeamId === '' means make them a
   // free agent. Keeps both the old and new teams' member arrays in sync.
@@ -210,14 +181,14 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
           <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>MANAGE PLAYERS</span>
         </div>
         <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          Rename a player or change their team — useful when someone leaves a squad or is removed. Players keep all their stats and awards.
+          Manage player teams, positions, and Strikers Club IDs. Usernames are synchronized from Discord at sign-in.
         </p>
       </div>
 
       {info && (
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
       )}
-      {error && !editing && !teamEditing && (
+      {error && !teamEditing && (
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
       )}
 
@@ -287,36 +258,7 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
           const playerTeam = p.teamId ? teamById(p.teamId) : null;
           return (
           <div key={p.id || p.username} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-            {(() => { if (editing && (editing.id === p.id)) return (
-              <div className="space-y-2">
-                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
-                  RENAMING — {p.username.toUpperCase()}
-                </div>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newName}
-                  maxLength={20}
-                  onChange={(e) => setNewName(e.target.value)}
-                  className="w-full rounded px-3 py-2 font-heading tracking-wider"
-                  style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
-                />
-                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => { setEditing(null); setError(''); }}
-                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
-                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                  >CANCEL</button>
-                  <button
-                    onClick={saveRename}
-                    disabled={busy}
-                    className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
-                    style={{ background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`, color: C.onColor }}
-                  >{busy ? 'SAVING…' : 'SAVE NEW NAME'}</button>
-                </div>
-              </div>
-            ); if (teamEditing && (teamEditing.id === p.id)) return (
+            {(() => { if (teamEditing && (teamEditing.id === p.id)) return (
               <div className="space-y-2">
                 <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
                   CHANGE TEAM — {p.username.toUpperCase()}
@@ -413,22 +355,18 @@ export const PlayersManager = ({ allPlayers, allTeams = [], currentSeason: _curr
                   </div>
                 </div>
                 <button
-                  onClick={() => { setPosEditing(p); setEditing(null); setTeamEditing(null); setSidEditing(null); setError(''); }}
+                  onClick={() => { setPosEditing(p); setTeamEditing(null); setSidEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 >POS</button>
                 <button
-                  onClick={() => { setTeamEditing(p); setEditing(null); setSidEditing(null); setPosEditing(null); setError(''); }}
+                  onClick={() => { setTeamEditing(p); setSidEditing(null); setPosEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 ><Users size={11} /> TEAM</button>
+
                 <button
-                  onClick={() => startEdit(p)}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                ><Edit3 size={11} /> RENAME</button>
-                <button
-                  onClick={() => { startSidEdit(p); setEditing(null); setTeamEditing(null); }}
+                  onClick={() => { startSidEdit(p); setTeamEditing(null); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 >SC ID</button>

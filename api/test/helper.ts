@@ -26,7 +26,7 @@ export function createApp(deps: { db: Database; verify: VerifyToken; webhookUrl?
         loginUrl: () => '', exchange: async () => { throw new Error('unused exchange'); },
         refresh: async () => { throw new Error('unused refresh'); }, logout: async () => {},
       },
-      discord: { identity: async () => '', membership: async () => true, refresh: async () => { throw new Error('unused refresh'); } },
+      discord: { identity: async () => ({ id: '', username: 'discord_player' }), membership: async () => true, refresh: async () => { throw new Error('unused refresh'); } },
       membership: { fresh: async () => true, save: async () => {} }, provision: async () => {},
     },
   });

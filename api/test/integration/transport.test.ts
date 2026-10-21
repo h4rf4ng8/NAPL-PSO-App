@@ -27,6 +27,9 @@ function harness(roleByUser: Record<string, string[]> = {}) {
       setting: { findUnique: async () => { databaseReads++; return null; } },
       account: { findMany: async () => [], findUnique: async () => ({ username: currentUsername }) },
       team: { findMany: async () => [] },
+      teamJoinRequest: { findMany: async () => [] },
+      season: { findMany: async () => [] },
+      teamSeason: { findMany: async () => [] },
     } as unknown as Prisma.TransactionClient,
     query: async <T extends Row>(sql: Prisma.Sql) => {
       databaseReads++;
@@ -36,8 +39,8 @@ function harness(roleByUser: Record<string, string[]> = {}) {
         const id = String(sql.values[0]);
         return (roleByUser[id] ?? []).map(role => ({ role })) as T[];
       }
-      if (sql.sql.includes('FROM auth_gateway.user_roles r JOIN public.accounts')) return [] as T[];
-      if (sql.sql.includes('FROM public.accounts a ORDER BY a.created_at, a.id')) {
+      if (sql.sql.includes('FROM auth_gateway.user_roles r JOIN asl.accounts')) return [] as T[];
+      if (sql.sql.includes('FROM asl.accounts a ORDER BY a.created_at, a.id')) {
         return [{
           id: userId, username: currentUsername, position: 'CM', team_id: null, image_url: null, country: null,
           stats: {}, awards: [], championships: [], totw_until: null, cheater: false, strikers_id: null,
@@ -63,7 +66,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
       loginUrl: () => '', exchange: async () => { throw new Error('unexpected exchange'); },
       refresh: async () => { throw new Error('unexpected refresh'); }, logout: async () => {},
     },
-    discord: { refresh: async () => { throw new Error('unexpected refresh'); }, identity: async () => '', membership: async () => false },
+    discord: { refresh: async () => { throw new Error('unexpected refresh'); }, identity: async () => ({ id: '', username: 'discord_player' }), membership: async () => false },
     membership: { fresh: async () => true, save: async () => {} },
     provision: async () => {},
   };

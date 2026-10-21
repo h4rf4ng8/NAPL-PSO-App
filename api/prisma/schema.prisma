@@ -6,7 +6,7 @@ generator client {
 }
 datasource db {
   provider = "postgresql"
-  schemas = ["public", "auth_gateway"]
+  schemas = ["asl", "auth_gateway"]
 }
 model Membership {
   user_id String @id @db.Uuid
@@ -20,8 +20,8 @@ model Membership {
 
 model Account {
   id String @id @db.Uuid
-  username String @unique
-  username_lower String @unique
+  username String
+  username_lower String @unique @default(dbgenerated())
   position String @default("CM")
   team_id String?
   image_url String?
@@ -34,22 +34,11 @@ model Account {
   championships Json @default("[]")
   totw_until DateTime? @db.Timestamptz
   cheater Boolean @default(false)
+  created_at DateTime @db.Timestamptz @default(now())
   strikers_id String?
   steam_url String?
-  created_at DateTime @default(now()) @db.Timestamptz
   @@map("accounts")
-  @@schema("public")
-}
-
-model RuleSection {
-  id String @id
-  title String
-  body String @default("")
-  sort_order Int @default(0)
-  created_at DateTime @default(now()) @db.Timestamptz
-  updated_at DateTime @default(now()) @db.Timestamptz
-  @@map("rules_sections")
-  @@schema("public")
+  @@schema("asl")
 }
 
 model Team {
@@ -58,37 +47,118 @@ model Team {
   tag String
   color String?
   description String?
-  owner_username String
-  members Json @default("[]")
-  pending_members Json @default("[]")
+  owner_account_id String @db.Uuid
   totw Boolean @default(false)
   totw_set_at DateTime? @db.Timestamptz
   status String @default("pending")
   logo_url String?
-  created_at DateTime @default(now()) @db.Timestamptz
+  created_at DateTime @db.Timestamptz @default(now())
   reviewed_at DateTime? @db.Timestamptz
   reviewed_by String?
+  reviewed_by_account_id String? @db.Uuid
   rejection_reason String?
-  seasons Json?
-  formation String? @default("2-1-2")
   lineup Json @default("{}")
+  formation String @default("2-1-2")
   @@map("teams")
-  @@schema("public")
+  @@schema("asl")
+}
+
+model TeamJoinRequest {
+  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  team_id String
+  account_id String @db.Uuid
+  status String @default("pending")
+  created_at DateTime @db.Timestamptz @default(now())
+  reviewed_at DateTime? @db.Timestamptz
+  reviewed_by_account_id String? @db.Uuid
+  review_note String?
+  details Json @default("{}")
+  @@map("team_join_requests")
+  @@schema("asl")
+}
+
+model Season {
+  id String @id
+  @@map("seasons")
+  @@schema("asl")
+}
+
+model TeamSeason {
+  team_id String
+  season_id String
+  @@id([team_id, season_id])
+  @@map("team_seasons")
+  @@schema("asl")
+}
+
+model Article {
+  id String @id
+  slug String @unique
+  title String
+  cover_image_url String?
+  author String
+  body String
+  excerpt String?
+  published_at DateTime @db.Timestamptz @default(now())
+  updated_at DateTime @db.Timestamptz @default(now())
+  @@map("articles")
+  @@schema("asl")
+}
+
+model RuleSection {
+  id String @id
+  title String
+  body String @default("")
+  sort_order Int @default(0)
+  created_at DateTime @db.Timestamptz @default(now())
+  updated_at DateTime @db.Timestamptz @default(now())
+  @@map("rules_sections")
+  @@schema("asl")
+}
+
+model Setting {
+  key String @id
+  value String?
+  @@map("settings")
+  @@schema("asl")
+}
+
+model ScheduledMatch {
+  id String @id
+  season_id String
+  week Int
+  home_team_id String
+  away_team_id String
+  scheduled_date DateTime? @db.Timestamptz
+  stream_url String?
+  match_type String @default("regular")
+  playoff_round String?
+  status String @default("scheduled")
+  home_score Int?
+  away_score Int?
+  linked_match_id String?
+  notes String?
+  created_at DateTime @db.Timestamptz @default(now())
+  updated_at DateTime @db.Timestamptz @default(now())
+  @@map("scheduled_matches")
+  @@schema("asl")
 }
 
 model Submission {
   id String @id
   status String @default("pending")
   submitted_by String
-  submitted_at DateTime @default(now()) @db.Timestamptz
+  submitted_by_account_id String? @db.Uuid
+  submitted_at DateTime @db.Timestamptz @default(now())
   reviewed_by String?
+  reviewed_by_account_id String? @db.Uuid
   reviewed_at DateTime? @db.Timestamptz
   rejection_reason String?
   match_info Json
   player_stats Json @default("[]")
   edits Json @default("[]")
   @@map("submissions")
-  @@schema("public")
+  @@schema("asl")
 }
 
 model News {
@@ -104,108 +174,88 @@ model News {
   event_date DateTime? @db.Timestamptz
   notes String?
   author String?
-  created_at DateTime @default(now()) @db.Timestamptz
+  created_at DateTime @db.Timestamptz @default(now())
   auto_from_submission String?
   @@map("news")
-  @@schema("public")
+  @@schema("asl")
 }
 
-model Setting {
-  key String @id
-  value String?
-  @@map("settings")
-  @@schema("public")
+model PositionChangeRequest {
+  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  account_id String @db.Uuid
+  username String
+  from_pos String
+  to_pos String
+  reason String? @default("")
+  status String @default("pending")
+  reviewed_by String?
+  reviewed_by_account_id String? @db.Uuid
+  reviewed_at DateTime? @db.Timestamptz
+  review_note String? @default("")
+  created_at DateTime @db.Timestamptz @default(now())
+  @@map("position_change_requests")
+  @@schema("asl")
 }
 
-model Article {
-  id String @id
-  slug String @unique
-  title String
-  cover_image_url String?
-  author String?
-  body String @default("")
-  excerpt String?
-  published_at DateTime? @default(now()) @db.Timestamptz
-  updated_at DateTime? @default(now()) @db.Timestamptz
-  @@map("articles")
-  @@schema("public")
+model TotwVotingPeriod {
+  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  opens_at DateTime @db.Timestamptz @default(now())
+  closes_at DateTime @db.Timestamptz
+  status String @default("open")
+  created_by String
+  created_by_account_id String? @db.Uuid
+  created_at DateTime @db.Timestamptz @default(now())
+  resolved_at DateTime? @db.Timestamptz
+  @@map("totw_voting_periods")
+  @@schema("asl")
 }
 
-model ScheduledMatch {
-  id String @id
-  season String?
-  week Int?
-  home_team_id String?
-  away_team_id String?
-  scheduled_date DateTime? @db.Timestamptz
-  stream_url String?
-  match_type String? @default("regular")
-  playoff_round String?
-  status String? @default("scheduled")
-  home_score Int?
-  away_score Int?
-  linked_match_id String?
-  notes String?
-  created_at DateTime? @default(now()) @db.Timestamptz
-  updated_at DateTime? @default(now()) @db.Timestamptz
-  @@map("scheduled_matches")
-  @@schema("public")
+model TotwCandidate {
+  period_id String @db.Uuid
+  account_id String @db.Uuid
+  position String
+  details Json @default("{}")
+  @@id([period_id, account_id, position])
+  @@map("totw_candidates")
+  @@schema("asl")
+}
+
+model TotwWinner {
+  period_id String @db.Uuid
+  account_id String @db.Uuid
+  position String
+  details Json @default("{}")
+  @@id([period_id, account_id, position])
+  @@map("totw_winners")
+  @@schema("asl")
+}
+
+model TotwVote {
+  id String @id @db.Uuid @default(dbgenerated("gen_random_uuid()"))
+  period_id String @db.Uuid
+  voter_account_id String @db.Uuid
+  position String
+  voted_for_account_id String @db.Uuid
+  voted_at DateTime @db.Timestamptz @default(now())
+  @@unique([period_id, voter_account_id, position])
+  @@map("totw_votes")
+  @@schema("asl")
 }
 
 model Transfer {
   id String @id
-  season String?
-  player_username String?
+  season_id String
+  player_account_id String @db.Uuid
+  player_username_snapshot String
   from_team_id String?
   to_team_id String?
-  kind String?
+  kind String
   window_type String?
-  created_at DateTime? @default(now()) @db.Timestamptz
+  created_at DateTime @db.Timestamptz @default(now())
   created_by String?
+  created_by_account_id String? @db.Uuid
   @@map("transfers")
-  @@schema("public")
-}
-
-model TotwVotingPeriod {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  opens_at DateTime? @default(now()) @db.Timestamptz
-  closes_at DateTime? @db.Timestamptz
-  status String?
-  eligible_players Json @default("[]")
-  winners Json?
-  created_by String?
-  created_at DateTime? @default(now()) @db.Timestamptz
-  resolved_at DateTime? @db.Timestamptz
-  @@map("totw_voting_periods")
-  @@schema("public")
-}
-
-model TotwVote {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  period_id String? @db.Uuid
-  voter_username String
-  position String
-  voted_for_username String
-  voted_at DateTime? @default(now()) @db.Timestamptz
-  @@unique([period_id, voter_username, position])
-  @@map("totw_votes")
-  @@schema("public")
-}
-
-model PositionChangeRequest {
-  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  account_id String? @db.Uuid
-  username String?
-  from_pos String?
-  to_pos String?
-  reason String?
-  status String?
-  reviewed_by String?
-  reviewed_at DateTime? @db.Timestamptz
-  review_note String?
-  created_at DateTime? @default(now()) @db.Timestamptz
-  @@map("position_change_requests")
-  @@schema("public")
+  @@schema("asl")
 }
 
 model UserRole {

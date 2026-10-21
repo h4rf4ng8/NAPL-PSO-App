@@ -6,7 +6,7 @@ import { C } from '../../theme/theme';
 import { useTheme } from '../../theme/use-theme';
 import { isAdmin } from '../../utils/league';
 import { getStatsForSeason } from '../../utils/rankings';
-import { EditNameModal, EditPositionModal, OnboardingModal, StatsView, UploadImageModal } from '../accounts';
+import { EditPositionModal, OnboardingModal, StatsView, UploadImageModal } from '../accounts';
 import { AdminPanel } from '../admin';
 import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
 import { ScheduleView, StandingsView } from '../matches';
@@ -75,7 +75,6 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} /> : <p role="alert">Administrator access is required.</p>)}
       </main>
       {modal === 'pos' && <EditPositionModal account={account} onClose={closeModal} />}
-      {modal === 'name' && <EditNameModal account={account} onClose={closeModal} onSave={savedAccount} />}
       {modal === 'image' && <UploadImageModal account={account} onClose={closeModal} onSave={savedAccount} />}
       {data && modal === 'share' && <ShareableCardModal account={cardAccount} team={myTeam} onClose={closeModal} />}
       {selectedPlayer && <ShareableCardModal account={selectedPlayer} team={teams.find(team => team.id === selectedPlayer.teamId)} onClose={() => setSelectedPlayer(null)} />}

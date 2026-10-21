@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { submissionInput, approveSubmission, id, username } from '@napl/contracts';
 import type { Dependencies } from '../../app.js';
 import { params as parameters } from '../../plugins/request.js';
-import { HttpError, actorName, isAdmin } from '../../plugins/auth/identity.js';
+import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identity.js';
 import { type Row } from '../../plugins/db/client.js';
 import { object, array } from '../../plugins/db/records.js';
 import { submissionDto } from './dto.js';
@@ -34,8 +34,8 @@ const importInput = z.strictObject({
 });
 export function registerMatches(app: FastifyInstance, { db }: Dependencies): void {
     app.get('/api/submissions', async (request) => {
-        const name = await actorName(db, request);
-        const rows = await listSubmissions(db, isAdmin(request) ? undefined : name);
+        await actorName(db, request);
+        const rows = await listSubmissions(db, isAdmin(request) ? undefined : actor(request).id);
         return rows.map(row => submissionDto(row));
     });
     app.post('/api/submissions', {
@@ -49,7 +49,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             if (old && old.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await saveSubmission(tx, input.id, {
-                match_info: input.matchInfo, player_stats: input.playerStats, edits: input.edits ?? [], status: 'pending', submitted_by: old?.submitted_by ?? reviewer
+                match_info: input.matchInfo, player_stats: input.playerStats, edits: input.edits ?? [], status: 'pending', submitted_by: old?.submitted_by ?? reviewer, submitted_by_account_id: old?.submitted_by_account_id ?? actor(request).id
             }));
         });
     });
@@ -96,7 +96,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             if (row.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             return submissionDto(await updateSubmission(tx, row.id, {
-                status: 'rejected', reviewed_by: reviewer, reviewed_at: new Date(), rejection_reason: reason
+                status: 'rejected', reviewed_by: reviewer, reviewed_by_account_id: actor(request).id, reviewed_at: new Date(), rejection_reason: reason
             }));
         });
     });
@@ -140,7 +140,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 type: 'result', home_team_id: home.id, away_team_id: away.id, home_score: info.homeScore, away_score: info.awayScore, event_date: new Date(info.date), author: reviewer, auto_from_submission: sub.id
             });
             return submissionDto(await updateSubmission(tx, sub.id, {
-                status: 'approved', reviewed_by: reviewer, reviewed_at: new Date(), match_info: info, player_stats: input.playerStats, edits: input.edits ?? []
+                status: 'approved', reviewed_by: reviewer, reviewed_by_account_id: actor(request).id, reviewed_at: new Date(), match_info: info, player_stats: input.playerStats, edits: input.edits ?? []
             }));
         });
     });

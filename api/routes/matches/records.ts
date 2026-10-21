@@ -14,7 +14,7 @@ export async function loadTeamRecords(database: Database): Promise<TeamRecord[]>
       m.value->>'result' AS result,
       CASE WHEN jsonb_typeof(m.value->'goalsFor')='number' THEN (m.value->>'goalsFor')::numeric ELSE 0 END AS gf,
       CASE WHEN jsonb_typeof(m.value->'goalsAgainst')='number' THEN (m.value->>'goalsAgainst')::numeric ELSE 0 END AS ga
-    FROM public.accounts a CROSS JOIN LATERAL jsonb_array_elements(
+    FROM asl.accounts a CROSS JOIN LATERAL jsonb_array_elements(
       CASE WHEN jsonb_typeof(a.matches)='array' THEN a.matches ELSE '[]'::jsonb END
     ) WITH ORDINALITY AS m(value, ordinality)
     WHERE COALESCE(m.value->>'ownTeamId','')<>'' AND (

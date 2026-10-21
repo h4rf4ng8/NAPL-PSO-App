@@ -21,11 +21,11 @@ test('account and position request queries preserve UUID text matching, filterin
   });
   try {
     await owner.execute(Prisma.sql`INSERT INTO auth.users(id) VALUES(${accountId}::uuid)`);
-    await db.client.account.create({ data: { id: accountId, username: 'Query Player', username_lower: 'query player' } });
+    await db.client.account.create({ data: { id: accountId, username: 'Query Player' } });
     await db.client.positionChangeRequest.createMany({ data: [
-      { id: ids[0], account_id: alice, username: 'Alice', status, created_at: new Date(-1000) },
-      { id: ids[1], account_id: alice, username: 'Alice', status, created_at: null },
-      { id: ids[2], account_id: bob, username: 'Bob', status, created_at: new Date(1000) },
+      { id: ids[0], account_id: alice, username: 'Alice', from_pos: 'CM', to_pos: 'GK', status, created_at: new Date(-1000) },
+      { id: ids[1], account_id: alice, username: 'Alice', from_pos: 'CM', to_pos: 'GK', status, created_at: new Date(0) },
+      { id: ids[2], account_id: bob, username: 'Bob', from_pos: 'CM', to_pos: 'GK', status, created_at: new Date(1000) },
     ] });
     const url = `/api/position-requests?status=${encodeURIComponent(status)}`;
     const all = await call('GET', url);
@@ -57,40 +57,33 @@ test('account and position request queries preserve UUID text matching, filterin
   }
 });
 
-test('rename keeps literal name comparisons and rolls back ORM and SQL writes together', { skip: !enabled }, async () => {
+test('verified Discord rename follows UUID references and retains historical snapshots', { skip: !enabled }, async () => {
   const db = connectDatabase(process.env.API_TEST_DATABASE_URL!);
   const owner = connectDatabase(process.env.API_TEST_ADMIN_DATABASE_URL!);
-  const app = createApp({ db, verify });
-  const originalName = 'Query%_Player';
+  const { provisionAccount } = await import('../../routes/accounts/queries.js');
+  const oldName = 'query_player', newName = 'renamed_query';
+  const identity = { id: accountId, sessionId: accountId, claims: { sub: accountId } };
   try {
     await owner.execute(Prisma.sql`INSERT INTO auth.users(id) VALUES(${accountId}::uuid)`);
-    await db.client.account.create({ data: { id: accountId, username: originalName, username_lower: originalName.toLowerCase() } });
-    await db.client.team.create({ data: { id: 'rename-query-team', name: 'Rename Query', tag: 'RQ', owner_username: originalName, members: [originalName] } });
-    await db.client.news.createMany({ data: [
-      { id: 'rename-query-exact', type: 'announcement', author: originalName },
-      { id: 'rename-query-other', type: 'announcement', author: 'QueryXXPlayer' },
-    ] });
-    await owner.execute(Prisma.sql`CREATE FUNCTION public.reject_query_test_rename() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
-      IF NEW.id = 'rename-query-exact' THEN RAISE EXCEPTION 'test rename failure'; END IF; RETURN NEW; END $$`);
-    await owner.execute(Prisma.sql`CREATE TRIGGER reject_query_test_rename BEFORE UPDATE ON public.news FOR EACH ROW EXECUTE FUNCTION public.reject_query_test_rename()`);
-    const rename = () => app.inject({ method: 'POST', url: `/api/accounts/${accountId}/rename`, headers: { authorization: `Bearer ${admin}` }, payload: { username: 'Renamed Query' } });
-    const failed = await rename();
-    assert.equal(failed.statusCode, 503, failed.body);
-    assert.doesNotMatch(failed.body, /test rename failure|reject_query_test/);
-    assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: accountId } })).username, originalName);
-    assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: 'rename-query-team' } })).members, [originalName]);
-    assert.equal((await db.client.news.findUniqueOrThrow({ where: { id: 'rename-query-exact' } })).author, originalName);
-    await owner.execute(Prisma.sql`DROP TRIGGER reject_query_test_rename ON public.news`);
-    const success = await rename();
-    assert.equal(success.statusCode, 200, success.body);
-    assert.equal((await db.client.news.findUniqueOrThrow({ where: { id: 'rename-query-exact' } })).author, 'Renamed Query');
-    assert.equal((await db.client.news.findUniqueOrThrow({ where: { id: 'rename-query-other' } })).author, 'QueryXXPlayer');
+    await provisionAccount(db, identity, oldName);
+    await db.client.team.create({ data: { id: 'rename-query-team', name: 'Rename Query', tag: 'RQ', owner_account_id: accountId, lineup: { gk: oldName } } });
+    await db.client.news.create({ data: { id: 'rename-query-exact', type: 'announcement', author: oldName } });
+    await db.client.account.update({ where: { id: accountId }, data: { team_id: 'rename-query-team' } });
+    await provisionAccount(db, identity, newName);
+    const saved = await db.client.account.findUniqueOrThrow({ where: { id: accountId } });
+    assert.equal(saved.username, newName);
+    assert.equal(saved.username_lower, newName);
+    assert.equal(saved.team_id, 'rename-query-team');
+    assert.equal((await db.client.team.findUniqueOrThrow({ where: { id: 'rename-query-team' } })).owner_account_id, accountId);
+    assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: 'rename-query-team' } })).lineup, { gk: newName });
+    assert.equal((await db.client.news.findUniqueOrThrow({ where: { id: 'rename-query-exact' } })).author, oldName);
+    const aliceAccount = await db.client.account.findUniqueOrThrow({ where: { id: alice } });
+    await assert.rejects(provisionAccount(db, identity, aliceAccount.username.toLowerCase()), /discord_username_conflict/);
+    assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: accountId } })).username, newName);
   } finally {
-    await owner.execute(Prisma.sql`DROP TRIGGER IF EXISTS reject_query_test_rename ON public.news`);
-    await owner.execute(Prisma.sql`DROP FUNCTION IF EXISTS public.reject_query_test_rename()`);
-    await db.client.news.deleteMany({ where: { id: { in: ['rename-query-exact', 'rename-query-other'] } } });
+    await db.client.news.deleteMany({ where: { id: 'rename-query-exact' } });
     await db.client.team.deleteMany({ where: { id: 'rename-query-team' } });
     await owner.execute(Prisma.sql`DELETE FROM auth.users WHERE id=${accountId}::uuid`);
-    await Promise.all([app.close(), db.close(), owner.close()]);
+    await Promise.all([db.close(), owner.close()]);
   }
 });

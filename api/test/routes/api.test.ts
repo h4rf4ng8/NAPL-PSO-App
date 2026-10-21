@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createApp } from '../helper.js';
 import { type Database, type Row, Prisma, connectDatabase } from '../../plugins/db/client.js';
 import { accountDto } from '../../routes/accounts/dto.js';
+import { provisionAccount, syncVerifiedDiscordUsername } from '../../routes/accounts/queries.js';
 import { aggregate } from '../../routes/matches/routes.js';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { accountMatchPageSchema } from '@napl/contracts/accounts';
@@ -86,8 +87,8 @@ test('revoked sessions cannot mutate or use administrative reads', async () => {
         }
     } finally {await app.close();}
 });
-test('Prisma adapter serialization and uniqueness conflicts are explicit 409 responses', async () => {
-    for(const sqlState of ['40001','40P01','23505']) {
+test('Prisma adapter constraint and transaction errors have deliberate responses', async () => {
+    for(const sqlState of ['40001','40P01','23505','23503','23514']) {
       for (const direct of [false, true]) {
         const database:Database={
             query:async()=>{throw Object.assign(new Error('private query detail'), direct
@@ -96,7 +97,7 @@ test('Prisma adapter serialization and uniqueness conflicts are explicit 409 res
             execute:async()=>0,transaction:async work=>work(database),close:async()=>{}
         };
         const app=createApp({db:database,verify});
-        try{const response=await app.inject('/api/accounts');assert.equal(response.statusCode,409);assert.equal(response.body.includes('private query detail'),false);}finally{await app.close();}
+        try{const response=await app.inject('/api/accounts');assert.equal(response.statusCode,sqlState==='23514'?400:409);assert.equal(response.body.includes('private query detail'),false);}finally{await app.close();}
       }
     }
 });
@@ -183,7 +184,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 const saved = await ok('POST', '/api/news', admin, { id: 'nullable_news', type: 'announcement', title, body: title });
                 assert.equal(saved.title, '');
                 assert.equal(saved.body, '');
-                await database.execute(Prisma.sql `UPDATE public.news SET author=NULL, notes=NULL WHERE id='nullable_news'`);
+                await database.execute(Prisma.sql `UPDATE asl.news SET author=NULL, notes=NULL WHERE id='nullable_news'`);
                 const news = (await call('GET', '/api/news')).json<Row[]>().find(row => row.id === 'nullable_news');
                 assert.equal(news?.author, '');
                 const response = await call('POST', '/api/dashboard', alice, { variables: {} });
@@ -200,15 +201,15 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             country: 'US'
         });
         assert.equal((await ok('GET', '/api/users/me', alice)).email, 'alice@private.test');
+        assert.equal((await call('POST', '/api/users/me', newUser, {})).statusCode, 409);
+        await provisionAccount(database, await verify(newUser), 'discord_player');
         const provision = await ok('POST', '/api/users/me', newUser, {});
         assert.equal(provision.id, newUser);
-        assert.equal(provision.username, 'Player');
+        assert.equal(provision.username, 'discord_player');
         assert.deepEqual(provision.roles, []);
         assert.equal((await ok('POST', '/api/users/me', newUser, {})).id, newUser);
-        assert.equal((await call('POST', `/api/accounts/${newUser}/rename`, newUser, { username: 'Sh1t' })).statusCode, 400);
-        assert.equal((await call('POST', `/api/accounts/${alice}/rename`, bob, { username: 'Alicia' })).statusCode, 403);
-        await ok('POST', `/api/accounts/${newUser}/rename`, admin, { username: 'Cunt' });
-        await ok('POST', `/api/accounts/${newUser}/rename`, admin, { username: 'Player' });
+        assert.equal((await call('POST', `/api/accounts/${newUser}/rename`, newUser, { username: 'Other' })).statusCode, 404);
+        assert.equal((await call('POST', `/api/accounts/${alice}/rename`, admin, { username: 'Other' })).statusCode, 404);
         assert.equal((await call('POST','/api/teams',alice,{id:'blocked_name',name:'F_u_c_k FC',tag:'FUK'})).statusCode,400);
         assert.equal((await call('POST','/api/teams',alice,{id:'blocked_tag',name:'Fine Team',tag:'SH1T'})).statusCode,400);
         assert.equal((await call('POST','/api/teams',alice,{id:'bad_lineup',name:'Invalid Team',tag:'BAD',lineup:{gk:'Bob'}})).statusCode,400);
@@ -246,10 +247,11 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         });
         await t.test('content CRUD keeps public reads, admin writes, field mappings and server metadata', async () => {
             const date = 1_700_000_000_000;
+            await database.client.submission.create({ data: { id: 'source', submitted_by: 'Admin', submitted_by_account_id: admin, match_info: {} } });
             const fixtures = [
                 { path: 'news', input: { id: 'content_news', type: 'result', title: 'Before', body: 'Body', pinned: true, homeTeamId: 'home', awayTeamId: 'away', homeScore: 2, awayScore: 1, date, notes: 'Note', autoFromSubmission: 'source' }, patch: { title: null, date: null }, expected: { title: '', date: null, body: 'Body', homeScore: 2, autoFromSubmission: 'source' } },
                 { path: 'rules', input: { id: 'content_rules', title: 'Before', body: 'Body', sortOrder: 7 }, patch: { title: 'After', body: 'Updated body', sortOrder: 3 }, expected: { title: 'After', body: 'Updated body', sortOrder: 3 } },
-                { path: 'articles', input: { id: 'content_article', slug: 'content-article', title: 'Before', body: 'Body', coverImageUrl: 'https://example.test/cover.png', excerpt: 'Excerpt', publishedAt: date }, patch: { title: 'After', body: 'Updated body', publishedAt: null }, expected: { title: 'After', body: 'Updated body', publishedAt: null, excerpt: 'Excerpt', coverImageUrl: 'https://example.test/cover.png' } },
+                { path: 'articles', input: { id: 'content_article', slug: 'content-article', title: 'Before', body: 'Body', coverImageUrl: 'https://example.test/cover.png', excerpt: 'Excerpt', publishedAt: date }, patch: { title: 'After', body: 'Updated body', publishedAt: date + 1000 }, expected: { title: 'After', body: 'Updated body', publishedAt: date + 1000, excerpt: 'Excerpt', coverImageUrl: 'https://example.test/cover.png' } },
                 { path: 'schedule', input: { id: 'content_schedule', season: 'Content test', week: 1, homeTeamId: 'home', awayTeamId: 'away', scheduledDate: date, streamUrl: 'https://example.test/live', matchType: 'playoff', playoffRound: 'Final', status: 'completed', homeScore: 2, awayScore: 1, linkedMatchId: 'source', notes: 'Note' }, patch: { week: 2, scheduledDate: null }, expected: { week: 2, scheduledDate: null, streamUrl: 'https://example.test/live', playoffRound: 'Final', homeScore: 2, linkedMatchId: 'source', notes: 'Note' } },
             ];
             for (const fixture of fixtures) {
@@ -266,8 +268,8 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 assert.equal(saved.id, fixture.input.id);
                 if (fixture.path !== 'news') assert.ok(Number(saved.updatedAt) >= before);
                 if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(saved.author, 'Admin');
-                if (fixture.path === 'news') await database.execute(Prisma.sql`UPDATE public.news SET author='Original writer' WHERE id=${fixture.input.id}`);
-                else if (fixture.path === 'articles') await database.execute(Prisma.sql`UPDATE public.articles SET author='Original writer' WHERE id=${fixture.input.id}`);
+                if (fixture.path === 'news') await database.execute(Prisma.sql`UPDATE asl.news SET author='Original writer' WHERE id=${fixture.input.id}`);
+                else if (fixture.path === 'articles') await database.execute(Prisma.sql`UPDATE asl.articles SET author='Original writer' WHERE id=${fixture.input.id}`);
                 assert.equal((await call('PATCH', itemUrl, admin, { id: 'forged', ...fixture.patch })).statusCode, 400);
                 const patched = await ok('PATCH', itemUrl, admin, fixture.patch);
                 for (const [key, value] of Object.entries(fixture.expected)) assert.deepEqual(patched[key], value, `${fixture.path}.${key}`);
@@ -318,7 +320,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal(conflict.statusCode, 409, conflict.body);
             assert.deepEqual(await readSeason(season), saved);
             assert.deepEqual(await readSeason('Untouched season'), other);
-            assert.equal((await database.query(Prisma.sql `SELECT id FROM public.scheduled_matches WHERE id='schedule_partial_insert'`)).length, 0);
+            assert.equal((await database.query(Prisma.sql `SELECT id FROM asl.scheduled_matches WHERE id='schedule_partial_insert'`)).length, 0);
         });
         await t.test('concurrent schedule replacements keep one complete schedule', async () => {
             const season = 'Concurrent replacement';
@@ -404,13 +406,13 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         });
         assert.equal(selfVote.statusCode, 400, `Expected self-vote validation, received ${selfVote.statusCode} ${selfVote.body}; app=${Date.now()} database=${voteClock?.database_now instanceof Date ? voteClock.database_now.toISOString() : voteClock?.database_now} opensAt=${period.opensAt} closesAt=${period.closesAt}`);
         assert.equal(selfVote.json<{ error: string }>().error, 'ineligible_vote');
-        assert.equal((await database.query(Prisma.sql `SELECT * FROM public.totw_votes`)).length, 0);
+        assert.equal((await database.query(Prisma.sql `SELECT * FROM asl.totw_votes`)).length, 0);
         const votes={gk:'Goalie',def:'Alice',cm:'Admin',st:'Bob'};
         await ok('PUT',`/api/voting/periods/${period.id}/votes`,newUser,votes);
         await ok('PUT',`/api/voting/periods/${period.id}/votes`,newUser,votes);
-        assert.equal((await database.query(Prisma.sql `SELECT * FROM public.totw_votes`)).length,4);
+        assert.equal((await database.query(Prisma.sql `SELECT * FROM asl.totw_votes`)).length,4);
         assert.equal((await call('PUT',`/api/voting/periods/${period.id}/votes`,newUser,{...votes,gk:'Bob'})).statusCode,400);
-        assert.equal((await database.query(Prisma.sql `SELECT * FROM public.totw_votes`)).length,4);
+        assert.equal((await database.query(Prisma.sql `SELECT * FROM asl.totw_votes`)).length,4);
         const champions={S1:{winnerTeamId:'home',runnerUpTeamId:'away',setAt:Date.now()}};
         await ok('PUT','/api/settings/season_champions',admin,{value:champions});
         assert.equal(((await ok('GET','/api/accounts/Alice')).championships as unknown[]).length,1);
@@ -420,11 +422,9 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         const imported={matchData:{match_id:'strikers_1',score:{home:2,away:0},players:[{player_id:'123',username:'Alice',team:'home',stats:{goals:2}}]},playerMap:{'123':'Alice'},tackleOverrides:{},homeTeamId:'home',awayTeamId:'away',season:'S1'};
         assert.equal((await ok('POST','/api/import-match',admin,imported)).updated,1);
         assert.equal((await ok('POST','/api/import-match',admin,imported)).alreadyImported,1);
-        await ok('POST', `/api/accounts/${alice}/rename`, alice, {
-            username: 'Alicia'
-        });
-        assert.equal((await ok('GET', '/api/teams/home')).ownerUsername, 'Alicia');
-        const grants = await database.query(Prisma.sql `SELECT has_table_privilege('authenticated','public.accounts','UPDATE') AS writable,has_table_privilege('anon','public.accounts','SELECT') AS readable`);
+        await database.transaction(tx => syncVerifiedDiscordUsername(tx, alice, 'alicia'));
+        assert.equal((await ok('GET', '/api/teams/home')).ownerUsername, 'alicia');
+        const grants = await database.query(Prisma.sql `SELECT has_table_privilege('authenticated','asl.accounts','UPDATE') AS writable,has_table_privilege('anon','asl.accounts','SELECT') AS readable`);
         assert.equal(grants[0]?.writable, false);
         assert.equal(grants[0]?.readable, false);
     }

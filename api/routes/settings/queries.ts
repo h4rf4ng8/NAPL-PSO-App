@@ -15,12 +15,25 @@ export async function getSetting(database: Database, key: SettingKey): Promise<u
 export async function readSetting(database: Database, key: SettingKey, lock = false): Promise<Setting | null> {
   // Return the locked row directly rather than adding a second read.
   if (!lock) return database.client.setting.findUnique({ where: { key } });
-  const rows = await database.query<Setting>(Prisma.sql `SELECT key,value FROM public.settings WHERE key=${key} FOR UPDATE`);
+  const rows = await database.query<Setting>(Prisma.sql `SELECT key,value FROM asl.settings WHERE key=${key} FOR UPDATE`);
   return rows[0] ?? null;
 }
 
+export async function ensureSeason(database: Database, id: string): Promise<void> {
+  await database.transaction(async tx => {
+    const existing = await tx.client.season.findUnique({ where: { id } });
+    if (existing) return;
+    await tx.client.season.create({ data: { id } });
+    const teams = await tx.client.team.findMany({ select: { id: true } });
+    if (teams.length > 0) await tx.client.teamSeason.createMany({ data: teams.map(team => ({ team_id: team.id, season_id: id })) });
+  });
+}
+
 export async function saveSetting(database: Database, key: SettingKey, value: string | null): Promise<void> {
-  await database.client.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+  await database.transaction(async tx => {
+    if (key === 'current_season' && value) await ensureSeason(tx, value);
+    await tx.client.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
+  });
 }
 
 export async function championshipTeam(database: Database, id: string): Promise<Team> {
@@ -29,9 +42,9 @@ export async function championshipTeam(database: Database, id: string): Promise<
   return team;
 }
 
-export async function lockChampionshipAccounts(database: Database): Promise<Pick<Account, 'id' | 'username_lower' | 'championships'>[]> {
+export async function lockChampionshipAccounts(database: Database): Promise<Pick<Account, 'id' | 'team_id' | 'championships'>[]> {
   // Award replacement must read and write each account while its row is locked.
-  return database.query(Prisma.sql `SELECT id, username_lower, championships FROM public.accounts FOR UPDATE`);
+  return database.query(Prisma.sql `SELECT id, team_id, championships FROM asl.accounts FOR UPDATE`);
 }
 
 export async function saveChampionships(database: Database, id: string, championships: Prisma.InputJsonValue[]): Promise<void> {

@@ -22,7 +22,7 @@ function sessionDependencies(): SessionDependencies {
       logout: async () => {},
     },
     discord: {
-      identity: async () => '',
+      identity: async () => ({ id: '', username: 'discord_player' }),
       membership: async () => false,
       refresh: async () => { throw new Error('unexpected Discord refresh'); },
     },
@@ -40,7 +40,7 @@ test('independent app instances read committed public account changes without a 
   const second = createApp({ db: secondDb, config, session: sessionDependencies() });
   let originalCountry: string | null | undefined;
   try {
-    const [current] = await firstDb.query<{ country: string | null }>(Prisma.sql`SELECT country FROM public.accounts WHERE id=${accountId}::uuid`);
+    const [current] = await firstDb.query<{ country: string | null }>(Prisma.sql`SELECT country FROM asl.accounts WHERE id=${accountId}::uuid`);
     assert.ok(current, 'seed account should exist');
     originalCountry = current.country;
 
@@ -52,7 +52,7 @@ test('independent app instances read committed public account changes without a 
     assert.equal(initialAccount.country, originalCountry);
 
     const changedCountry = originalCountry === 'freshness-probe' ? 'freshness-probe-next' : 'freshness-probe';
-    await firstDb.execute(Prisma.sql`UPDATE public.accounts SET country=${changedCountry} WHERE id=${accountId}::uuid`);
+    await firstDb.execute(Prisma.sql`UPDATE asl.accounts SET country=${changedCountry} WHERE id=${accountId}::uuid`);
 
     const later = await second.inject({ url: '/api/accounts', headers });
     assert.equal(later.statusCode, 200, later.body);
@@ -61,7 +61,7 @@ test('independent app instances read committed public account changes without a 
   } finally {
     try {
       if (originalCountry !== undefined) {
-        await firstDb.execute(Prisma.sql`UPDATE public.accounts SET country=${originalCountry} WHERE id=${accountId}::uuid`);
+        await firstDb.execute(Prisma.sql`UPDATE asl.accounts SET country=${originalCountry} WHERE id=${accountId}::uuid`);
       }
     } finally {
       await Promise.all([first.close(), second.close(), firstDb.close(), secondDb.close()]);

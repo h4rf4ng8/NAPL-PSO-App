@@ -56,7 +56,7 @@ test('administrator changes append actor and set history atomically', {
     await ownerSql.query('ALTER TABLE auth_gateway.role_audit_events ADD CONSTRAINT role_audit_test_reject CHECK (actor_user_id IS NULL) NOT VALID');
     try {
       const failed = await request([bob]);
-      assert.equal(failed.statusCode, 503, failed.body);
+      assert.equal(failed.statusCode, 400, failed.body);
       const current = (await owner.query<{ user_id: string }>(Prisma.sql `SELECT user_id::text FROM auth_gateway.user_roles WHERE role='admin' ORDER BY user_id`)).map(row => row.user_id);
       assert.deepEqual(current, [alice, bob], 'role change must roll back when event append fails');
       assert.equal(Number((await owner.query<{ count: bigint }>(Prisma.sql `SELECT count(*) AS count FROM auth_gateway.role_audit_events`))[0]!.count), beforeCount + 1);

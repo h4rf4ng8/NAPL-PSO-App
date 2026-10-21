@@ -4,15 +4,17 @@ import { z } from 'zod';
 import { adminAccountPatch, profilePatch, position } from '@napl/contracts';
 import { awardIdSchema } from '@napl/contracts/accounts';
 import type { Dependencies } from '../../app.js';
-import { params as parameters, query } from '../../plugins/request.js';
+import { params as parameters, query, clientIp } from '../../plugins/request.js';
 import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identity.js';
+import { RateLimiter } from '../../plugins/limits/auth.js';
 import type { Prisma } from '../../plugins/db/client.js';
 import { string, array, object } from '../../plugins/db/records.js';
 import { accountDto, currentAccountDto, positionRequestDto } from './dto.js';
 import { provisionAccount, getCurrentAccount, listAccounts, loadRankedAccounts, findAccountByUsername, requireAccount, updateAccount, listPositionRequests, hasPendingPositionRequest, createPositionRequest, lockPositionRequest, reviewPositionRequest, deletePositionRequest } from './queries.js';
 const awardSeason = z.string().trim().min(1).max(64);
 const historicalAwardId = z.string().trim().min(1).max(160);
-export function registerAccounts(app: FastifyInstance, { db }: Dependencies): void {
+export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencies): void {
+    const limiter = new RateLimiter(auth.authStore);
     app.get('/api/accounts', {
         config: {
             public: true
@@ -40,15 +42,20 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
         return { ...accountDto(row), ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats };
     });
-    app.get('/api/users/me', {
-        config: {
-            membership: false
-        }
-    }, async (request) => currentAccountDto(await getCurrentAccount(db, actor(request).id), request.userRoles));
+    app.get('/api/users/me', async (request) => currentAccountDto(await getCurrentAccount(db, actor(request).id), request.userRoles));
     app.post('/api/users/me', async (request) => {
-        z.strictObject({}).parse(request.body ?? {});
+        const input = z.strictObject({ providerToken: z.string().min(1).max(4096).optional() }).parse(request.body === undefined ? {} : request.body);
         const identity = actor(request);
-        const row = await provisionAccount(db, identity);
+        await limiter.provision(clientIp(request), identity.id, identity.sessionId);
+        let username: string | undefined;
+        if (input.providerToken) {
+            const user = await auth.supabase.user(request.headers.authorization!.slice(7));
+            const profile = await auth.discord.identity(input.providerToken);
+            if (user.id !== identity.id || user.identities.every(item => item.provider !== 'discord' || item.id !== profile.id))
+                throw new HttpError(401, 'discord_identity_mismatch');
+            username = profile.username;
+        }
+        const row = await provisionAccount(db, identity, username);
         const population = await loadRankedAccounts(db);
         const calculated = population.find(account => account.id === row.id);
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');

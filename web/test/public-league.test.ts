@@ -63,7 +63,7 @@ const responses: Record<string, unknown> = {
 
 function mockPublicReads() {
   return mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
-    const path = String(input);
+    const path = String(input).replace('http://api.example.test','');
     assert.equal(init?.method, 'GET');
     assert.ok(Object.hasOwn(responses, path), `Unexpected public request: ${path}`);
     return Response.json(responses[path]);
@@ -82,7 +82,7 @@ test('visitors can browse every public page without standings navigation or priv
   assert.deepEqual(navigation().map(button => button.children.join('')), ['teams', 'stats', 'schedule', 'news', 'transfers', 'rules']);
   assert.match(navigation()[0]!.props.className, /active/);
   assert.match(renderedText(), /Public Team/);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => call.arguments[0])), new Set(['/api/accounts', '/api/teams']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/accounts', '/api/teams']));
 
   for (const [page, expected] of [
     ['stats', /Public Player/], ['schedule', /SCHEDULED/], ['news', /MATCHUPS/],
@@ -95,7 +95,7 @@ test('visitors can browse every public page without standings navigation or priv
   await act(async () => { navigation().find(button => button.children.join('') === 'news')!.props.onClick(); });
   await act(async () => { renderer!.root.findAllByType('button').find(button => button.children.join('') === 'ARTICLES')!.props.onClick(); });
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
-  const paths = new Set(fetch.mock.calls.map(call => call.arguments[0]));
+  const paths = new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test','')));
   assert.ok(paths.has('/api/schedule'));
   assert.ok(paths.has('/api/news'));
   assert.ok(paths.has('/api/transfers'));
@@ -117,5 +117,5 @@ test('public schedule skips team records and hides data retained after its accou
   assert.match(renderedText(), /SCHEDULED/);
   assert.doesNotMatch(renderedText(), /91W-8D-7L/);
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => call.arguments[0])), new Set(['/api/schedule', '/api/teams']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/schedule', '/api/teams']));
 });

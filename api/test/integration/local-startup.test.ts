@@ -22,7 +22,8 @@ test('local Compose loads hosted API settings without local Auth or database ove
   assert.equal(api.environment?.LAMBDA_ENDPOINT, undefined);
   assert.deepEqual(api.depends_on, { lambda: { condition: 'service_started' } });
   assert.equal(web.env_file, './web/.env');
-  assert.deepEqual(web.environment, { LOCAL_API_URL: 'http://api:3000' });
+  assert.deepEqual(api.ports, ['127.0.0.1:3000:3000']);
+  assert.deepEqual(web.environment, { VITE_API_URL: 'http://localhost:3000' });
   assert.deepEqual(web.ports, ['127.0.0.1:5173:5173']);
   assert.equal(compose.volumes, undefined);
 });

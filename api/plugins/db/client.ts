@@ -5,7 +5,7 @@ export interface Database {
     readonly client: Prisma.TransactionClient;
     query<T extends Row = Row>(sql: Prisma.Sql): Promise<T[]>;
     execute(sql: Prisma.Sql): Promise<number>;
-    transaction<T>(work: (database: Database) => Promise<T>): Promise<T>;
+    transaction<T>(work: (database: Database) => Promise<T>, options?: { maxWait: number; timeout: number; isolationLevel?: Prisma.TransactionIsolationLevel }): Promise<T>;
     close(): Promise<void>;
 }
 function wrap(client: PrismaClient | Prisma.TransactionClient): Database {
@@ -13,8 +13,8 @@ function wrap(client: PrismaClient | Prisma.TransactionClient): Database {
         client,
         query: <T extends Row>(sql: Prisma.Sql) => client.$queryRaw<T[]>(sql),
         execute: sql => client.$executeRaw(sql),
-        transaction: work => '$transaction' in client ? client.$transaction(tx => work(wrap(tx)), {
-            isolationLevel: 'Serializable', timeout: 15_000
+        transaction: (work, options) => '$transaction' in client ? client.$transaction(tx => work(wrap(tx)), {
+            isolationLevel: 'Serializable', timeout: 15_000, ...options
         }) : work(wrap(client)),
         close: async () => {
             if ('$disconnect' in client)

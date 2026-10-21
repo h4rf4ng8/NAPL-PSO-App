@@ -1,19 +1,11 @@
 sequenceDiagram
-    participant User as User (web app)
-    participant API as Lambda API
-    participant Auth as Supabase Auth
-    participant Discord
-    participant DB as Supabase (PostgreSQL)
-    User->>API: Start sign-in: POST /auth/login/discord
-    API-->>User: OAuth URL and login cookie
-    User->>Auth: Open OAuth URL
-    Note over Auth,Discord: User completes Discord sign-in and consent
-    Auth-->>User: Redirect with authorization code
-    User->>API: GET /auth/callback with code and login cookie
-    API->>Auth: Exchange code and verify identity
-    Auth-->>API: Session tokens and Discord credentials
-    API->>Discord: Verify identity and guild membership
-    Discord-->>API: Eligible member
-    API->>DB: Save membership, then provision league account
-    DB-->>API: Account ready
-    API-->>User: Set session cookies and redirect to app
+  participant B as Browser SDK
+  participant A as Supabase Auth / Discord
+  participant L as Lambda API
+  B->>A: Discord OAuth with PKCE
+  A-->>B: Redirect to /auth/callback with code
+  B->>A: Exchange code
+  A-->>B: Access, refresh and provider tokens
+  B->>L: POST /api/users/me (bearer, optional provider token)
+  L->>A: Verify JWT and provisioning identity
+  L-->>B: Current league account and database roles

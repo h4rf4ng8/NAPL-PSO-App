@@ -65,28 +65,6 @@ test('unlisted routes and mutations require identity by default', async () => {
         await app.close();
     }
 });
-test('revoked sessions cannot mutate or use administrative reads', async () => {
-    const database: Database = {
-        query: async <T extends Row>(sql: Prisma.Sql) => {
-            let rows: Row[] = [];
-            if (sql.sql.includes('FROM auth_gateway.memberships')) rows = [{eligible:true,fresh:true}];
-            if (sql.sql.includes('FROM auth_gateway.user_roles')) rows = [{role:'super_admin'}];
-            if (sql.sql.includes('session_active')) rows = [{active:false}];
-            return rows as T[];
-        },
-        execute: async () => {throw new Error('A revoked session must not write');},
-        transaction: async work => work(database),
-        close: async () => {}
-    };
-    const app=createApp({db:database,verify});
-    try {
-        for (const request of [{method:'GET' as const,url:`/api/accounts/id/${alice}`},{method:'PATCH' as const,url:`/api/accounts/${alice}`,payload:{cheater:true}}]) {
-            const response=await app.inject({...request,headers:{authorization:`Bearer ${admin}`}});
-            assert.equal(response.statusCode,401);
-            assert.equal(response.json<{error:string}>().error,'session_expired');
-        }
-    } finally {await app.close();}
-});
 test('Prisma adapter constraint and transaction errors have deliberate responses', async () => {
     for(const sqlState of ['40001','40P01','23505','23503','23514']) {
       for (const direct of [false, true]) {

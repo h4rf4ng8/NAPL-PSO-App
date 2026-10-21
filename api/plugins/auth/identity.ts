@@ -29,15 +29,3 @@ export async function roles(database: Database, userId: string): Promise<('admin
     const rows = await database.query(Prisma.sql `SELECT role FROM auth_gateway.user_roles WHERE user_id=${userId}::uuid`);
     return rows.map(r => z.enum(['admin', 'super_admin']).parse(r.role));
 }
-export async function requireMember(database: Database, userId: string): Promise<void> {
-    const [record] = await database.query(Prisma.sql `SELECT eligible, valid_until > now() AS fresh FROM auth_gateway.memberships WHERE user_id=${userId}::uuid`);
-    if (!record || !record.fresh)
-        throw new HttpError(401, 'membership_refresh_required');
-    if (!record.eligible)
-        throw new HttpError(403, 'membership_required');
-}
-export async function requireActiveSession(database: Database, sessionId: string): Promise<void> {
-    const [row] = await database.query(Prisma.sql `SELECT auth_gateway.session_active(${sessionId}::uuid) AS active`);
-    if (!row?.active)
-        throw new HttpError(401, 'session_expired');
-}

@@ -1,13 +1,9 @@
 sequenceDiagram
-    participant User as User (web app)
-    participant API as Lambda API
-    participant DB as Supabase (PostgreSQL)
-    participant Auth as Supabase Auth
-    User->>API: POST /auth/refresh with session cookie
-    API->>DB: Claim this session's refresh
-    DB-->>API: Refresh claimed
-    API->>Auth: Exchange refresh token
-    Auth-->>API: New access and refresh tokens
-    API->>DB: Check membership and save refresh result
-    DB-->>API: Membership current, result saved
-    API-->>User: 200 OK and renewed session cookies
+  participant B as Browser Supabase SDK
+  participant A as Supabase Auth
+  participant L as Lambda API
+  B->>A: Refresh session through SDK
+  A-->>B: New access and refresh tokens
+  B->>L: API request with bearer access token
+  L->>L: Verify JWT and current database session/roles
+  L-->>B: Authorized response

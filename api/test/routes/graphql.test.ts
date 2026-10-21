@@ -28,7 +28,7 @@ const team = {
 };
 
 function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = false, options: {
-  account?: Row; teams?: Row[]; membership?: { eligible: boolean; fresh: boolean }; settingsError?: Error; activeSession?: boolean;
+  account?: Row; teams?: Row[]; membership?: { eligible: boolean; fresh: boolean }; settingsError?: Error;
 } = {}) {
   const seen = new Map<string, number>();
   const database: Database = {
@@ -69,7 +69,6 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
       else if (key.includes('public."settings"')) rows = [{ key: sql.values[0], value: sql.values[0] === 'current_season' ? 'S2' : '{"CM":{"goals":1}}' }];
       else if (key.includes('FROM auth_gateway.user_roles')) rows = sql.values[0] === admin ? roleForAlice.map(role => ({ role })) : [];
       else if (key.includes('auth_gateway.memberships')) rows = [options.membership ?? { eligible: true, fresh: true }];
-      else if (key.includes('session_active')) rows = [{ active: options.activeSession ?? true }];
       return rows as T[];
     },
     execute: async () => 0,
@@ -78,7 +77,10 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
   };
   const app = createApp({
     db: database,
-    verify: async token => ({ id: token, sessionId: token, claims: { sub: token } }),
+    verify: async token => {
+      if (token === 'invalid') throw new Error('bad token');
+      return { id: token, sessionId: token, claims: { sub: token } };
+    },
   });
   return { app, seen, database };
 }
@@ -194,18 +196,6 @@ test('schema-only selections preserve alias deduplication and privileged resolve
   } finally { await app.close(); }
 });
 
-test('schema-only privileged reads preserve membership admission errors', async () => {
-  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
-    const { app, database } = appFor(['super_admin'], false, { membership });
-    try {
-      const result = await graphql({ schema, source: '{ admins { userId } }', contextValue: {
-        db: database, request: { identity: { id: admin }, userRoles: ['super_admin'] }, reads: new Map(),
-      } });
-      assert.equal(result.errors?.[0]?.extensions.status, membership.fresh ? 403 : 401);
-    } finally { await app.close(); }
-  }
-});
-
 test('GraphQL and REST share pending-team visibility rules', async () => {
   const pending = { ...team, id: 'pending', status: 'pending', owner_account_id: '22222222-2222-4222-8222-222222222222', pending_members: [{ username: 'Alice', status: 'pending' }] };
   const { app } = appFor([], false, { teams: [team, pending] });
@@ -222,27 +212,24 @@ test('GraphQL and REST share pending-team visibility rules', async () => {
   } finally { await app.close(); }
 });
 
-test('standings aggregates preserve membership admission errors', async () => {
-  for (const membership of [{ eligible: false, fresh: true }, { eligible: true, fresh: false }]) {
-    const { app, seen } = appFor([], false, { membership });
-    try {
-      for (const url of ['/api/standings', '/api/team-records']) {
-        const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
-        assert.equal(response.statusCode, membership.fresh ? 403 : 401, response.body);
-        assert.equal(response.json().error, membership.fresh ? 'membership_required' : 'membership_refresh_required');
-        assert.ok(seen.keys().every(key => key.includes('auth_gateway')), 'denied membership must not trigger domain reads');
-      }
-    } finally { await app.close(); }
-  }
+test('standings admits authenticated Discord users without guild membership lookups', async () => {
+  const { app, seen } = appFor([], false, { membership: { eligible: false, fresh: false } });
+  try {
+    for (const url of ['/api/standings', '/api/team-records']) {
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+      assert.equal(response.statusCode, 200, response.body);
+    }
+    assert.ok(seen.keys().every(key => !key.includes('memberships')));
+  } finally { await app.close(); }
 });
 
-test('fixed reads preserve expired-session errors', async () => {
-  const { app } = appFor([], false, { activeSession: false });
+test('fixed reads reject invalid JWTs', async () => {
+  const { app } = appFor();
   try {
     for (const url of ['/api/dashboard', '/api/standings', '/api/team-records']) {
-      const response = await app.inject({ method: 'POST', url, headers: { authorization: `Bearer ${alice}` }, payload: { variables: {} } });
+      const response = await app.inject({ method: 'POST', url, headers: { authorization: 'Bearer invalid' }, payload: { variables: {} } });
       assert.equal(response.statusCode, 401, response.body);
-      assert.equal(response.json().error, 'session_expired');
+      assert.equal(response.json().error.code, 'access_invalid');
     }
   } finally { await app.close(); }
 });

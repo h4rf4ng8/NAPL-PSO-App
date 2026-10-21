@@ -1,3 +1,4 @@
+import { FLAGS } from '../assets/flags';
 import type { Account,Team } from '../api/models';
 import { getFormation, POS, POSITIONS } from '@napl/contracts/league';
 export { DEFAULT_FORMATION, FORMATION_IDS, getFormation, POSITIONS } from '@napl/contracts/league';
@@ -9,7 +10,7 @@ export const isAdmin = (account: Account | null | undefined) => isSuperAdmin(acc
 // ============ COUNTRIES ============
 // Players pick a country at registration; the flag shows on their card.
 // COUNTRY_CODES maps the country name to its ISO code, used to load a real
-// flag image from flagcdn.com (e.g. https://flagcdn.com/w80/ca.png).
+// flag image served from the public asset bucket.
 export const COUNTRIES = [
   'Canada', 'United States', 'Mexico', 'El Salvador', 'United Kingdom', 'Ireland', 'France',
   'Germany', 'Spain', 'Portugal', 'Italy', 'Netherlands', 'Belgium',
@@ -35,7 +36,7 @@ const COUNTRY_CODES: Record<string,string> = {
 export const flagUrl = (country: string | null | undefined) => {
   if (!country) return null;
   const code = COUNTRY_CODES[country];
-  return code ? `https://flagcdn.com/w80/${code}.png` : null;
+  return code ? FLAGS[code] ?? null : null;
 };
 
 // ============ STAT CALCS ============

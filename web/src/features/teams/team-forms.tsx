@@ -1,3 +1,4 @@
+import { uploadImage } from '../../api/media';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Check, Clock, Shield, X, XCircle } from 'lucide-react';
 import React, { useRef,useState } from 'react';
@@ -68,7 +69,7 @@ export const EditTeamModal = ({ team, onClose, onSaved }: { team: Team; onClose:
         tag: tag.trim().toUpperCase(),
         color,
         description: description.trim(),
-        ...(logoUrl !== team.logoUrl && { logoUrl }),
+        ...(logoUrl !== team.logoUrl && { logoUrl: await uploadImage('team-logo', team.id, logoUrl) }),
         seasons,
       });
       onSaved?.();
@@ -263,6 +264,7 @@ export const SubmitTeamModal = ({ account, onClose, onSave }: { account: Account
       pendingMembers: selectedMembers,
     };
     try {
+      team.logoUrl = await uploadImage('team-logo', id, logoUrl);
       await teamApi.createTeam(team); onSave(); onClose();
     } catch (error) { setError(error instanceof Error ? error.message : 'Could not create team.'); }
     finally { setLoading(false); }

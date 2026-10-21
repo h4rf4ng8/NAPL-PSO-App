@@ -10,7 +10,7 @@ export function accountDto(row: Account, privateFields = false) {
     imageUrl: storedImage(row.image_url, `/api/media/accounts/${row.id}/image`), country: row.country, stats: row.stats, matches: row.matches,
     awards: row.awards, championships: row.championships, totwUntil: row.totw_until?.getTime() ?? null,
     cheater: row.cheater, strikersId: row.strikers_id, steamUrl: row.steam_url, createdAt: row.created_at?.getTime() ?? null,
-    ...(privateFields && { email: row.email ?? null, pendingImageUrl: storedImage(row.pending_image_url ?? null, `/api/media/accounts/${row.id}/pending-image`) }),
+    ...(privateFields && { email: row.email ?? null, pendingImageUrl: storedImage(row.pending_image_url ?? null, `/api/media/accounts/${row.id}/pending-image`, false) }),
   };
 }
 
@@ -43,7 +43,7 @@ function rankedAccountDto(row: Row) {
 export function rankedAccountsDto(rows: Row[], pending?: Pick<Account, 'id' | 'pending_image_url'>[]) {
   const byId = new Map(pending?.map(row => [row.id, row.pending_image_url]));
   return rows.map(row => ({
-    ...rankedAccountDto(row), ...(pending && { pendingImageUrl: storedImage(byId.get(String(row.id)) ?? null, `/api/media/accounts/${String(row.id)}/pending-image`) }),
+    ...rankedAccountDto(row), ...(pending && { pendingImageUrl: storedImage(byId.get(String(row.id)) ?? null, `/api/media/accounts/${String(row.id)}/pending-image`, false) }),
   }));
 }
 
@@ -53,7 +53,7 @@ export function currentAccountDto(result: {
   if (!result) return null;
   return {
     ...rankedAccountDto(result.summary), email: result.privateFields?.email ?? null,
-    pendingImageUrl: storedImage(result.privateFields?.pending_image_url ?? null, `/api/media/accounts/${String(result.summary.id)}/pending-image`), roles,
+    pendingImageUrl: storedImage(result.privateFields?.pending_image_url ?? null, `/api/media/accounts/${String(result.summary.id)}/pending-image`, false), roles,
   };
 }
 

@@ -60,4 +60,8 @@ test('rejects duplicate assignments and server secrets in web before changing ei
   await assert.rejects(setupEnv(root), /secrets belong in api/);
   assert.equal(await readFile(api, 'utf8'), '# unchanged\n');
   assert.equal(await readFile(web, 'utf8'), 'DATABASE_URL=private-value\n');
+  await writeFile(web, 'VITE_SUPABASE_SECRET_KEY=private-storage-secret\n');
+  await assert.rejects(setupEnv(root), /secrets belong in api/);
+  assert.equal(await readFile(api, 'utf8'), '# unchanged\n');
+  assert.equal(await readFile(web, 'utf8'), 'VITE_SUPABASE_SECRET_KEY=private-storage-secret\n');
 });

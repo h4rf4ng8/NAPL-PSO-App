@@ -381,6 +381,7 @@ Supply production values through a protected local file or the deployment enviro
 | --- | --- |
 | `DATABASE_URL` | One Supabase PostgreSQL connection URL for league data, database roles, session checks and provisioning quotas. Its restricted runtime login must inherit `app_runtime` and `gateway_runtime`; use `sslmode=verify-full` in production. |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` | Supabase project HTTPS URL, such as `https://PROJECT.supabase.co`, and authentication publishable key. |
+| `SUPABASE_SECRET_KEY` | Required server-only key from the same Supabase project for Storage uploads, promotion and private signed URLs. Keep it out of browser config and Vercel. |
 | `SUPABASE_JWKS_URL` | Full signing-key endpoint, usually `https://PROJECT.supabase.co/auth/v1/.well-known/jwks.json`. Used only to fetch keys; the issuer comes from the project Auth URL. |
 | `PUBLIC_ORIGIN` | Exact HTTPS address of the public frontend, without a path or trailing slash. Configure allowed sign-in redirects for this frontend origin. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional destination for roster notices. |
@@ -421,6 +422,7 @@ Configure the **Production** environment under GitHub **Settings → Environment
 | Repository secret | Where to obtain it |
 | --- | --- |
 | `DATABASE_URL` | Supabase PostgreSQL connection for the restricted runtime login, with `sslmode=verify-full`. |
+| `SUPABASE_SECRET_KEY` | Supabase project secret API key; required for production Storage. Never expose it through `VITE_*` or Vercel. |
 | `DISCORD_TRANSFER_WEBHOOK` | Optional Discord webhook URL for roster notices. |
 
 The database login requires both runtime role grants and the migrations described in [Runtime Settings](#runtime-settings) and [Rollout and Rollback](#rollout-and-rollback). Use a restricted runtime login rather than the database administrator account. The login supplies league access, role/session checks and provisioning quotas.
@@ -467,6 +469,8 @@ A new Lambda version becomes active through the `live` alias. CloudFormation nor
 The smoke check verifies access to league data. It does not verify real Discord sign-in, SDK refresh or authenticated authorization. Complete those checks through the website after configuring Vercel. The workflow does not run production migrations or coordinate Vercel's separate deployment process.
 
 ### Configure Vercel
+
+Deploy the API with its production Storage key before releasing the frontend that uses native Storage uploads. The GitHub workflow and Vercel deploy independently; wait for the API deployment and smoke checks to pass before releasing the matching frontend.
 
 Set Vercel's project root to `web`, allow access to the workspace's shared packages, and use Node 24 for builds. [vercel.json](web/vercel.json) builds static assets and serves SPA fallback routes, including `/auth/callback`.
 

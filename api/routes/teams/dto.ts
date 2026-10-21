@@ -10,7 +10,7 @@ export function teamDto(row: TeamRecord) {
   return {
     id: row.id, name: row.name, tag: row.tag, color: row.color, description: row.description,
     ownerUsername: row.owner_username, members: row.status === 'pending' ? [...new Set([row.owner_username, ...row.members])] : row.members, totw: row.totw, totwSetAt: timestamp(row.totw_set_at),
-    status: row.status, logoUrl: storedImage(row.logo_url, `/api/media/teams/${pathSegment(row.id)}/logo`), createdAt: timestamp(row.created_at), reviewedAt: timestamp(row.reviewed_at),
+    status: row.status, logoUrl: storedImage(row.logo_url, `/api/media/teams/${pathSegment(row.id)}/logo`, row.status === 'approved'), createdAt: timestamp(row.created_at), reviewedAt: timestamp(row.reviewed_at),
     reviewedBy: row.reviewed_by, rejectionReason: row.rejection_reason,
     invitations, pendingMembers: invitations.map(entry => entry.username), seasons: row.seasons,
     formation: row.formation || DEFAULT_FORMATION, lineup: object(row.lineup),

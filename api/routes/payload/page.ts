@@ -1,3 +1,4 @@
+import { ASSET_BUCKET } from '@napl/contracts/storage';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { HttpError } from '../../plugins/auth/identity.js';
@@ -62,7 +63,12 @@ export function textPage(text: string, scope: string, after?: string): Page<stri
   return page(chunks, scope, { first: 1, after });
 }
 
-export function storedImage(value: unknown, path: string): unknown {
+export function storedImage(value: unknown, path: string, publicRead = true): unknown {
+  // Presentation only: writes validate exact project/entity ownership before persisting managed URLs.
+  if (publicRead && typeof value === 'string' && new RegExp(`^https?://[^/?#]+/storage/v1/object/public/${ASSET_BUCKET}/[A-Za-z0-9_./%-]+$`).test(value)) {
+    const url = new URL(value);
+    if (!url.username && !url.password && url.href === value) return value;
+  }
   if (typeof value === 'string' && value.startsWith(`${path}?v=`) && /^[\w-]{12}$/.test(value.slice(path.length + 3))) return value;
   return typeof value === 'string' && value.length > 0 ? `${path}?v=${createHash('sha256').update(value).digest('base64url').slice(0, 12)}` : value;
 }

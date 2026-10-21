@@ -2,17 +2,19 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { articleInput, newsInput, ruleInput, scheduleInput, transferInput, id } from '@napl/contracts';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
+import { Prisma } from '../../plugins/db/client.js';
 import type { Dependencies } from '../../app.js';
 import { actor, actorName } from '../../plugins/auth/identity.js';
 import { HttpError } from '../../plugins/auth/identity.js';
 import { pathSegment, page, pageInput, textPage } from '../payload/page.js';
+import { prepareImage, removeUnusedImages } from '../payload/storage.js';
 import { listTeams } from '../teams/queries.js';
 import { loadTeamRecords } from '../matches/records.js';
 import { isAdmin } from '../../plugins/auth/identity.js';
 import { params as parameters, query } from '../../plugins/request.js';
 import * as queries from './queries.js';
 import { newsDto, ruleDto, articleDto, scheduleDto, transferDto } from './dto.js';
-export function registerContent(app: FastifyInstance, { db, webhookUrl }: Dependencies): void {
+export function registerContent(app: FastifyInstance, { db, webhookUrl, storage }: Dependencies): void {
     app.get('/api/news', { config: { public: true } }, async (request) => {
         const rows = await queries.listNews(db);
         return page(rows.map(row => { const { body: _body, notes: _notes, ...summary } = newsDto(row); return { ...summary, bodyUrl: `/api/news/${pathSegment(row.id)}/body`, notesUrl: `/api/news/${pathSegment(row.id)}/notes` }; }), 'news', pageInput(request));
@@ -73,17 +75,44 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
     app.post('/api/articles', { config: { role: 'admin' } }, async (request) => {
         const input = articleInput.parse(request.body);
         const author = await actorName(db, request);
-        return db.transaction(async (tx) => articleDto(await queries.upsertArticle(tx, input, author)));
+        const images: (string | null | undefined)[] = [];
+        try { return await db.transaction(async tx => {
+            await tx.query(Prisma.sql`SELECT id FROM asl.articles WHERE id=${input.id} FOR UPDATE`);
+            const previous = await tx.client.article.findUnique({ where: { id: input.id } });
+            if (input.coverImageUrl !== undefined) {
+                images.push(previous?.cover_image_url);
+                input.coverImageUrl = await prepareImage(storage, input.coverImageUrl, previous?.cover_image_url ?? null, { kind: 'article-cover', entityId: input.id, actorId: actor(request).id, public: input.publishedAt !== null && (input.publishedAt !== undefined || !previous || Boolean(previous.published_at)) });
+                images.push(input.coverImageUrl);
+            }
+            return articleDto(await queries.upsertArticle(tx, input, author, previous));
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.patch('/api/articles/:id', { config: { role: 'admin' } }, async (request) => {
         const input = articleInput.omit({ id: true }).partial().parse(request.body);
-        return articleDto(await queries.patchArticle(db, parameters(request).id!, input));
+        const images: (string | null | undefined)[] = [];
+        try { return await db.transaction(async tx => {
+            await tx.query(Prisma.sql`SELECT id FROM asl.articles WHERE id=${parameters(request).id!} FOR UPDATE`);
+            const previous = await tx.client.article.findUnique({ where: { id: parameters(request).id! } });
+            if (!previous) throw new HttpError(404, 'not_found');
+            if (input.coverImageUrl !== undefined) {
+                images.push(previous.cover_image_url);
+                input.coverImageUrl = await prepareImage(storage, input.coverImageUrl, previous.cover_image_url, { kind: 'article-cover', entityId: previous.id, actorId: actor(request).id, public: input.publishedAt !== null && (input.publishedAt !== undefined || Boolean(previous.published_at)) });
+                images.push(input.coverImageUrl);
+            }
+            return articleDto(await queries.patchArticle(tx, previous.id, input));
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
     });
     app.delete('/api/articles/:id', { config: { role: 'admin' } }, async (request) => {
-        await queries.deleteArticle(db, parameters(request).id!);
+        const images: (string | null | undefined)[] = [];
+        try { await db.transaction(async tx => {
+            const articleId = parameters(request).id!;
+            await tx.query(Prisma.sql`SELECT id FROM asl.articles WHERE id=${articleId} FOR UPDATE`);
+            const previous = await tx.client.article.findUnique({ where: { id: articleId }, select: { cover_image_url: true } });
+            images.push(previous?.cover_image_url);
+            await queries.deleteArticle(tx, articleId);
+        }); } finally { await removeUnusedImages(db, storage, request, images); }
         return { ok: true };
     });
-
     app.get('/api/schedule', { config: { public: true } }, async (request) => {
         const { season } = query(request);
         const { week } = z.object({ week: z.coerce.number().int().min(1).max(10_000).optional() }).parse(request.query);

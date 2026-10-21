@@ -1,3 +1,4 @@
+import { uploadImage } from '../../api/media';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { BookOpen, ChevronRight, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -6,6 +7,7 @@ import type { Account } from '../accounts/models';
 import type { Article } from './models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
+import { compressImage, fetchImageFile } from '../../utils/input';
 import { readTime, renderArticleBody, slugify } from '../../utils/content';
 import { isAdmin } from '../../utils/league';
 import { useResource } from '../../hooks/use-resource';
@@ -20,6 +22,7 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
   const [title, setTitle] = useState(article?.title || '');
   const [slug, setSlug] = useState(article?.slug || '');
   const [coverImageUrl, setCoverImageUrl] = useState(article?.coverImageUrl || '');
+  const [importUrl, setImportUrl] = useState('');
   const [body, setBody] = useState(article?.body || '');
   const [excerpt, setExcerpt] = useState(article?.excerpt || '');
   const [slugTouched, setSlugTouched] = useState(!!article);
@@ -32,6 +35,20 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
     if (!slugTouched) setSlug(slugify(title));
   }, [title, slugTouched]);
 
+  const prepareCover = async (file: File) => {
+    if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
+    setCoverImageUrl(await compressImage(file, 1600, 0.85));
+  };
+  const importCover = async () => {
+    setBusy(true);setErr('');
+    try {
+      await prepareCover(await fetchImageFile(importUrl));
+      setImportUrl('');
+    } catch {
+      setErr('Could not import this image. Download it and choose the image file instead.');
+    } finally { setBusy(false); }
+  };
+
   const handleSave = async () => {
     setErr('');
     if (!title.trim()) { setErr('Title is required.'); return; }
@@ -39,12 +56,14 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
     if (!body.trim()) { setErr('Body cannot be empty.'); return; }
     setBusy(true);
     try {
+      const id = article?.id ?? slug.trim();
+      const cover = coverImageUrl && coverImageUrl !== (article?.coverImageUrl ?? '') ? await uploadImage('article-cover', id, coverImageUrl) : coverImageUrl;
       await contentApi.saveArticle({
-        id: article?.id,
+        id,
         publishedAt: article?.publishedAt,
         title: title.trim(),
         slug: slug.trim(),
-        ...(coverImageUrl.trim() !== article?.coverImageUrl && { coverImageUrl: coverImageUrl.trim() }),
+        ...(coverImageUrl.trim() !== article?.coverImageUrl && { coverImageUrl: cover }),
         body,
         excerpt: excerpt.trim(),
       });
@@ -85,16 +104,28 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
         </div>
 
         <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>COVER IMAGE URL</label>
-          <input
-            type="url" value={coverImageUrl}
-            onChange={(e) => setCoverImageUrl(e.target.value)}
-            placeholder="https://... (external URL to the hero image)"
-            className="w-full px-3 py-2 font-mono text-xs rounded"
+          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>COVER IMAGE</label>
+          <input type="file" accept="image/*" aria-label="Choose cover image" disabled={busy}
+            className="block w-full px-3 py-2 font-mono text-xs rounded disabled:opacity-50"
             style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
-            Optional. Hosted somewhere accessible (Discord CDN, Imgur, etc.).
+            onChange={event => {
+            const file = event.target.files?.[0];
+            if (!file) return;
+            setBusy(true);setErr('');
+            void prepareCover(file).catch((error: unknown) => {
+              setErr(error instanceof Error ? error.message : 'Could not process cover image.');
+            }).finally(() => setBusy(false));
+          }} />
+          <input type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} placeholder="https://... image to import" disabled={busy} aria-label="Image URL to import"
+            className="w-full px-3 py-2 font-mono text-xs rounded disabled:opacity-50"
+            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }} />
+          <div className="flex gap-2">
+            <button type="button" onClick={() => { void importCover(); }} disabled={busy || !importUrl}
+              className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+              style={{ background: C.green, color: C.onColor }}>Import cover image</button>
+            {coverImageUrl && <button type="button" onClick={() => setCoverImageUrl('')} disabled={busy}
+              className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
+              style={{ background: `${C.navyLight}44`, color: C.cream }}>Remove cover image</button>}
           </div>
           {coverImageUrl && (
             <MediaImage src={mediaUrl(coverImageUrl)} alt="Cover preview" className="mt-2 rounded max-h-32 object-cover"

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Kind } from 'graphql';
+import { trustedOperations } from '../../routes/graphql/generated/operations.js';
 import { graphqlOperationNames } from '@napl/contracts';
 import { ASSET_BUCKET, PRIVATE_BUCKET } from '@napl/contracts/storage';
 import { detailUrl } from '../../routes/payload/page.js';
@@ -7,7 +9,7 @@ import type { Database } from '../../plugins/db/client.js';
 import { storageFixture } from '../storage-fixture.js';
 import { createApp } from '../helper.js';
 import { payloadFixture, fixtureUser } from '../payload-fixture.js';
-import { contractClient, applicationOperations, dereference, specification, type OpenApiNode } from '../openapi.js';
+import { contractClient, applicationOperations, type ResponseBody } from '../endpoints.js';
 
 test('all read operations and every trusted GraphQL branch satisfy the wire contract', async t => {
   const f = payloadFixture();
@@ -20,8 +22,8 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   const app = createApp({ db: f.db, verify: async id => ({ id, sessionId: id, claims: {} }) });
   t.after(() => app.close());
   const c = contractClient(app), headers = { authorization: `Bearer ${fixtureUser}` };
-  const get = async (route: string, url = route) => (await c.exchange('GET', route, url, { headers })).json<OpenApiNode>();
-  const id = fixtureUser, documents = new Map<string, OpenApiNode>();
+  const get = async (route: string, url = route) => (await c.exchange('GET', route, url, { headers })).json<ResponseBody>();
+  const id = fixtureUser, documents = new Map<string, ResponseBody>();
   for (const route of ['/api/accounts', '/api/articles', '/api/news', '/api/position-requests', '/api/roles', '/api/rules', '/api/schedule', '/api/submissions', '/api/transfers', '/api/voting/periods', '/api/accounts/me', '/api/integrations/discord']) documents.set(route, await get(route));
   for (const [route, url] of [
     ['/api/accounts/{id}', `/api/accounts/${id}`], ['/api/accounts/username/{username}', `/api/accounts/username/${encodeURIComponent(f.accounts[0]!.username)}`],
@@ -35,7 +37,7 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   ]) documents.set(route!, await get(route!, url!));
   const history = await get('/api/accounts/{id}/history/{collection}', `/api/accounts/${id}/history/matches`);
   const match = await get('/api/accounts/{id}/history/{collection}/{ordinal}', history.nodes[0].detailUrl + '&first=50');
-  await get('/api/accounts/{id}/history/{collection}/{ordinal}/fields/{field}', match.nodes.find((field: OpenApiNode) => field.valueUrl).valueUrl);
+  await get('/api/accounts/{id}/history/{collection}/{ordinal}/fields/{field}', match.nodes.find((field: ResponseBody) => field.valueUrl).valueUrl);
   for (const [route, url, fieldRoute] of [
     ['/api/accounts/{id}/stats', `/api/accounts/${id}/stats`, '/api/accounts/{id}/stats/fields/{field}'],
     ['/api/submissions/{id}/detail', documents.get('/api/submissions').nodes[0].detailUrl, '/api/submissions/{id}/detail/fields/{field}'],
@@ -45,7 +47,7 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   ]) {
     if (route === '/api/settings/{key}') f.db.client.setting.findUnique = (async (args: { where: { key: string } }) => args.where.key === 'position_weights' ? { key: 'position_weights', value: JSON.stringify({ historical: '球'.repeat(5000) }) } : originalSetting(args)) as typeof f.db.client.setting.findUnique;
     const fields = await get(route!, url! + (url!.includes('?') ? '&' : '?') + 'first=50');
-    const field = fields.nodes.find((value: OpenApiNode) => value.valueUrl);
+    const field = fields.nodes.find((value: ResponseBody) => value.valueUrl);
     assert.ok(field, `${route} requires a real large-field descriptor`);
     await get(fieldRoute!, field.valueUrl);
   }
@@ -54,17 +56,15 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   await c.exchange('GET', '/api/media/accounts/{id}/steam', `/api/media/accounts/${id}/steam`, { headers }, 302);
   await c.exchange('GET', '/api/schedule/{id}/stream', '/api/schedule/s_0/stream', { headers }, 302);
   for (const name of graphqlOperationNames) {
-    const schema = dereference(specification.components.schemas[`GraphQL${name}Request`]);
-    const variables: Record<string, unknown> = {};
+    const operation = trustedOperations[name].definitions.find(definition => definition.kind === Kind.OPERATION_DEFINITION)!;
     const supplied: Record<string, unknown> = { id, periodId: f.period.id, teamId: 't_0', kind: 'announcement', strikersIds: ['10000'] };
-    for (const [key, raw] of Object.entries(schema.properties.variables.properties)) {
-      const value = raw as OpenApiNode;
-      if (value.default !== undefined) variables[key] = value.default;
-      else if (Object.hasOwn(supplied, key)) variables[key] = supplied[key];
-    }
+    const variables = Object.fromEntries((operation.variableDefinitions ?? []).flatMap(variable => {
+      const key = variable.variable.name.value;
+      return Object.hasOwn(supplied, key) ? [[key, supplied[key]]] : [];
+    }));
     await c.exchange('POST', '/api/graphql', '/api/graphql', { headers, payload: { operationName: name, variables } });
   }
-  const expected = applicationOperations().filter(key => key.startsWith('GET ') || key === 'POST /api/graphql');
+  const expected = applicationOperations(c.registered).filter(key => key.startsWith('GET ') || key === 'POST /api/graphql');
   assert.deepEqual([...c.covered].toSorted((a, b) => a.localeCompare(b)), expected);
   assert.deepEqual([...c.branches].toSorted((a, b) => a.localeCompare(b)), [...graphqlOperationNames].toSorted((a, b) => a.localeCompare(b)));
   assert.equal(c.heads.size, 51);

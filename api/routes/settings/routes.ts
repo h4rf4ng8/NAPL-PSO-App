@@ -5,7 +5,7 @@ import type { Dependencies } from '../../app.js';
 import { params as parameters } from '../../plugins/request.js';
 import { HttpError } from '../../plugins/auth/identity.js';
 import type { Database, Prisma } from '../../plugins/db/client.js';
-import { string, object, array } from '../../plugins/db/records.js';
+import { string, object } from '../../plugins/db/records.js';
 import { getSetting, settingKey, readSetting, saveSetting, championshipTeam, lockChampionshipAccounts, saveChampionships } from './queries.js';
 
 const championsInput = z.record(z.string().min(1).max(160), z.strictObject({
@@ -26,11 +26,8 @@ async function setChampions(database: Database, next: z.infer<typeof championsIn
                 throw new HttpError(400, 'same_champion_team');
             for (const [teamId, placement] of [[champions.winnerTeamId, 'winner'], [champions.runnerUpTeamId, 'runner_up']] as const) {
                 if (!teamId) continue;
-                const team = await championshipTeam(tx, teamId);
-                for (const member of array(team.members)) {
-                    const key = string(member).toLowerCase();
-                    awards.set(key, [...(awards.get(key) ?? []), { season, placement, teamId, awardedAt: champions.setAt }]);
-                }
+                await championshipTeam(tx, teamId);
+                awards.set(teamId, [...(awards.get(teamId) ?? []), { season, placement, teamId, awardedAt: champions.setAt }]);
             }
         }
         const accounts = await lockChampionshipAccounts(tx);
@@ -38,7 +35,7 @@ async function setChampions(database: Database, next: z.infer<typeof championsIn
             const previousAwards = Array.isArray(account.championships) ? account.championships.map(value =>
                 typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {}) : [];
             const retained = previousAwards.filter(a => !changed.includes(string(a.season)));
-            const granted = awards.get(string(account.username_lower)) ?? [];
+            const granted = awards.get(string(account.team_id)) ?? [];
             if (retained.length !== previousAwards.length || granted.length > 0)
                 await saveChampionships(tx, account.id, [...retained, ...granted]);
         }

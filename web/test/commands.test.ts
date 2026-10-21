@@ -62,19 +62,15 @@ test('replacing a season sends one command with the URL as its season source', a
   } }]);
 });
 
-test('rename and vote commands resolve on success and reject server errors', async () => {
+test('vote commands resolve on success and reject server errors', async () => {
   const calls = captureCommands();
   const votes = { gk: 'Keeper', def: 'Defender', cm: 'Midfielder', st: 'Striker' };
-  assert.equal(await accounts.renameAccount('account/1', 'NewName'), undefined);
   assert.equal(await voting.submitTotwVotes('period/1', votes), undefined);
   assert.deepEqual(calls, [
-    { url: '/api/accounts/account%2F1/rename', method: 'POST', body: { username: 'NewName' } },
     { url: '/api/voting/periods/period%2F1/votes', method: 'PUT', body: votes },
   ]);
   mock.method(globalThis, 'fetch', async () => Response.json({ error: { code: 'conflict', message: 'Try again.' } }, { status: 409 }));
-  for (const command of [() => accounts.renameAccount('account/1', 'NewName'), () => voting.submitTotwVotes('period/1', votes)]) {
-    await assert.rejects(command(), error => error instanceof ApiError && error.status === 409 && error.code === 'conflict' && error.message === 'Try again.');
-  }
+  await assert.rejects(voting.submitTotwVotes('period/1', votes), error => error instanceof ApiError && error.status === 409 && error.code === 'conflict' && error.message === 'Try again.');
 });
 
 test('award commands use stable identities, accept 204 and surface conflicts without replay', async () => {

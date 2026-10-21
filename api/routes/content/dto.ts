@@ -27,7 +27,7 @@ export function articleDto(row: Article) {
 
 export function scheduleDto(row: ScheduledMatch) {
   return {
-    id: row.id, season: row.season, week: row.week, homeTeamId: row.home_team_id, awayTeamId: row.away_team_id,
+    id: row.id, season: row.season_id, week: row.week, homeTeamId: row.home_team_id, awayTeamId: row.away_team_id,
     scheduledDate: row.scheduled_date?.getTime() ?? null, streamUrl: row.stream_url, matchType: row.match_type,
     playoffRound: row.playoff_round, status: row.status, homeScore: row.home_score, awayScore: row.away_score,
     linkedMatchId: row.linked_match_id, notes: row.notes,
@@ -35,9 +35,9 @@ export function scheduleDto(row: ScheduledMatch) {
   };
 }
 
-export function transferDto(row: Transfer) {
+export function transferDto(row: Transfer & { player_username: string }) {
   return {
-    id: row.id, season: row.season, playerUsername: row.player_username,
+    id: row.id, season: row.season_id, playerUsername: row.player_username,
     fromTeamId: row.from_team_id, toTeamId: row.to_team_id, kind: row.kind, windowType: row.window_type,
     createdAt: row.created_at?.getTime() ?? null, createdBy: row.created_by,
   };

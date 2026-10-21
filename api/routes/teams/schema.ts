@@ -30,7 +30,7 @@ const Team = new GraphQLObjectType({
     pendingMembers: { type: nonNullList(GraphQLString), description: 'Names with pending or accepted invitations.' },
     totw: { type: nonNull(GraphQLBoolean), description: 'Whether the team holds the current team of the week title.' },
     totwSetAt: { type: GraphQLFloat, description: 'Team of the week selection time in epoch milliseconds.' },
-    seasons: { type: nonNullList(GraphQLString), description: 'Seasons in which the team participates.' },
+    seasons: { type: nonNullList(GraphQLString), description: 'Seasons excluded from team participation.' },
     formation: { type: nonNull(GraphQLString), description: 'Team formation identifier.' },
     lineup: { type: nonNull(JSONScalar), description: 'Formation slot to player name mapping.' },
     status: { type: nonNull(GraphQLString), description: 'Review status.' },
@@ -49,7 +49,7 @@ export const queryFields = {
     resolve: (_source: unknown, _args: unknown, context: GraphQLContext) =>
       read(context, 'teams', async () => {
         const self = context.request.identity ? await getAccount(context.db, context.request.identity.id) : null;
-        return listTeams(context.db, { username: self?.username, admin: isAdmin(context.request) });
+        return listTeams(context.db, { id: self?.id, admin: isAdmin(context.request) });
       }),
   },
 };

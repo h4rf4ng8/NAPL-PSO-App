@@ -9,10 +9,15 @@ export const discordTokensSchema = z.object({
   scope: z.string(),
 });
 export type DiscordTokens = z.infer<typeof discordTokensSchema>;
+const discordProfileSchema = z.object({
+  id: z.string().regex(/^\d+$/),
+  username: z.string().min(2).max(32).regex(/^[a-z0-9_.]+$/),
+});
+export type DiscordProfile = z.infer<typeof discordProfileSchema>;
 
 export interface DiscordAuth {
   refresh(token: string): Promise<DiscordTokens>;
-  identity(token: string): Promise<string>;
+  identity(token: string): Promise<DiscordProfile>;
   membership(token: string, expectedUser: string): Promise<boolean>;
 }
 
@@ -35,9 +40,9 @@ export class DiscordClient implements DiscordAuth {
     return result;
   }
 
-  async identity(token: string): Promise<string> {
+  async identity(token: string): Promise<DiscordProfile> {
     const response = await this.request('/users/@me', { headers: { Authorization: `Bearer ${token}` } });
-    return z.object({ id: z.string().regex(/^\d+$/) }).parse(await response.json() as unknown).id;
+    return discordProfileSchema.parse(await response.json() as unknown);
   }
 
   async membership(token: string, expectedUser: string): Promise<boolean> {

@@ -1,7 +1,7 @@
 /* eslint-disable unicorn/prefer-structured-clone -- JSON normalization preserves stored historical extension fields. */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
-import { adminAccountPatch, profilePatch, username, position } from '@napl/contracts';
+import { adminAccountPatch, profilePatch, position } from '@napl/contracts';
 import { awardIdSchema } from '@napl/contracts/accounts';
 import type { Dependencies } from '../../app.js';
 import { params as parameters, query } from '../../plugins/request.js';
@@ -9,8 +9,7 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import type { Prisma } from '../../plugins/db/client.js';
 import { string, array, object } from '../../plugins/db/records.js';
 import { accountDto, currentAccountDto, positionRequestDto } from './dto.js';
-import { provisionAccount, getCurrentAccount, listAccounts, loadRankedAccounts, findAccountByUsername, requireAccount, updateAccount, renameAccount, listPositionRequests, hasPendingPositionRequest, createPositionRequest, lockPositionRequest, reviewPositionRequest, deletePositionRequest } from './queries.js';
-import { checkBlockedName } from '../name-validation.js';
+import { provisionAccount, getCurrentAccount, listAccounts, loadRankedAccounts, findAccountByUsername, requireAccount, updateAccount, listPositionRequests, hasPendingPositionRequest, createPositionRequest, lockPositionRequest, reviewPositionRequest, deletePositionRequest } from './queries.js';
 const awardSeason = z.string().trim().min(1).max(64);
 const historicalAwardId = z.string().trim().min(1).max(160);
 export function registerAccounts(app: FastifyInstance, { db }: Dependencies): void {
@@ -136,20 +135,6 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
         });
         return reply.code(204).send();
     });
-    app.post('/api/accounts/:id/rename', async (request) => {
-        const id = z.uuid().parse(parameters(request).id);
-        if (actor(request).id !== id && !isAdmin(request))
-            throw new HttpError(403, 'forbidden');
-        const input = z.strictObject({
-            username
-        }).parse(request.body);
-        if (!isAdmin(request) && checkBlockedName(input.username))
-            throw new HttpError(400, 'name_not_allowed', 'That username isn\'t allowed. Please choose a different one.');
-        await db.transaction(tx => renameAccount(tx, id, input.username));
-        return {
-            ok: true
-        };
-    });
     app.get('/api/position-requests', async (request) => {
         const q = query(request);
         const rows = await listPositionRequests(db, { accountId: isAdmin(request) ? undefined : actor(request).id, status: q.status });
@@ -194,7 +179,8 @@ export function registerAccounts(app: FastifyInstance, { db }: Dependencies): vo
                 });
             }
             return positionRequestDto(await reviewPositionRequest(tx, request.id, {
-                status: input.status, reviewed_by: reviewer, review_note: input.reviewNote, reviewed_at: new Date()
+                status: input.status, reviewed_by: reviewer, reviewed_by_account_id: actor(request_).id,
+                review_note: input.reviewNote, reviewed_at: new Date()
             }));
         });
     });

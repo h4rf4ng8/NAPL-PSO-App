@@ -48,7 +48,7 @@ function harness(status: 200 | 403 | 503, outage = false) {
         exchange: async () => ({ access_token: access, refresh_token: expired.supabaseRefresh, provider_token: expired.discordAccess, provider_refresh_token: fullSession.discordRefresh, user: { id: userId, identities: [{ provider: 'discord', identity_data: { sub: expired.discordUserId } }] } }),
         loginUrl: () => '', logout: async () => {},
       },
-      discord: { identity: async () => expired.discordUserId, membership: async () => true, refresh: async () => { throw new Error('unexpected'); } },
+      discord: { identity: async () => ({ id: expired.discordUserId, username: 'discord_player' }), membership: async () => true, refresh: async () => { throw new Error('unexpected'); } },
       membership: { fresh: async () => { if (status === 503) throw new GatewayError(503, 'membership_unavailable', 3); return status === 200; }, save: async () => {} },
       provision: async () => {},
     },

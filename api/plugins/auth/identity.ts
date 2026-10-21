@@ -21,7 +21,7 @@ export function isAdmin(request: FastifyRequest): boolean {
     return request.userRoles.includes('admin') || request.userRoles.includes('super_admin');
 }
 export async function actorName(database: Database, request: FastifyRequest): Promise<string> {
-    const [row] = await database.query(Prisma.sql`SELECT username FROM public.accounts WHERE id=${actor(request).id}::uuid`);
+    const [row] = await database.query(Prisma.sql`SELECT username FROM asl.accounts WHERE id=${actor(request).id}::uuid`);
     if (!row || typeof row.username !== 'string') throw new HttpError(409, 'profile_required');
     return row.username;
 }

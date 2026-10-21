@@ -6,7 +6,7 @@ schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 
 [db]
-major_version = 15
+major_version = 17
 
 [auth]
 enable_signup = true

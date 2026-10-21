@@ -6,7 +6,7 @@ import { connectDatabase, Prisma } from '../../plugins/db/client.js';
 
 const path = (id: string) => `/api/submissions/${encodeURIComponent(id)}`;
 
-test('submission HTTP filtering preserves exact names, literal IDs and review state', {
+test('submission HTTP filtering uses actor UUIDs and preserves literal IDs and review state', {
   skip: !process.env.API_TEST_DATABASE_URL,
 }, async () => {
   assert.ok(process.env.API_TEST_ADMIN_DATABASE_URL);
@@ -22,17 +22,23 @@ test('submission HTTP filtering preserves exact names, literal IDs and review st
     await owner.execute(Prisma.sql`INSERT INTO auth.users(id) VALUES(${playerId}::uuid)`);
     await owner.execute(Prisma.sql`INSERT INTO auth.sessions(id,user_id) VALUES(${playerId}::uuid,${playerId}::uuid)`);
     await owner.execute(Prisma.sql`INSERT INTO auth_gateway.memberships(user_id,discord_user_id,eligible,valid_until) VALUES(${playerId}::uuid,'submission-test',true,now()+interval '1 hour')`);
-    await db.client.account.create({ data: { id: playerId, username: name, username_lower: name.toLowerCase() } });
+    await db.client.account.create({ data: { id: playerId, username: name } });
     await db.client.submission.createMany({ data: [
-      { id: literalId, submitted_by: name, match_info: {}, status: 'pending' },
-      { id: `${prefix}rejected`, submitted_by: name, match_info: {}, status: 'rejected' },
-      { id: `${prefix}approved`, submitted_by: name, match_info: {}, status: 'approved' },
-      { id: `${prefix}case_variant`, submitted_by: name.toUpperCase(), match_info: {} },
+      { id: literalId, submitted_by: name, submitted_by_account_id: playerId, match_info: {}, status: 'pending' },
+      { id: `${prefix}rejected`, submitted_by: name, submitted_by_account_id: playerId, match_info: {}, status: 'rejected' },
+      { id: `${prefix}approved`, submitted_by: name, submitted_by_account_id: playerId, match_info: {}, status: 'approved' },
+      { id: `${prefix}case_variant`, submitted_by: name.toUpperCase(), submitted_by_account_id: playerId, match_info: {} },
       { id: `${prefix}other`, submitted_by: 'Another Player', match_info: {} },
     ] });
     const listed = await call('GET', '/api/submissions', playerId);
     assert.equal(listed.statusCode, 200, listed.body);
-    assert.deepEqual(listed.json<Array<{ id: string }>>().map(row => row.id).toSorted((a, b) => a.localeCompare(b)), [literalId, `${prefix}rejected`, `${prefix}approved`].toSorted((a, b) => a.localeCompare(b)));
+    assert.deepEqual(listed.json<Array<{ id: string }>>().map(row => row.id).toSorted((a, b) => a.localeCompare(b)), [literalId, `${prefix}rejected`, `${prefix}approved`, `${prefix}case_variant`].toSorted((a, b) => a.localeCompare(b)));
+    const renamed = `${name} Renamed`;
+    await db.client.account.update({ where: { id: playerId }, data: { username: renamed } });
+    const afterRename = await call('GET', '/api/submissions', playerId);
+    assert.equal(afterRename.json().length, 4, 'renaming the account preserves access by UUID');
+    assert.ok(afterRename.json<Array<{ submittedBy: string }>>().every(row => row.submittedBy === renamed));
+    assert.equal((await db.client.submission.findUniqueOrThrow({ where: { id: literalId } })).submitted_by, name, 'historical snapshot remains unchanged');
     const all = await call('GET', '/api/submissions', admin);
     assert.equal(all.json<Array<{ id: string }>>().filter(row => row.id.startsWith(prefix)).length, 5);
     const denied = await call('PATCH', path(literalId), playerId, input);

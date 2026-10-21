@@ -106,6 +106,14 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
             return reply.code(409).send({
                 error: 'conflict', message: 'This value is already in use'
             });
+        if (sqlState === '23503' || ['P2003', '23503'].includes(problem.code ?? ''))
+            return reply.code(409).send({
+                error: 'reference_conflict', message: 'A related record is missing or still references this record'
+            });
+        if (sqlState === '23514' || problem.code === '23514')
+            return reply.code(400).send({
+                error: 'invalid_data', message: 'The values violate a database constraint'
+            });
         if (problem.code === 'P2034' || adapterCause.kind==='TransactionWriteConflict' || ['40001','40P01'].includes(sqlState))
             return reply.code(409).send({
                 error: 'concurrent_update', message: 'Another request changed this record; reload and try again'

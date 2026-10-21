@@ -64,7 +64,7 @@ test('current account ranking uses one population read and keeps private fields 
   assert.equal(result?.email, 'alice@example.test');
   assert.equal(result?.pendingImageUrl, 'private-image');
   assert.equal(result?.id, accountId);
-  assert.match(summarySql.sql, /FROM public\.accounts a ORDER BY/);
+  assert.match(summarySql.sql, /FROM asl\.accounts a ORDER BY/);
   assert.match(summarySql.sql, /jsonb_array_elements/);
   assert.doesNotMatch(summarySql.sql, /a\.email|a\.pending_image_url/);
   assert.equal(statements.length, 1, 'one population read');

@@ -6,81 +6,88 @@ import { connectDatabase, Prisma } from '../../plugins/db/client.js';
 
 const teamPath = (id: string) => `/api/teams/${encodeURIComponent(id)}`;
 
-test('team HTTP visibility, authorization and roster rollback preserve actual database state', {
-  skip: !process.env.API_TEST_DATABASE_URL,
+test('UUID invitations, pending captains, roster rollback and history restrictions preserve database state', {
+  skip: !process.env.API_TEST_DATABASE_URL || !process.env.API_TEST_ADMIN_DATABASE_URL,
 }, async t => {
-  assert.ok(process.env.API_TEST_ADMIN_DATABASE_URL);
   const db = connectDatabase(process.env.API_TEST_DATABASE_URL!);
-  const owner = connectDatabase(process.env.API_TEST_ADMIN_DATABASE_URL);
+  const owner = connectDatabase(process.env.API_TEST_ADMIN_DATABASE_URL!);
   const app = createApp({ db, verify: async id => ({ id, sessionId: id, claims: { sub: id } }) });
-  const playerId = randomUUID(), name = `Team' OR true -- ${playerId.slice(0, 8)}`;
+  const captain = randomUUID(), invited = randomUUID();
   const admin = '33333333-3333-4333-8333-333333333333';
-  const prefix = `team_queries_${playerId}_`, source = `${prefix}source' OR true --`, target = `${prefix}target`;
-  const call = (method: 'GET' | 'POST' | 'PATCH', path: string, payload?: object, actor?: string) => app.inject({
+  const prefix = `team_queries_${captain}_`, pending = `${prefix}pending`, target = `${prefix}target`, hidden = `${prefix}hidden`;
+  const names = new Map([[captain, `captain_${captain.slice(0, 8)}`], [invited, `invite_${invited.slice(0, 8)}`]]);
+  const call = (method: 'GET' | 'POST' | 'DELETE', path: string, payload?: object, actor?: string) => app.inject({
     method, url: path, payload, headers: actor ? { authorization: `Bearer ${actor}` } : {},
   });
   try {
-    await owner.execute(Prisma.sql`INSERT INTO auth.users(id) VALUES(${playerId}::uuid)`);
-    await owner.execute(Prisma.sql`INSERT INTO auth.sessions(id,user_id) VALUES(${playerId}::uuid,${playerId}::uuid)`);
-    await owner.execute(Prisma.sql`INSERT INTO auth_gateway.memberships(user_id,discord_user_id,eligible,valid_until) VALUES(${playerId}::uuid,'team-test',true,now()+interval '1 hour')`);
-    await db.client.account.create({ data: { id: playerId, username: name, username_lower: name.toLowerCase(), strikers_id: playerId, team_id: source } });
+    for (const id of [captain, invited]) {
+      await owner.execute(Prisma.sql`INSERT INTO auth.users(id) VALUES(${id}::uuid)`);
+      await owner.execute(Prisma.sql`INSERT INTO auth.sessions(id,user_id) VALUES(${id}::uuid,${id}::uuid)`);
+      await owner.execute(Prisma.sql`INSERT INTO auth_gateway.memberships(user_id,discord_user_id,eligible,valid_until) VALUES(${id}::uuid,${id},true,now()+interval '1 hour')`);
+      await db.client.account.create({ data: { id, username: names.get(id)!, strikers_id: id } });
+    }
     await db.client.team.createMany({ data: [
-      { id: source, name: 'Source', tag: 'SRC', owner_username: 'Captain', status: 'approved', members: ['Captain', name], lineup: { gk: name } },
-      { id: target, name: 'Target', tag: 'TGT', owner_username: 'Target Captain', status: 'approved', members: ['Target Captain'] },
-      { id: `${prefix}owner`, name: 'Owned', tag: 'OWN', owner_username: name.toUpperCase(), status: 'pending' },
-      { id: `${prefix}legacy`, name: 'Legacy', tag: 'LEG', owner_username: 'Other', status: 'pending', pending_members: [name.toUpperCase()] },
-      { id: `${prefix}declined`, name: 'Declined', tag: 'DEC', owner_username: 'Other', status: 'rejected', pending_members: [{ username: name.toUpperCase(), status: 'declined' }] },
-      { id: `${prefix}hidden`, name: 'Hidden', tag: 'HID', owner_username: 'Other', status: 'pending' },
+      { id: pending, name: 'Pending', tag: 'PEN', owner_account_id: captain, status: 'pending', lineup: { gk: names.get(captain)! } },
+      { id: target, name: 'Target', tag: 'TGT', owner_account_id: admin, status: 'approved' },
+      { id: hidden, name: 'Hidden', tag: 'HID', owner_account_id: admin, status: 'pending' },
     ] });
-
-    await t.test('literal IDs, case folded legacy invitations and nonowner authorization', async () => {
-      const visible = await call('GET', '/api/teams', undefined, playerId);
-      assert.equal(visible.statusCode, 200, visible.body);
-      assert.deepEqual(visible.json<Array<{ id: string }>>().filter(row => row.id.startsWith(prefix)).map(row => row.id).toSorted((a, b) => a.localeCompare(b)), [source, target, `${prefix}owner`, `${prefix}legacy`, `${prefix}declined`].toSorted((a, b) => a.localeCompare(b)));
-      const anonymous = await call('GET', '/api/teams');
-      assert.deepEqual(anonymous.json<Array<{ id: string }>>().filter(row => row.id.startsWith(prefix)).map(row => row.id).toSorted((a, b) => a.localeCompare(b)), [source, target].toSorted((a, b) => a.localeCompare(b)));
-      assert.equal((await call('GET', teamPath(source))).json().id, source);
-      assert.equal((await call('GET', teamPath(`${prefix}declined`), undefined, playerId)).statusCode, 200);
-      assert.equal((await call('GET', teamPath(`${prefix}hidden`), undefined, playerId)).statusCode, 404);
-      assert.equal((await call('PATCH', teamPath(source), { name: 'Taken Over' }, playerId)).statusCode, 403);
-      assert.equal((await db.client.team.findUniqueOrThrow({ where: { id: source } })).name, 'Source');
+    await db.client.teamJoinRequest.create({ data: { team_id: pending, account_id: invited, details: { source: 'invitation' } } });
+    await t.test('pending captain is visible without active membership; invitations follow account UUID', async () => {
+      const shown = await call('GET', teamPath(pending), undefined, captain);
+      assert.equal(shown.statusCode, 200, shown.body);
+      assert.deepEqual(shown.json().members, [names.get(captain)]);
+      assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: captain } })).team_id, null);
+      await db.client.account.update({ where: { id: invited }, data: { username: `${names.get(invited)}_new` } });
+      assert.equal((await call('GET', teamPath(pending), undefined, invited)).statusCode, 200);
+      assert.equal((await call('GET', teamPath(hidden), undefined, invited)).statusCode, 404);
+      const accepted = await call('POST', `${teamPath(pending)}/invitation`, { accept: true }, invited);
+      assert.equal(accepted.statusCode, 200, accepted.body);
+      assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: invited } })).team_id, null);
+      const invitation = await db.client.teamJoinRequest.findFirstOrThrow({ where: { team_id: pending, account_id: invited } });
+      assert.equal(invitation.status, 'accepted');
+      assert.ok(invitation.reviewed_at);
+      const approved = await call('POST', `${teamPath(pending)}/review`, { status: 'approved' }, admin);
+      assert.equal(approved.statusCode, 200, approved.body);
+      assert.equal(await db.client.account.count({ where: { team_id: pending } }), 2);
+      assert.equal(await db.client.transfer.count({ where: { to_team_id: pending } }), 2);
     });
-
-    await t.test('a database transfer failure rolls back both rosters, lineup and account membership', async () => {
-      const beforeTeams = await db.client.team.findMany({ where: { id: { in: [source, target] } }, orderBy: { id: 'asc' } });
-      const beforeAccount = await db.client.account.findUniqueOrThrow({ where: { id: playerId } });
-      const beforeTransfers = await db.client.transfer.findMany({ where: { player_username: name } });
-      await owner.execute(Prisma.sql`CREATE FUNCTION public.team_queries_reject_transfer() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected transfer failure'; END $$`);
-      await owner.execute(Prisma.sql`CREATE TRIGGER team_queries_reject_transfer BEFORE INSERT ON public.transfers FOR EACH ROW EXECUTE FUNCTION public.team_queries_reject_transfer()`);
+    await t.test('transfer failure rolls back membership and lineup; referenced team delete returns conflict', async () => {
+      await owner.execute(Prisma.sql`CREATE FUNCTION asl.team_queries_reject_transfer() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected transfer failure'; END $$`);
+      await owner.execute(Prisma.sql`CREATE TRIGGER team_queries_reject_transfer BEFORE INSERT ON asl.transfers FOR EACH ROW EXECUTE FUNCTION asl.team_queries_reject_transfer()`);
+      const transfers = await db.client.transfer.count({ where: { player_account_id: captain } });
       try {
-        const failed = await call('POST', `${teamPath(target)}/membership`, { action: 'join', accountId: playerId }, admin);
+        const failed = await call('POST', `${teamPath(target)}/membership`, { action: 'join', accountId: captain }, admin);
         assert.equal(failed.statusCode, 503, failed.body);
-        assert.deepEqual(await db.client.team.findMany({ where: { id: { in: [source, target] } }, orderBy: { id: 'asc' } }), beforeTeams);
-        assert.deepEqual(await db.client.account.findUniqueOrThrow({ where: { id: playerId } }), beforeAccount);
-        assert.deepEqual(await db.client.transfer.findMany({ where: { player_username: name } }), beforeTransfers);
+        assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: captain } })).team_id, pending);
+        assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: pending } })).lineup, { gk: names.get(captain) });
+        assert.equal(await db.client.transfer.count({ where: { player_account_id: captain } }), transfers);
       } finally {
-        await owner.execute(Prisma.sql`DROP TRIGGER IF EXISTS team_queries_reject_transfer ON public.transfers`);
-        await owner.execute(Prisma.sql`DROP FUNCTION IF EXISTS public.team_queries_reject_transfer()`);
+        await owner.execute(Prisma.sql`DROP TRIGGER team_queries_reject_transfer ON asl.transfers`);
+        await owner.execute(Prisma.sql`DROP FUNCTION asl.team_queries_reject_transfer()`);
       }
-      const success = await call('POST', `${teamPath(target)}/membership`, { action: 'join', accountId: playerId }, admin);
+      const deleted = await call('DELETE', teamPath(pending), undefined, admin);
+      assert.equal(deleted.statusCode, 409, deleted.body);
+      assert.equal(deleted.json().error, 'team_has_history');
+      assert.equal(await db.client.account.count({ where: { team_id: pending } }), 2);
+      assert.equal(await db.client.transfer.count({ where: { player_account_id: captain } }), transfers);
+      const success = await call('POST', `${teamPath(target)}/membership`, { action: 'join', accountId: captain }, admin);
       assert.equal(success.statusCode, 200, success.body);
-      assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: source } })).members, ['Captain']);
-      assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: source } })).lineup, {});
-      assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: target } })).members, ['Target Captain', name]);
-      assert.equal((await db.client.account.findUniqueOrThrow({ where: { id: playerId } })).team_id, target);
-      assert.equal(await db.client.transfer.count({ where: { player_username: name, from_team_id: source, to_team_id: target } }), 1);
+      assert.deepEqual((await db.client.team.findUniqueOrThrow({ where: { id: pending } })).lineup, {});
+      const transfer = await db.client.transfer.findFirstOrThrow({ where: { player_account_id: captain, to_team_id: target } });
+      assert.equal(transfer.player_username_snapshot, names.get(captain));
+      assert.equal(transfer.created_by_account_id, admin);
     });
   } finally {
     try {
-    await owner.execute(Prisma.sql`DROP TRIGGER IF EXISTS team_queries_reject_transfer ON public.transfers`);
-    await owner.execute(Prisma.sql`DROP FUNCTION IF EXISTS public.team_queries_reject_transfer()`);
-    await db.client.transfer.deleteMany({ where: { player_username: name } });
-    await db.client.account.deleteMany({ where: { id: playerId } });
-    await db.client.team.deleteMany({ where: { id: { startsWith: prefix } } });
-    await owner.execute(Prisma.sql`DELETE FROM auth.sessions WHERE user_id=${playerId}::uuid`);
-    await owner.execute(Prisma.sql`DELETE FROM auth.users WHERE id=${playerId}::uuid`);
-    } finally {
-      await Promise.all([app.close(), db.close(), owner.close()]);
-    }
+      await owner.execute(Prisma.sql`DROP TRIGGER IF EXISTS team_queries_reject_transfer ON asl.transfers`);
+      await owner.execute(Prisma.sql`DROP FUNCTION IF EXISTS asl.team_queries_reject_transfer()`);
+      await db.client.transfer.deleteMany({ where: { player_account_id: { in: [captain, invited] } } });
+      await db.client.team.deleteMany({ where: { id: { startsWith: prefix } } });
+      await db.client.account.deleteMany({ where: { id: { in: [captain, invited] } } });
+      for (const id of [captain, invited]) {
+        await owner.execute(Prisma.sql`DELETE FROM auth.sessions WHERE user_id=${id}::uuid`);
+        await owner.execute(Prisma.sql`DELETE FROM auth.users WHERE id=${id}::uuid`);
+      }
+    } finally { await Promise.all([app.close(), db.close(), owner.close()]); }
   }
 });

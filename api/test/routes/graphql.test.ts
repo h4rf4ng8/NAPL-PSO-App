@@ -22,7 +22,7 @@ const account = {
   email: 'private@example.test', pending_image_url: 'private-image',
 };
 const team = {
-  id: 'team-1', name: 'Blue', tag: 'BLU', color: '#0000ff', description: '', owner_username: 'Alice', members: ['Alice'],
+  id: 'team-1', name: 'Blue', tag: 'BLU', color: '#0000ff', description: '', owner_account_id: alice, members: ['Alice'],
   pending_members: [], seasons: ['S1'], formation: '2-1-2', lineup: {}, status: 'approved', logo_url: null,
   totw: false, totw_set_at: null, created_at: new Date(0), reviewed_at: null, reviewed_by: null, rejection_reason: null,
 };
@@ -33,12 +33,15 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
   const seen = new Map<string, number>();
   const database: Database = {
     client: {
-      account: { findUnique: async ({ where, select }: { where: { id?: string }; select?: { email?: boolean } }) => {
+      account: { findMany: async () => [options.account ?? account], findUnique: async ({ where, select }: { where: { id?: string }; select?: { email?: boolean } }) => {
         const key = select?.email ? `client.account.privateFields:${where.id}` : 'client.account.findUnique';
         seen.set(key, (seen.get(key) ?? 0) + 1);
         return options.account ?? account;
       } },
       team: { findMany: async () => options.teams ?? [team] },
+      teamJoinRequest: { findMany: async () => (options.teams ?? [team]).flatMap(t => (Array.isArray(t.pending_members) ? t.pending_members : []).map(invitation => ({ ...invitation, account_id: alice, team_id: t.id }))) },
+      season: { findMany: async () => [{ id: 'S1' }, { id: 'S2' }] },
+      teamSeason: { findMany: async () => [{ team_id: team.id, season_id: 'S2' }] },
       news: { findMany: async () => [{ id: 'news-1', type: 'update', title: 'Hello', body: '', pinned: false, author: 'Alice', created_at: new Date(0) }] },
       totwVotingPeriod: { findMany: async () => [] },
       setting: { findUnique: async ({ where }: { where: { key: string } }) => {
@@ -59,7 +62,7 @@ function appFor(roleForAlice: ('admin' | 'super_admin')[] = [], failSettings = f
       else if (key.startsWith('WITH match_rows AS')) rows = [];
       else if (key.startsWith('WITH target AS')) rows = [{ version: '1', match: null, ordinality: null }];
       else if (key.includes('AS opponent')) rows = [];
-      else if (key.includes('public."accounts"') || key.includes('public.accounts')) rows = [options.account ?? account];
+      else if (key.includes('public."accounts"') || key.includes('asl.accounts')) rows = [options.account ?? account];
       else if (key.includes('public."teams"')) rows = options.teams ?? [team];
       else if (key.includes('public."news"')) rows = [{ id: 'news-1', type: 'update', title: 'Hello', body: '', pinned: false, author: 'Alice', created_at: new Date(0) }];
       else if (key.includes('public."totw_voting_periods"')) rows = [];
@@ -204,7 +207,7 @@ test('schema-only privileged reads preserve membership admission errors', async 
 });
 
 test('GraphQL and REST share pending-team visibility rules', async () => {
-  const pending = { ...team, id: 'pending', status: 'pending', owner_username: 'Bob', pending_members: [{ username: 'Alice', status: 'pending' }] };
+  const pending = { ...team, id: 'pending', status: 'pending', owner_account_id: '22222222-2222-4222-8222-222222222222', pending_members: [{ username: 'Alice', status: 'pending' }] };
   const { app } = appFor([], false, { teams: [team, pending] });
   try {
     for (const token of [undefined, alice]) {

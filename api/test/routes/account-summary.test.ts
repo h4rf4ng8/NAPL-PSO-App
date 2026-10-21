@@ -50,7 +50,7 @@ test('PostgreSQL account summary season totals match the web aggregation rules',
         { id: 's1-a', date: 3, opponent: 'Red', result: 'X', goals: 0, assists: 0, passes: 3, tackles: 0, deflects: 0, catches: 0, cleanSheet: false, motm: false },
       ];
       const all = { games: 7, wins: 4, draws: 2, losses: 1, goals: 18, assists: 13, passes: 26, tackles: 8, deflects: 4, catches: 3, cleanSheets: 2, motm: 4, historical: 9 };
-      await tx.execute(Prisma.sql`UPDATE public.accounts SET matches=${JSON.stringify(matches)}::jsonb, stats=${JSON.stringify(all)}::jsonb WHERE id=${id}::uuid`);
+      await tx.execute(Prisma.sql`UPDATE asl.accounts SET matches=${JSON.stringify(matches)}::jsonb, stats=${JSON.stringify(all)}::jsonb WHERE id=${id}::uuid`);
       const rows = await loadAccountSummaries(tx);
       const alice = rows.find(row => row.id === id);
       assert.deepEqual(alice?.stats, all);

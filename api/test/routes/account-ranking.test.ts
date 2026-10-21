@@ -33,7 +33,10 @@ function appFor() {
     client: {
       setting: { findUnique: async ({ where }: { where: { key: string } }) => ({ key: where.key, value: JSON.stringify(positionWeights) }) },
       team: { findMany: async () => [] },
-      account: { findUnique: async ({ where }: { where: { id?: string; username_lower?: string } }) =>
+      teamJoinRequest: { findMany: async () => [] },
+      season: { findMany: async () => [] },
+      teamSeason: { findMany: async () => [] },
+      account: { findMany: async () => accounts, findUnique: async ({ where }: { where: { id?: string; username_lower?: string } }) =>
         accounts.find(row => where.id ? row.id === where.id : row.username_lower === where.username_lower) ?? null },
     } as unknown as Database['client'],
     query: async <T extends Row>(sql: Prisma.Sql) => {
@@ -43,7 +46,7 @@ function appFor() {
       if (key.includes('auth_gateway.session_active')) return [{ active: true }] as T[];
       if (key.includes('public."settings"')) return [{ key: sql.values[0], value: JSON.stringify(positionWeights) }] as T[];
       if (key.startsWith('WITH match_rows AS')) return [] as T[];
-      if (key.includes('public.accounts') || key.includes('public."accounts"')) {
+      if (key.includes('asl.accounts') || key.includes('public."accounts"')) {
         const usernameFilter = key.includes('username_lower');
         const idFilter = key.includes('id =');
         return accounts.filter(row => (!usernameFilter || row.username_lower === sql.values[1] || row.username_lower === sql.values[0]) && (!idFilter || row.id === sql.values[0])) as T[];

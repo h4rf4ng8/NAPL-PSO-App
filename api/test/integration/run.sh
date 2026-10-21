@@ -10,14 +10,15 @@ db_container="napl-api-check-$$"
 test_network="napl-check-$$"
 trap 'docker rm -f "$db_container" >/dev/null 2>&1 || true; docker network rm "$test_network" >/dev/null 2>&1 || true' EXIT
 docker network create "$test_network" >/dev/null
-docker run --rm -d --name "$db_container" --network "$test_network" --network-alias db -e POSTGRES_PASSWORD=napl_test_only -e POSTGRES_DB=napl_test -p 127.0.0.1::5432 postgres:16-alpine >/dev/null
+docker run --rm -d --name "$db_container" --network "$test_network" --network-alias db -e POSTGRES_PASSWORD=napl_test_only -e POSTGRES_DB=napl_test -p 127.0.0.1::5432 postgres:17-alpine >/dev/null
 for attempt in {1..30}; do
   if docker exec "$db_container" pg_isready -h 127.0.0.1 -U postgres -d napl_test >/dev/null 2>&1; then break; fi
   sleep 1
 done
-for sql in api/test/bootstrap.sql supabase/fixtures/legacy.sql supabase/migrations/202610130001_gateway.sql supabase/migrations/202610130002_cutover.sql supabase/migrations/202610130003_rbac.sql supabase/migrations/202610140001_role_audit.sql supabase/migrations/202610140002_auth_state.sql api/test/seed.sql; do
+for sql in api/test/bootstrap.sql supabase/fixtures/legacy.sql supabase/migrations/*.sql api/test/seed.sql; do
   docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < "$sql" >/dev/null
 done
+docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/asl-migration.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/rbac.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test < api/test/integration/role_audit.sql >/dev/null
 docker exec -i "$db_container" psql -v ON_ERROR_STOP=1 -U postgres -d napl_test >/dev/null <<'SQL'

@@ -151,6 +151,7 @@ jobs:
       - name: Prepare protected deployment parameters
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           DISCORD_TRANSFER_WEBHOOK: ${{ secrets.DISCORD_TRANSFER_WEBHOOK }}
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}

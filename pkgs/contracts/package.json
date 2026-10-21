@@ -19,6 +19,10 @@
     "./matches": {
       "types": "./src/matches/index.ts",
       "default": "./dist/matches/index.js"
+    },
+    "./storage": {
+      "types": "./src/storage.ts",
+      "default": "./dist/storage.js"
     }
   },
   "scripts": {

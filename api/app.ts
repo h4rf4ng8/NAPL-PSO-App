@@ -19,6 +19,7 @@ import type { DiscordAuth } from './plugins/discord/client.js';
 import type { AuthStore } from './plugins/session/store.js';
 import { GatewayError } from './plugins/auth/errors.js';
 import type { Config } from './plugins/cfg.js';
+import type { ImageStorage } from './plugins/storage/client.js';
 import { registerMedia } from './routes/payload/media.js';
 import { graphqlEndpoints } from '@napl/contracts';
 import { registerDetails } from './routes/payload/details.js';
@@ -38,6 +39,7 @@ export interface Dependencies {
     auth: { supabase: SupabaseAuth; discord: DiscordAuth; authStore: AuthStore };
     close?: () => Promise<void>;
     webhookUrl?: string;
+    storage?: ImageStorage;
 }
 export function createApp(dependencies: Dependencies): FastifyInstance {
     const app = Fastify({
@@ -200,7 +202,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         registerVoting(scope, dependencies);
         registerAdmin(scope, dependencies);
         registerSettings(scope, dependencies);
-        registerMedia(scope, dependencies.db);
+        registerMedia(scope, dependencies);
         registerDetails(scope, dependencies.db);
         await registerGraphQL(scope, dependencies.db);
     }, { name: 'api-routes' }));

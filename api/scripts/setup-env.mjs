@@ -42,7 +42,7 @@ export async function setupEnv(root = repoRoot) {
   try {
     const api = await readEnv(path.resolve(root, 'api/.env'));
     const web = await readEnv(path.resolve(root, 'web/.env'));
-    if (['COOKIE_KEYS', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS', 'DISCORD_CLIENT_SECRET', 'SUPABASE_SECRET_KEY', 'DATABASE_URL'].some(name => Object.hasOwn(web.values, name))) {
+    if (['COOKIE_KEYS', 'GOTRUE_JWT_SECRET', 'GOTRUE_JWT_KEYS', 'DISCORD_CLIENT_SECRET', 'SUPABASE_SECRET_KEY', 'VITE_SUPABASE_SECRET_KEY', 'DATABASE_URL'].some(name => Object.hasOwn(web.values, name))) {
       throw new Error('API and Auth secrets belong in api/.env, not web/.env');
     }
     // Validate both files before replacing either; the lock serializes setup calls.

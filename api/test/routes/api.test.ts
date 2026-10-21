@@ -288,7 +288,18 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 }
                 assert.equal((await call('POST', url, admin, { ...fixture.input, author: 'Forged' })).statusCode, 400);
                 const before = Date.now();
-                const saved = await ok('POST', url, admin, fixture.input);
+                // New media must use native upload; existing external references remain editable.
+                let createInput = fixture.input;
+                if (fixture.path === 'articles') {
+                    const rejected = await call('POST', url, admin, fixture.input);
+                    assert.equal(rejected.statusCode, 400);
+                    assert.equal(rejected.json().error, 'image_upload_required');
+                    assert.equal(await database.client.article.findUnique({ where: { id: fixture.input.id } }), null);
+                    const { coverImageUrl: _cover, ...withoutCover } = fixture.input;
+                    createInput = withoutCover;
+                }
+                const saved = await ok('POST', url, admin, createInput);
+                if (fixture.path === 'articles') await database.client.article.update({ where: { id: fixture.input.id }, data: { cover_image_url: fixture.input.coverImageUrl } });
                 assert.equal(saved.id, fixture.input.id);
                 if (fixture.path !== 'news') assert.ok(Number(saved.updatedAt) >= before);
                 if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(saved.author, 'Admin');

@@ -11,6 +11,7 @@ const parameterEnv = {
   DatabaseUrl: 'DATABASE_URL',
   SupabaseUrl: 'SUPABASE_URL',
   SupabasePublishableKey: 'SUPABASE_PUBLISHABLE_KEY',
+  SupabaseSecretKey: 'SUPABASE_SECRET_KEY',
   SupabaseJwksUrl: 'SUPABASE_JWKS_URL',
   PublicOrigin: 'PUBLIC_ORIGIN',
   DiscordTransferWebhook: 'DISCORD_TRANSFER_WEBHOOK',
@@ -43,6 +44,7 @@ function safeValidationError(error) {
 
 export async function prepareSamParams({ environment = process.env, envPath = defaultEnvPath, outputPath = defaultOutputPath } = {}) {
   const merged = { ...(await readLocalEnv(envPath)), ...environment, NODE_ENV: 'production' };
+  if (!/^\S+$/.test(merged.SUPABASE_SECRET_KEY ?? '')) throw new Error('SupabaseSecretKey is required for deployment and must not contain whitespace');
   let config;
   try {
     config = readConfig(merged);

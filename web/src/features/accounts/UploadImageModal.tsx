@@ -1,3 +1,4 @@
+import { uploadImage } from '../../api/media';
 import { auth } from '../../auth/session';
 import { Clock, Plus, User } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -53,7 +54,8 @@ export const UploadImageModal = ({ account, onClose, onSave }: { account: Accoun
       } else {
         // New picture — goes to pending, awaits admin approval.
         // The old imageUrl stays live until an admin approves.
-        await accountApi.patchAccount(account.id,{pendingImageUrl: preview});
+        const sourceUrl = await uploadImage('account-image', account.id, preview);
+        await accountApi.patchAccount(account.id,{pendingImageUrl: sourceUrl});
         const updated = await auth.getCurrent();
         if (updated) onSave(updated);
         setSubmitted(true);

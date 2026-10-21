@@ -20,7 +20,7 @@ export function ruleDto(row: RuleSection) {
 
 export function articleDto(row: Article) {
   return {
-    id: row.id, slug: row.slug, title: row.title, coverImageUrl: storedImage(row.cover_image_url, `/api/media/articles/${pathSegment(row.id)}/cover`),
+    id: row.id, slug: row.slug, title: row.title, coverImageUrl: storedImage(row.cover_image_url, `/api/media/articles/${pathSegment(row.id)}/cover`, Boolean(row.published_at)),
     author: row.author, body: row.body, excerpt: row.excerpt,
     publishedAt: row.published_at?.getTime() ?? null, updatedAt: row.updated_at?.getTime() ?? null,
   };

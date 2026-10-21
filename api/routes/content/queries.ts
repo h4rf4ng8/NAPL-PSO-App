@@ -95,11 +95,9 @@ export function articleBySlug(db: Database, slug: string) {
   return db.client.article.findUnique({ where: { slug } });
 }
 
-export async function upsertArticle(db: Database, input: ArticleInput, author: string) {
-  // Keep the existing row locked through the surrounding route transaction.
-  const existing = await db.query<{ id: string }>(Prisma.sql`SELECT id FROM asl.articles WHERE id=${input.id} FOR UPDATE`);
+export async function upsertArticle(db: Database, input: ArticleInput, author: string, previous: { id: string } | null) {
   const data = { ...articleData(input), author };
-  return existing.length > 0
+  return previous
     ? db.client.article.update({ where: { id: input.id }, data })
     : db.client.article.create({ data: { id: input.id, ...data, slug: input.slug, title: input.title, body: input.body ?? '' } });
 }

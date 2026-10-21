@@ -15,6 +15,12 @@ Parameters:
   SupabasePublishableKey:
     Type: String
     Description: Supabase publishable key used for Auth requests.
+  SupabaseSecretKey:
+    Type: String
+    NoEcho: true
+    MinLength: 1
+    AllowedPattern: '\S+'
+    Description: Server-only Supabase secret key for managed Storage uploads and private signed URLs.
   SupabaseJwksUrl:
     Type: String
     Description: Complete HTTPS URL of the Supabase Auth public signing keys endpoint.
@@ -110,6 +116,7 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
           SUPABASE_JWKS_URL: !Ref SupabaseJwksUrl
+          SUPABASE_SECRET_KEY: !Ref SupabaseSecretKey
           PUBLIC_ORIGIN: !Ref PublicOrigin
           DISCORD_TRANSFER_WEBHOOK: !If [HasDiscordTransferWebhook, !Ref DiscordTransferWebhook, !Ref AWS::NoValue]
 

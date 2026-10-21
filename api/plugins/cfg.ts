@@ -9,6 +9,7 @@ const schema = z.object({
   SUPABASE_URL: z.url(),
   SUPABASE_JWKS_URL: z.url(),
   SUPABASE_PUBLISHABLE_KEY: z.string().min(1),
+  SUPABASE_SECRET_KEY: z.string().min(1).optional(),
   DATABASE_URL: z.string().min(1),
   DISCORD_TRANSFER_WEBHOOK: z.preprocess(value => value === '' ? undefined : value, z.url().optional()),
 });

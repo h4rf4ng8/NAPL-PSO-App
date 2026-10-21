@@ -20,11 +20,11 @@ async function paths(t: import('node:test').TestContext) {
 test('writes only current validated parameters, with injected settings taking precedence', async t => {
   const files = await paths(t);
   await writeFile(files.envPath, Object.entries(env).map(([key, value]) => `${key}='${value}'`).join('\n'));
-  await prepareSamParams({ ...files, environment: { DATABASE_URL: 'postgres://injected.example/app?sslmode=verify-full', COOKIE_KEYS: 'obsolete', ORIGIN_SECRET: 'obsolete' } });
+  await prepareSamParams({ ...files, environment: { DATABASE_URL: 'postgres://injected.example/app?sslmode=verify-full', SUPABASE_SECRET_KEY: 'injected-storage-secret', COOKIE_KEYS: 'obsolete', ORIGIN_SECRET: 'obsolete' } });
   const params = JSON.parse(await readFile(files.outputPath, 'utf8'));
   assert.deepEqual(params, {
     DatabaseUrl: 'postgres://injected.example/app?sslmode=verify-full', SupabaseUrl: env.SUPABASE_URL,
-    SupabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY, SupabaseSecretKey: env.SUPABASE_SECRET_KEY, SupabaseJwksUrl: env.SUPABASE_JWKS_URL,
+    SupabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY, SupabaseSecretKey: 'injected-storage-secret', SupabaseJwksUrl: env.SUPABASE_JWKS_URL,
     PublicOrigin: env.PUBLIC_ORIGIN, DiscordTransferWebhook: '', RolePermissionsBoundaryArn: env.APPLICATION_ROLE_BOUNDARY_ARN,
   });
   assert.equal((await stat(files.outputPath)).mode & 0o777, 0o600);
@@ -50,4 +50,16 @@ test('rejects Lambda environments above 4 KiB and unfilled placeholders', async 
   await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_PUBLISHABLE_KEY: 'REPLACE_WITH_KEY' } }), /placeholders/);
   await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_SECRET_KEY: 'REPLACE_WITH_STORAGE_SECRET' } }), /placeholders/);
   await assert.rejects(readFile(files.outputPath));
+});
+
+test('missing, empty or whitespace Storage secrets stop deployment without writing or revealing values', async t => {
+  for (const value of [undefined, '', ' '.repeat(3), 'private invalid-key']) {
+    const files = await paths(t);
+    await assert.rejects(prepareSamParams({ ...files, environment: { ...env, SUPABASE_SECRET_KEY: value } }), error => {
+      assert.match(error.message, /SupabaseSecretKey/);
+      if (value?.trim()) assert.ok(!error.message.includes(value));
+      return true;
+    });
+    await assert.rejects(readFile(files.outputPath));
+  }
 });

@@ -41,7 +41,16 @@ test('SAM template describes the bounded Lambda and direct browser Function URL'
   assert.equal(fn.FunctionUrlConfig.Cors, undefined);
   assert.equal(template.Parameters.DatabaseUrl.NoEcho, true);
   assert.equal(template.Parameters.SupabaseSecretKey.NoEcho, true);
-  assert.deepEqual(fn.Environment.Variables.SUPABASE_SECRET_KEY, ['HasSupabaseSecretKey', 'SupabaseSecretKey', 'AWS::NoValue']);
+  assert.equal(template.Parameters.SupabaseSecretKey.Default, undefined);
+  assert.equal(template.Parameters.SupabaseSecretKey.MinLength, 1);
+  const secretPattern = new RegExp(`^(?:${template.Parameters.SupabaseSecretKey.AllowedPattern})$`);
+  for (const value of ['', ' '.repeat(3), 'private invalid-key']) assert.equal(secretPattern.test(value), false);
+  assert.equal(secretPattern.test('synthetic-server-key'), true);
+  assert.equal(template.Conditions.HasSupabaseSecretKey, undefined);
+  assert.equal(fn.Environment.Variables.SUPABASE_SECRET_KEY, 'SupabaseSecretKey');
+  const workflow = parse(await readFile(path.join(root, '.github/workflows/ci-cd.yml'), 'utf8'));
+  const prepare = workflow.jobs.deploy.steps.find(step => step.name === 'Prepare protected deployment parameters');
+  assert.equal(prepare.env.SUPABASE_SECRET_KEY, '${{ secrets.SUPABASE_SECRET_KEY }}');
   assert.equal(fn.Environment.Variables.NODE_ENV, 'production');
   assert.equal(fn.Environment.Variables.DATABASE_URL, 'DatabaseUrl');
   assert.equal(fn.Environment.Variables.SUPABASE_URL, 'SupabaseUrl');

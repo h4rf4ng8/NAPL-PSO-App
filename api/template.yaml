@@ -18,7 +18,8 @@ Parameters:
   SupabaseSecretKey:
     Type: String
     NoEcho: true
-    Default: ''
+    MinLength: 1
+    AllowedPattern: '\S+'
     Description: Server-only Supabase secret key for managed Storage uploads and private signed URLs.
   SupabaseJwksUrl:
     Type: String
@@ -53,7 +54,6 @@ Parameters:
     MaxValue: 900
 
 Conditions:
-  HasSupabaseSecretKey: !Not [!Equals [!Ref SupabaseSecretKey, '']]
   HasDiscordTransferWebhook: !Not [!Equals [!Ref DiscordTransferWebhook, '']]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, -1]]
 
@@ -116,7 +116,7 @@ Resources:
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
           SUPABASE_JWKS_URL: !Ref SupabaseJwksUrl
-          SUPABASE_SECRET_KEY: !If [HasSupabaseSecretKey, !Ref SupabaseSecretKey, !Ref AWS::NoValue]
+          SUPABASE_SECRET_KEY: !Ref SupabaseSecretKey
           PUBLIC_ORIGIN: !Ref PublicOrigin
           DISCORD_TRANSFER_WEBHOOK: !If [HasDiscordTransferWebhook, !Ref DiscordTransferWebhook, !Ref AWS::NoValue]
 

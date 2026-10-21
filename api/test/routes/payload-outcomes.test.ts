@@ -17,7 +17,7 @@ test('maximum import skipped roster and full voting tally stay bounded and compl
   const headers = { authorization: `Bearer ${fixtureUser}` };
   try {
     const players = Array.from({ length: 30 }, (_, index) => ({ player_id: String(index), username: '球'.repeat(100), team: 'home', stats: {} }));
-    const imported = await app.inject({ method: 'POST', url: '/api/import-match', headers, payload: { matchData: { match_id: '球'.repeat(160), score: { home: 100_000, away: 100_000 }, players }, playerMap: {}, tackleOverrides: {}, homeTeamId: 'home', awayTeamId: 'away', season: 'S1' } });
+    const imported = await app.inject({ method: 'POST', url: '/api/match-imports', headers, payload: { matchData: { match_id: '球'.repeat(160), score: { home: 100_000, away: 100_000 }, players }, playerMap: {}, tackleOverrides: {}, homeTeamId: 'home', awayTeamId: 'away', season: 'S1' } });
     assert.equal(imported.statusCode, 200, imported.body);
     assert.ok(Buffer.byteLength(imported.body) <= 10_000);
     assert.equal(imported.json().skipped, 30);
@@ -38,7 +38,7 @@ test('public selected cards retain full legacy numeric stats access without priv
   Object.assign(fixture.accounts[0]!, { stats });
   const app = createApp({ db: fixture.db, verify: async id => ({ id, sessionId: id, claims: { sub: id } }) });
   try {
-    const card = await app.inject({ url: `/api/accounts/${encodeURIComponent(fixture.accounts[0]!.username)}` });
+    const card = await app.inject({ url: `/api/accounts/username/${encodeURIComponent(fixture.accounts[0]!.username)}` });
     assert.equal(card.statusCode, 200, card.body);
     const response = await app.inject({ url: card.json().statsUrl });
     assert.equal(response.statusCode, 200, response.body);

@@ -7,29 +7,31 @@ export * from './league/positions.js';
 export * from './league/formations.js';
 export * from './accounts/index.js';
 export * from './matches/index.js';
-export const graphqlEndpoints = {
-    ImportAccountMatches: '/api/import-account-matches',
-    TeamPlayers: '/api/team-players',
-    TeamStandings: '/api/team-standings',
-    SeasonChampions: '/api/season-champions',
-    HomeSummary: '/api/home-summary',
-    HomeNews: '/api/home-news',
-    TeamSummaries: '/api/team-summaries',
-    HallOfFame: '/api/hall-of-fame',
-    DecoratedPlayers: '/api/decorated-players',
-    VotingCandidates: '/api/voting-candidates',
-    LeagueOverview: '/api/league-overview',
-    Leaderboard: '/api/leaderboard',
-    PlayerCard: '/api/player-card',
-    Seasons: '/api/seasons',
-    AccountAwards: '/api/account-awards',
-    AccountChampionships: '/api/account-championships',
-    TeamRecords: '/api/team-records',
-    AccountMatches: '/api/account-matches',
-    AccountOpponents: '/api/account-opponents',
-    AccountCardPreviews: '/api/account-card-previews',
-    DefaultPositionWeights: '/api/default-position-weights',
-} as const;
+export const graphqlEndpoint = '/api/graphql';
+export const graphqlOperationNames = [
+    'ImportAccountMatches',
+    'TeamPlayers',
+    'TeamStandings',
+    'SeasonChampions',
+    'HomeSummary',
+    'HomeNews',
+    'TeamSummaries',
+    'HallOfFame',
+    'DecoratedPlayers',
+    'VotingCandidates',
+    'LeagueOverview',
+    'Leaderboard',
+    'PlayerCard',
+    'Seasons',
+    'AccountAwards',
+    'AccountChampionships',
+    'TeamRecords',
+    'AccountMatches',
+    'AccountOpponents',
+    'AccountCardPreviews',
+    'DefaultPositionWeights',
+] as const;
+export type GraphQLOperationName = (typeof graphqlOperationNames)[number];
 export const id = z.string().min(1).max(160);
 const season = id;
 export const username = z.string().trim().min(2).max(64).regex(/^[\p{L}\p{N}_. -]+$/u);

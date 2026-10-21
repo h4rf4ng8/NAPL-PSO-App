@@ -35,7 +35,7 @@ const source = `
   const origin = await app.listen({host:'127.0.0.1',port:0});
   const observations = [];
   const request = async (route,variables) => {
-    const response = await fetch(origin+route,{method:variables?'POST':'GET',headers:{authorization:'Bearer '+actor,...(variables && {'content-type':'application/json'})},...(variables && {body:JSON.stringify({variables: variables})})});
+    const response = await fetch(origin+(variables && process.env.PAYLOAD_BENCHMARK_SIDE !== 'before' ? '/api/graphql' : route),{method:variables?'POST':'GET',headers:{authorization:'Bearer '+actor,...(variables && {'content-type':'application/json'})},...(variables && {body:JSON.stringify({...(process.env.PAYLOAD_BENCHMARK_SIDE !== 'before' && {operationName:route}),variables: variables})})});
     const body = Buffer.from(await response.arrayBuffer());
     assert.equal(response.status,200,route+': '+body.toString().slice(0,200));
     observations.push({route,bytes:body.byteLength,type:response.headers.get('content-type')});
@@ -48,15 +48,15 @@ const source = `
       assert.equal(body.data.accounts.length,105);
       console.log(JSON.stringify({initial_bytes:observations.reduce((n,row)=>n+row.bytes,0),complete_action_bytes:observations.reduce((n,row)=>n+row.bytes,0),requests:observations,accounts:105,action:'complete snapshot containing all directory, selected card and image data; no additional API reads required'}));
     } else {
-      const overview = await request('/api/league-overview',{});
+      const overview = await request('LeagueOverview',{});
       assert.equal(overview.errors,undefined);
-      const initial = await request('/api/leaderboard',{first:10});
+      const initial = await request('Leaderboard',{first:10});
       assert.equal(initial.errors,undefined);
       const initialBytes = observations.reduce((n,row)=>n+row.bytes,0);
       const accounts = [...initial.data.leaderboard.nodes];
       let page = initial.data.leaderboard;
       while(page.pageInfo.hasNextPage) {
-        page = (await request('/api/leaderboard',{first:10,after:page.pageInfo.endCursor})).data.leaderboard;
+        page = (await request('Leaderboard',{first:10,after:page.pageInfo.endCursor})).data.leaderboard;
         accounts.push(...page.nodes);
       }
       assert.equal(accounts.length,105);
@@ -67,15 +67,15 @@ const source = `
       assert.ok(jsonRows.every(row=>row.bytes<=10000));
       const collection = {initial_bytes:initialBytes,complete_action_bytes:observations.reduce((n,row)=>n+row.bytes,0),requests:[...observations],accounts:105,action:'conservative complete-data workload: all leaderboard pages and every account image; not images rendered by StatsView'};
       observations.length=0;
-      await request('/api/league-overview',{});
-      await request('/api/seasons',{first:10});
-      const first=(await request('/api/leaderboard',{first:10})).data.leaderboard;
+      await request('LeagueOverview',{});
+      await request('Seasons',{first:10});
+      const first=(await request('Leaderboard',{first:10})).data.leaderboard;
       const openStatsBytes=observations.reduce((n,row)=>n+row.bytes,0);
-      const next=(await request('/api/leaderboard',{first:10,after:first.pageInfo.endCursor})).data.leaderboard;
+      const next=(await request('Leaderboard',{first:10,after:first.pageInfo.endCursor})).data.leaderboard;
       const selected=next.nodes[0];
-      const card=(await request('/api/player-card',{id:selected.id,season:'all'})).data.accountCard;
-      await request('/api/account-awards',{id:selected.id,first:10});
-      await request('/api/account-championships',{id:selected.id,first:10});
+      const card=(await request('PlayerCard',{id:selected.id,season:'all'})).data.accountCard;
+      await request('AccountAwards',{id:selected.id,first:10});
+      await request('AccountChampionships',{id:selected.id,first:10});
       for(const route of new Set([card.imageUrl,card.team?.logoUrl].filter(Boolean)))await request(route);
       const json=observations.filter(row=>row.type?.includes('json'));
       assert.ok(json.every(row=>row.bytes<=10000));

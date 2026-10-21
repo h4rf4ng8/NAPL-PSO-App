@@ -1,6 +1,6 @@
 # Lambda API
 
-The NAPL API serves league data, applies changes, and verifies Supabase bearer identities and provisions league accounts from Discord identity. It runs the same Fastify application locally and on AWS Lambda, with league data, roles, active-session checks and provisioning quotas stored in Supabase PostgreSQL.
+The NAPL API serves league data, applies changes, and verifies Supabase bearer identities and provisions league accounts from Discord identity. It runs the same Fastify application locally and on AWS Lambda, with league data, roles and provisioning quotas stored in Supabase PostgreSQL.
 
 See the root README for the [system architecture](../README.md#system-architecture) and [workflow diagrams](../README.md#sequence-diagrams).
 
@@ -41,9 +41,9 @@ Fastify alone supplies exact-origin CORS, including errors and preflight. Reques
 
 ### Reading League Data
 
-Each GraphQL operation has a named POST endpoint, such as `/api/standings` or `/api/dashboard`. The [shared endpoint list](../pkgs/contracts/src/index.ts) keeps browser routing and API registration aligned. The [handler](routes/graphql/index.ts) accepts a strict `{variables: ...}` body and selects the fixed server-owned document assigned to that URL. It rejects query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation and field authorization remain in force. `/api/graphql` is not registered; league changes use REST endpoints.
+All 21 trusted GraphQL reads use `POST /api/graphql` with a strict `{operationName, variables}` body. The shared operation-name list selects an existing server-owned document; arbitrary query text, extensions, batches, unknown names and unexpected variables are rejected. Each operation retains its authentication and role checks; league changes use REST endpoints.
 
-`/api/standings` and `/api/team-records` require a verified bearer identity and an active database session. Anonymous requests are rejected before database reads. Public account and team REST reads and the other public GraphQL operations remain available without sign-in; the dashboard retains its existing private-field authorization.
+`TeamStandings` and `TeamRecords` require a verified Supabase bearer identity; `ImportAccountMatches` additionally requires an administrator. Other trusted reads retain their public or caller-specific field rules. The public username lookup is `GET /api/accounts/username/:username`; private owner/admin UUID cards use `GET /api/accounts/:id`.
 
 Apollo Server executes these fixed documents and owns variable coercion and native CSRF prevention. JSON requests pass Apollo's CSRF check; simple browser requests need a nonempty `Apollo-Require-Preflight` or `X-Apollo-Operation-Name` header. Browser access requires the exact configured CORS origin. GraphQL and REST use bearer authorization; no signed CSRF cookies/tokens remain. The server receives the original HTTP headers and starts and stops with Fastify. It exposes no landing page, persisted queries, or Apollo reporting.
 
@@ -54,7 +54,7 @@ Apollo Server executes these fixed documents and owns variable coercion and nati
 | [Match fields](routes/matches/schema.ts) | Return team records calculated from imported player match histories. |
 | [read()](routes/graphql/context.ts) | Reuses matching loads within one query request and converts database errors into GraphQL errors. |
 
-The API owns named queries such as [Standings and MemberLeagueData](routes/graphql/operations/league.graphql). The existing generator produces trusted server documents and browser typed documents from these same sources, including Apollo cache metadata. The [root query walkthrough](../README.md#reading-league-data) connects those queries to their screens and API field definitions. Some screens also use the REST read routes alongside GraphQL.
+The API owns named queries such as [Leaderboard and LeagueOverview](routes/graphql/operations/league.graphql). The existing generator produces trusted server documents and browser typed documents from these same sources, including Apollo cache metadata. The [root query walkthrough](../README.md#reading-league-data) connects those queries to their screens and API field definitions. Some screens also use the REST read routes alongside GraphQL.
 
 ### Saving Changes
 
@@ -62,13 +62,13 @@ REST handlers check permissions and validate submitted data with Zod. Shared com
 
 Account and team write routes enforce name and team-tag rules on the server. These checks apply to new or edited values; they do not rewrite existing stored names. OAuth provisioning uses a safe fallback when a provider username is disallowed, and the documented administrator username bypass remains available for intentional moderation changes.
 
-For example, the [match import handler](routes/matches/index.ts#L147) handles `POST /api/import-match`. It validates the imported match, locks mapped player accounts, adds match records, and recalculates player statistics. These account changes commit together before the API returns the match ID and import counts.
+For example, the [match import handler](routes/matches/index.ts#L147) handles `POST /api/match-imports`. It validates the imported match, locks mapped player accounts, adds match records, and recalculates player statistics. These account changes commit together before the API returns the match ID and import counts.
 
 Related writes [run in transactions](plugins/db/client.ts) that protect against conflicting concurrent changes and have a 15-second timeout. A failed transaction rolls back its changes. League data, authorization and provisioning quotas share the database login configured by `DATABASE_URL`. That login needs both sets of runtime permissions described in [Runtime Settings](../README.md#runtime-settings). The [root command walkthrough](../README.md#updating-league-data) covers the other core workflows.
 
 ### Sign-in and Sessions
 
-The browser Supabase SDK owns Discord OAuth, callback PKCE exchange, persistence, refresh, logout and cross-tab synchronization. `POST /api/users/me` receives the access token and optional provider token, verifies the authoritative Discord identity, and provisions a missing league account. Existing accounts do not need a provider token for loading. Native JWT validation and current database roles remain authoritative, and provider identity mismatch is rejected. Guild membership and Discord-token refresh are not API access requirements.
+The browser Supabase SDK owns Discord OAuth, callback PKCE exchange, persistence, refresh, logout and cross-tab synchronization. `POST /api/accounts/me` receives the access token and optional provider token, verifies the authoritative Discord identity, and provisions a missing league account. Existing accounts do not need a provider token for loading. Native JWT validation and current database roles remain authoritative, and provider identity mismatch is rejected. Guild membership and Discord-token refresh are not API access requirements.
 
 Provisioning admission uses database quotas by trusted IP, user, session and global limit. Repeated failures cannot bypass those limits by changing forwarded IP headers. See [account routes](routes/accounts/routes.ts), [runtime](plugins/runtime.ts), and [request checks](app.ts).
 

@@ -130,35 +130,38 @@ When the Lambda API starts, it loads its settings and prepares database access a
 
 When someone opens the app, it checks whether they are signed in. Visitors can browse the public pages; standings require sign-in and appear in the member dashboard. The app checks again when another browser tab reports a session change. The [main screen](web/src/App.tsx#L8) controls this choice.
 
-Choosing “Sign in with Discord” starts Supabase SDK OAuth with PKCE. The frontend handles `/auth/callback`, exchanges the code, and calls `POST /api/users/me` with the bearer access token and an available provider token. The API verifies the JWT, checks database roles and active session state, and provisions a missing league account from the verified Discord identity. Discord credentials remain in Supabase Dashboard. Guild membership is not an API access condition.
+Choosing “Sign in with Discord” starts Supabase SDK OAuth with PKCE. The frontend handles `/auth/callback`, exchanges the code, and calls `POST /api/accounts/me` with the bearer access token and an available provider token. The API verifies the JWT, checks database roles, and provisions a missing league account from the verified Discord identity. Discord credentials remain in Supabase Dashboard. Guild membership is not an API access condition.
 
-The [Supabase client](api/plugins/supabase/client.ts) verifies signature, issuer, audience and expiry from configured JWKS. The [request checks](api/app.ts) require bearer authentication for protected actions, load current roles from PostgreSQL, and check active Supabase sessions through the database. Public account/team and public named GraphQL reads remain anonymous. Browser role metadata and forwarded identity/IP headers are never authorization sources.
+The [Supabase client](api/plugins/supabase/client.ts) verifies signature, issuer, audience and expiry from configured JWKS. The [request checks](api/app.ts) require bearer authentication for protected actions, load current roles from PostgreSQL, and enforce resource permissions. JWT verification does not perform a per-request database session lookup. Public account/team and public GraphQL operations allow anonymous callers; supplied bearer tokens must still validate. Browser role metadata and forwarded identity/IP headers are never authorization sources.
 
 The browser SDK owns refresh coordination and cross-tab auth events. Logout clears browser session and Apollo data immediately; a departing session cannot retain access through an API cookie. Old `napl-*` cookies are ignored and can expire naturally.
 
 ### Reading League Data
 
-The browser selects a named endpoint and supplies its parameters. The Lambda API owns the query and chooses which fields to load. It never executes a query document supplied by the browser.
+The browser sends one of 21 allowlisted operation names and its variables to `POST /api/graphql`. The Lambda API selects the matching server-owned document; it never executes a query document supplied by the browser.
 
-| Operation | POST endpoint | Used for |
-| --- | --- | --- |
-| `Standings` | `/api/standings` | Signed-in player/team standings and team records. |
-| `MemberLeagueData` | `/api/dashboard` | Member dashboard, news, voting periods, season, and the current account. |
-| `TeamRecords` | `/api/team-records` | Signed-in standings and schedule records. |
-| `AccountMatches` | `/api/account-matches` | Bounded match-history pages with account, cursor, season, and opponent parameters. |
-| `AccountOpponents` | `/api/account-opponents` | Opponent totals for one account. |
-| `AccountCardPreviews` | `/api/account-card-previews` | Sample player cards calculated by the API. |
-| `DefaultPositionWeights` | `/api/default-position-weights` | Default ranking weights. |
+| Operation names | Used for |
+| --- | --- |
+| `LeagueOverview`, `HomeSummary`, `HomeNews` | Dashboard identity, league totals and filtered news. |
+| `Leaderboard`, `PlayerCard`, `AccountCardPreviews` | Ranked players, selected player cards and card samples. |
+| `TeamSummaries`, `TeamPlayers` | Visible team directories and roster cards. |
+| `TeamStandings`, `TeamRecords` | Signed-in standings and aggregated match records. |
+| `AccountMatches`, `AccountOpponents`, `AccountAwards`, `AccountChampionships` | Bounded account history and achievement views. |
+| `Seasons`, `SeasonChampions` | Season choices and enriched champions. |
+| `HallOfFame`, `DecoratedPlayers` | Award and decorated-player views. |
+| `VotingCandidates` | Eligible player choices. |
+| `ImportAccountMatches` | Administrator-only account lookup for match imports. |
+| `DefaultPositionWeights` | Default ranking weights. |
 
-For example, a signed-in standings request is `POST /api/standings` with this body:
+For example, a signed-in standings request is `POST /api/graphql` with this body:
 
 ```json
-{"variables": {}}
+{"operationName": "TeamStandings", "variables": {}}
 ```
 
-The [query handler](api/routes/graphql/index.ts) binds each endpoint to its fixed document and executes it through Apollo Server 5 with native CSRF prevention enabled. It rejects client-supplied query text, operation names, extensions, batch bodies, and unexpected variables. Existing argument validation, authorization, history bounds, and cursor checks still apply. `/api/graphql` is not registered.
+The [query handler](api/routes/graphql/index.ts) accepts only known operation names and their expected variables, then executes the trusted document through Apollo Server with native CSRF prevention. It rejects client-supplied query text, unknown names, extensions, batch bodies and unexpected variables. Existing argument validation, authorization, response bounds and cursor checks still apply. TeamStandings and TeamRecords require sign-in; ImportAccountMatches requires administrator access.
 
-Canonical selections and fragments live in [API operations](api/routes/graphql/operations/). The [existing generation script](web/scripts/codegen.ts) validates them against the API schema and creates both server execution documents and browser typed documents. The browser uses its documents for Apollo's types and normalized cache; the [transport](web/src/api/link.ts) sends only variables. Generated server documents include the `__typename` fields needed by that cache.
+Canonical selections and fragments live in [API operations](api/routes/graphql/operations/). The [existing generation script](web/scripts/codegen.ts) validates them against the API schema and creates both server execution documents and browser typed documents. The browser uses its documents for Apollo's types and normalized cache; the [transport](web/src/api/link.ts) sends only the operation name and variables. Generated server documents include the `__typename` fields needed by that cache.
 
 The browser sends these reads and REST commands directly through [request handling](web/src/api/http.ts), with bearer authorization and credentials omitted. GraphQL reads send JSON and `Apollo-Require-Preflight: true`; Apollo retains native CSRF prevention. Fastify is the only CORS owner and permits the exact configured frontend origin. Bearer authentication and database permissions authorize protected writes; no signed CSRF cookie or `/auth` API routes remain.
 

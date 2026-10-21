@@ -152,7 +152,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             }));
         });
     });
-    app.post('/api/import-match', {
+    app.post('/api/match-imports', {
         config: {
             role: 'admin'
         }

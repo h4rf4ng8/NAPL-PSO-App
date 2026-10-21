@@ -2,7 +2,7 @@ const browserPath=(value:string)=>new URL(value,'http://localhost').pathname;
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { FastifyInstance, LightMyRequestResponse } from 'fastify';
-import { graphqlEndpoints } from '@napl/contracts';
+import { graphqlEndpoint, type GraphQLOperationName } from '@napl/contracts';
 import { accountStatsSchema } from '@napl/contracts/accounts';
 import { createApp } from '../helper.js';
 import { payloadFixture, fixtureUser } from '../payload-fixture.js';
@@ -36,8 +36,8 @@ function harness() {
   const app = createApp({db:fixture.db,verify:async id => ({id,sessionId:'fixture-session',claims:{}})});
   return {app,fixture};
 }
-async function gql(app: FastifyInstance, name: keyof typeof graphqlEndpoints, variables: Record<string,unknown> = {}) {
-  const result = bounded(await app.inject({method:'POST',url:graphqlEndpoints[name],headers,payload:{variables}}),name);
+async function gql(app: FastifyInstance, name: GraphQLOperationName, variables: Record<string,unknown> = {}) {
+  const result = bounded(await app.inject({method:'POST',url:graphqlEndpoint,headers,payload:{operationName:name,variables}}),name);
   assert.equal(result.errors,undefined,JSON.stringify(result.errors));
   return result.data;
 }
@@ -45,7 +45,7 @@ async function gql(app: FastifyInstance, name: keyof typeof graphqlEndpoints, va
 test('all REST collections remain below 10000 decoded bytes and traverse complete fixtures', async t => {
   const {app,fixture} = harness(); t.after(() => app.close());
   const routes: Array<[string,number]> = [
-    ['/api/accounts',105],['/api/teams',7],['/api/news',105],['/api/rules',30],['/api/articles',30],['/api/schedule',105],['/api/transfers',105],['/api/position-requests',105],['/api/submissions',105],['/api/roles',105],['/api/voting/periods',1],
+    ['/api/accounts',105],['/api/news',105],['/api/rules',30],['/api/articles',30],['/api/schedule',105],['/api/transfers',105],['/api/position-requests',105],['/api/submissions',105],['/api/roles',105],['/api/voting/periods',1],
     [`/api/voting/periods/${fixture.period.id}/candidates`,105],
     [`/api/accounts/${fixtureUser}/history/matches`,60],
     ['/api/teams/t_0/members',15],
@@ -58,7 +58,7 @@ test('all REST collections remain below 10000 decoded bytes and traverse complet
 
 test('all fixed GraphQL pages include their real envelopes and preserve complete traversal', async t => {
   const {app,fixture} = harness(); t.after(() => app.close());
-  const operations: Array<[keyof typeof graphqlEndpoints,string,number,Record<string,unknown>?]> = [
+  const operations: Array<[GraphQLOperationName,string,number,Record<string,unknown>?]> = [
     ['Leaderboard','leaderboard',105],['TeamSummaries','teamSummaries',7],['Seasons','seasons',3],
     ['AccountAwards','accountAwards',20,{id:fixtureUser}],['AccountChampionships','accountChampionships',0,{id:fixtureUser}],
     ['HomeNews','homeNews',105,{kind:'announcement'}],['HallOfFame','hallOfFame',20],['DecoratedPlayers','decoratedPlayers',105],
@@ -71,7 +71,7 @@ test('all fixed GraphQL pages include their real envelopes and preserve complete
 test('single player cards and overview stay bounded under maximum Unicode fields', async t => {
   const {app,fixture} = harness(); t.after(() => app.close());
   Object.assign(fixture.accounts[0]!, {username:'球'.repeat(64),country:'球'.repeat(80),strikers_id:'9'.repeat(100)});
-  for (const route of ['/api/users/me',`/api/accounts/id/${fixtureUser}`,'/api/teams/t_0']) bounded(await app.inject({url:route,headers}),route);
+  for (const route of ['/api/accounts/me',`/api/accounts/${fixtureUser}`,'/api/teams/t_0']) bounded(await app.inject({url:route,headers}),route);
   const card = (await gql(app,'PlayerCard',{id:fixtureUser,season:'S2'})).accountCard;
   assert.equal(card.season,'S2');
   assert.equal(card.awardCount,20);
@@ -126,7 +126,7 @@ test('reserved and Unicode resource IDs survive generated media and detail URLs'
   for (const account of fixture.accounts) if(account.team_id==='t_0') account.team_id=teamId;
   fixture.articles[0]!.id=articleId;
   fixture.news[0]!.id=newsId;
-  const teams = bounded(await app.inject({url:'/api/teams',headers}),'teams reserved IDs');
+  const teams = (await gql(app,'TeamSummaries')).teamSummaries;
   const team = teams.nodes.find((row:{id:string})=>row.id===teamId);
   assert.ok(team);
   const logo=await app.inject({url:browserPath(team.logoUrl),headers});

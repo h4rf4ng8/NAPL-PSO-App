@@ -20,7 +20,7 @@ test('linked-account editor reads the original Steam URL and preserves it when a
  await login(async(url,init)=>{
   if(apiPath(url)==='/api/accounts/user-a/links/steamUrl')return Response.json(page([original]));
   if(apiPath(url)==='/api/accounts/user-a'){writes.push(JSON.parse(String(init?.body)));return Response.json({ok:true,id:'user-a'});}
-  assert.equal(apiPath(url),'/api/users/me');return Response.json(card);
+  assert.equal(apiPath(url),'/api/accounts/me');return Response.json(card);
  });
  const client=new ApolloClient({cache:new InMemoryCache(),link:new ApolloLink(operation=>new Observable(observer=>{
   observer.next({data:operation.operationName==='HomeSummary'?{homeSummary:{playerCount:1,activeTeamCount:0,topPlayers:[]}}:{homeNews:{...page([]),__typename:'JsonPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:null,hasNextPage:false}}}});observer.complete();

@@ -12,7 +12,7 @@ const location={get href(){return page.href;},get origin(){return page.origin;},
 const globals={React,location,history:{replaceState:mock.fn((_state:unknown,_unused:string,url:string)=>{page.href=new URL(url,page).href;})},window:{location,addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events)},document:{visibilityState:'hidden',documentElement:{dataset:{}}},addEventListener:events.addEventListener.bind(events),removeEventListener:events.removeEventListener.bind(events)};
 const originals=Object.fromEntries(Object.keys(globals).map(key=>[key,Object.getOwnPropertyDescriptor(globalThis,key)]));
 for(const [key,value]of Object.entries(globals))Object.defineProperty(globalThis,key,{configurable:true,value});
-const [{default:App},{supabase,storageKey},{auth},{client,resetClient},{Dashboard,PublicLeague},{login,clearSession,apiPath,tick}]=await Promise.all([import('../src/App'),import('../src/auth/client'),import('../src/auth/session'),import('../src/api/client'),import('../src/features/dashboard'),import('./auth-fixture')]);
+const [{default:App},{supabase,storageKey},{auth},{client,resetClient},{Dashboard,PublicLeague},{login,clearSession,apiPath,apiTarget,tick}]=await Promise.all([import('../src/App'),import('../src/auth/client'),import('../src/auth/session'),import('../src/api/client'),import('../src/features/dashboard'),import('./auth-fixture')]);
 const json=(body:unknown,status=200)=>Response.json(body,{status});
 /* eslint-disable unicorn/no-top-level-assignment-in-function -- The mounted tree is shared with test cleanup. */
 let renderer:ReactTestRenderer|undefined;
@@ -40,7 +40,7 @@ test('real SDK Discord login uses PKCE and callback exchanges once before verifi
  page.href=authorize.searchParams.get('redirect_to')!;page.searchParams.set('code','oauth-code');
  await Promise.all([auth.completeSignIn(),auth.completeSignIn()]);
  assert.equal(page.href,'https://frontend.example.test/');assert.equal(calls.filter(call=>call.url.includes('grant_type=pkce')).length,1);
- const provision=calls.find(call=>apiPath(call.url)==='/api/users/me')!;assert.equal(provision.init?.method,'POST');assert.deepEqual(JSON.parse(String(provision.init?.body)),{providerToken:'discord-provider-token'});assert.equal(new Headers(provision.init?.headers).get('Authorization'),`Bearer ${value.access_token}`);
+ const provision=calls.find(call=>apiPath(call.url)==='/api/accounts/me')!;assert.equal(provision.init?.method,'POST');assert.deepEqual(JSON.parse(String(provision.init?.body)),{providerToken:'discord-provider-token'});assert.equal(new Headers(provision.init?.headers).get('Authorization'),`Bearer ${value.access_token}`);
  const restored=secondary();try{assert.equal((await restored.auth.getSession()).data.session?.refresh_token,value.refresh_token);}finally{await restored.auth.dispose();}
 });
 
@@ -77,10 +77,10 @@ test('local sign-out clears SDK persistence after revocation errors and expired-
 
 test('home reads start while league overview is pending and overview failures remain visible',async()=>{
  const overview=Promise.withResolvers<Response>();const reads:string[]=[];
- await login(async url=>{const path=apiPath(url);reads.push(path);return path==='/api/users/me'?json(account()):(path==='/api/league-overview'?overview.promise:new Promise<Response>(()=>{}));});
+ await login(async(url,init)=>{const path=apiTarget(url,init);reads.push(path);return path==='/api/accounts/me'?json(account()):(path==='LeagueOverview'?overview.promise:new Promise<Response>(()=>{}));});
  await mount();await act(tick);
- assert.equal(reads.filter(path=>path==='/api/home-summary').length,1);
- assert.equal(reads.filter(path=>path==='/api/home-news').length,3);
+ assert.equal(reads.filter(path=>path==='HomeSummary').length,1);
+ assert.equal(reads.filter(path=>path==='HomeNews').length,3);
  const {HomeView}=await import('../src/features/content/Home');
  assert.equal(renderer!.root.findByType(HomeView).props.account.id,'user-a');
  assert.equal(renderer!.root.findByType(HomeView).props.currentSeason,undefined);
@@ -92,7 +92,7 @@ test('home reads start while league overview is pending and overview failures re
 });
 
 test('real SDK cross-tab sign-out clears the mounted private screen and ignores late old updates',async()=>{
- await login(async url=>apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{}));await mount();
+ await login(async url=>apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{}));await mount();
  const old=renderer!.root.findByType(Dashboard).props;assert.equal(old.account.id,'user-a');
  const other=secondary();try{
   mock.method(globalThis,'fetch',async()=>new Response(null,{status:204}));
@@ -103,19 +103,19 @@ test('real SDK cross-tab sign-out clears the mounted private screen and ignores 
 });
 
 test('account switches guard old modal callbacks, token refreshes retain account and Apollo cache',async()=>{
- await login(async url=>apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{}));await mount();const old=renderer!.root.findByType(Dashboard).props;
+ await login(async url=>apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{}));await mount();const old=renderer!.root.findByType(Dashboard).props;
  client.cache.writeQuery({query:(await import('../src/api/generated/graphql')).TeamRecordsDocument,data:{teamRecords:[]}});
  let profileReads=0;
  await act(async()=>{await login(async url=>{if(url.includes('grant_type=refresh_token'))return json(session('user-a',2));profileReads++;return json(account());});await supabase.auth.refreshSession();await tick();});
  assert.equal(profileReads,0);assert.ok(Object.keys(client.cache.extract()).length);assert.equal(renderer!.root.findByType(Dashboard).props.account,old.account);
- await act(async()=>{await login(async url=>apiPath(url)==='/api/users/me'?json(account('user-b')):new Promise<Response>(()=>{}),session('user-b'));await tick();});
+ await act(async()=>{await login(async url=>apiPath(url)==='/api/accounts/me'?json(account('user-b')):new Promise<Response>(()=>{}),session('user-b'));await tick();});
  assert.equal(renderer!.root.findByType(Dashboard).props.account.id,'user-b');
  await act(async()=>{old.onUpdate({...account(),username:'late old callback'});});assert.equal(renderer!.root.findByType(Dashboard).props.account.id,'user-b');
 });
 
 test('logout immediately hides private state while SDK refresh and revocation are pending',async()=>{
  const refresh=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>(),revoke=Promise.withResolvers<Response>();const publicReads:(string|null)[]=[];
- await login(async(url,init)=>{if(apiPath(url)==='/api/team-summaries')publicReads.push(new Headers(init?.headers).get('Authorization'));if(url.includes('grant_type=refresh_token')){started.resolve();return refresh.promise;}if(url.includes('/logout'))return revoke.promise;return apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{});});await mount();const old=renderer!.root.findByType(Dashboard).props;
+ await login(async(url,init)=>{if(apiTarget(url,init)==='TeamSummaries')publicReads.push(new Headers(init?.headers).get('Authorization'));if(url.includes('grant_type=refresh_token')){started.resolve();return refresh.promise;}if(url.includes('/logout'))return revoke.promise;return apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{});});await mount();const old=renderer!.root.findByType(Dashboard).props;
  const refreshing=supabase.auth.refreshSession();await started.promise;let logout:Promise<void>;
  await act(async()=>{logout=old.onLogout();await tick();});assert.equal(renderer!.root.findAllByType(Dashboard).length,0);
  assert.equal(renderer!.root.findAllByType(PublicLeague).length,0);assert.match(JSON.stringify(renderer!.toJSON()),/Loading league/);assert.deepEqual(client.cache.extract(),{});assert.equal(publicReads.length,0);
@@ -125,22 +125,22 @@ test('logout immediately hides private state while SDK refresh and revocation ar
  assert.equal(renderer!.root.findAllByType(Dashboard).length,0);assert.equal(renderer!.root.findAllByType(PublicLeague).length,1);assert.equal(localStorage.getItem(storageKey),null);assert.equal(renderer!.root.findAllByProps({role:'alert'}).length,1);assert.deepEqual(publicReads,[null]);
 });
 test('late account loads after a switch and unmount never expose the old account',async()=>{
- const delayed=Promise.withResolvers<Response>();await login(async url=>apiPath(url)==='/api/users/me'?delayed.promise:new Promise<Response>(()=>{}));await mount();assert.equal(renderer!.root.findAllByType(Dashboard).length,0);
- await act(async()=>{await login(async url=>apiPath(url)==='/api/users/me'?json(account('user-b')):new Promise<Response>(()=>{}),session('user-b'));await tick();});
+ const delayed=Promise.withResolvers<Response>();await login(async url=>apiPath(url)==='/api/accounts/me'?delayed.promise:new Promise<Response>(()=>{}));await mount();assert.equal(renderer!.root.findAllByType(Dashboard).length,0);
+ await act(async()=>{await login(async url=>apiPath(url)==='/api/accounts/me'?json(account('user-b')):new Promise<Response>(()=>{}),session('user-b'));await tick();});
  assert.equal(renderer!.root.findByType(Dashboard).props.account.id,'user-b');
  await act(async()=>{delayed.resolve(json(account()));await tick();});assert.equal(renderer!.root.findByType(Dashboard).props.account.id,'user-b');
  await act(async()=>{renderer!.unmount();});renderer=undefined;assert.equal(localStorage.getItem(storageKey)!==null,true);
 });
 test('a cross-tab login cannot lend its bearer token to a write from the old visible account before its event arrives',async()=>{
  const {request,ApiError}=await import('../src/api/http');
- await login(async url=>apiPath(url)==='/api/users/me'?json(account()):new Promise<Response>(()=>{}));await mount();
+ await login(async url=>apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{}));await mount();
  const other=secondary();let writes=0;
  try {
   await other.auth.getSession();await tick();await tick();
   mock.method(globalThis,'fetch',async(url)=>{
    if(String(url).includes('grant_type=password'))return json(session('user-b'));
    if(apiPath(url)==='/api/teams'){writes++;return json({saved:true});}
-   return apiPath(url)==='/api/users/me'?json(account('user-b')):new Promise<Response>(()=>{});
+   return apiPath(url)==='/api/accounts/me'?json(account('user-b')):new Promise<Response>(()=>{});
   });
   await act(async()=>{
    await other.auth.signInWithPassword({email:'new@example.test',password:'test'});

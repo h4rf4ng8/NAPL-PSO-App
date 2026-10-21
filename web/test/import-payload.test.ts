@@ -16,12 +16,12 @@ test('import matches only uploaded IDs across necessary lookup pages, preserves 
  const skippedName='未登録'.repeat(100);const writes:Record<string,unknown>[]=[];const paths:string[]=[];
  await login(async(url,init)=>{
   const path=apiPath(url);paths.push(path);
-  if(path.startsWith('/api/teams?'))return Response.json(page([{id:'team-a',name:'Home Team',tag:'HOME'},{id:'team-b',name:'Away Team',tag:'AWAY'}]));
   if(path.startsWith('/api/accounts?')){const second=path.includes('after=next');return Response.json({...page([{id:second?'manual':'first',username:second?'Manual Player':'First Choice',position:'CM'}]),pageInfo:{endCursor:second?null:'next',hasNextPage:!second}});}
-  assert.equal(path,'/api/import-match');writes.push(JSON.parse(String(init?.body)));return Response.json({ok:true,matchId:'fixture',updated:1,alreadyImported:1,skipped:1,skippedIndexes:[2],homeTeam:'Home Team',awayTeam:'Away Team',score:'2 - 0'});
+  assert.equal(path,'/api/match-imports');writes.push(JSON.parse(String(init?.body)));return Response.json({ok:true,matchId:'fixture',updated:1,alreadyImported:1,skipped:1,skippedIndexes:[2],homeTeam:'Home Team',awayTeam:'Away Team',score:'2 - 0'});
  });
  const lookups:Record<string,unknown>[]=[];
  const client=new ApolloClient({cache:new InMemoryCache(),link:new ApolloLink(operation=>new Observable(observer=>{
+  if(operation.operationName==='TeamSummaries'){observer.next({data:{teamSummaries:{...page([{id:'team-a',name:'Home Team',tag:'HOME',color:null,ownerUsername:'Owner',status:'approved',logoUrl:null,totw:false,totwSetAt:null,createdAt:1,reviewedAt:null,reviewedBy:null,memberCount:1,invitationCount:0,seasonCount:1,viewerInvitation:null,__typename:'TeamSummary'},{id:'team-b',name:'Away Team',tag:'AWAY',color:null,ownerUsername:'Owner',status:'approved',logoUrl:null,totw:false,totwSetAt:null,createdAt:1,reviewedAt:null,reviewedBy:null,memberCount:1,invitationCount:0,seasonCount:1,viewerInvitation:null,__typename:'TeamSummary'}]),__typename:'TeamSummaryPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:null,hasNextPage:false}}}});observer.complete();return;}
   assert.equal(operation.operationName,'ImportAccountMatches');lookups.push(operation.variables);
   const second=!!operation.variables.after;
   observer.next({data:{importAccountMatches:{...page([{__typename:'ImportAccountSummary',username:second?'Auto Two':'Auto One',strikersId:second?'102':'101'}]),__typename:'ImportAccountSummaryPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:second?null:'next',hasNextPage:!second}}}});observer.complete();

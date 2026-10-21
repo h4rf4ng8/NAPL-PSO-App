@@ -18,7 +18,7 @@ function capture(script: string) {
 test('one canonical error event correlates the response without logging secrets', () => {
   const { logs, response, output } = capture(`
     const response = await app.inject({
-      method: 'POST', url: '/api/users/me?probe=' + canaries.internal,
+      method: 'POST', url: '/api/accounts/me?probe=' + canaries.internal,
       headers: { authorization: 'Bearer ' + canaries.bearer, cookie: 'probe=' + canaries.cookie, 'x-request-id': canaries.internal },
       payload: { providerToken: canaries.provider },
     });
@@ -30,7 +30,7 @@ test('one canonical error event correlates the response without logging secrets'
   assert.equal(logs[0].component, 'api');
   assert.equal(logs[0].level, 'ERROR');
   assert.equal(logs[0].method, 'POST');
-  assert.equal(logs[0].route, '/api/users/me');
+  assert.equal(logs[0].route, '/api/accounts/me');
   assert.equal(logs[0].status, 503);
   assert.equal(logs[0].actor_id, 'fef79a51-49a9-45c9-a2a5-99d7b601e497');
   assert.equal(logs[0].code, 'service_unavailable');
@@ -79,7 +79,7 @@ test('GraphQL failures and handled auth rejection retain their classifications',
     });
     const { schema } = await import('./routes/graphql/schema.ts');
     schema.getQueryType().getFields().defaultPositionWeights.resolve = () => { throw new TypeError('private-resolver-error'); };
-    const bad = await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json','apollo-require-preflight':'true'},payload:{variables:{}}});
+    const bad = await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/json','apollo-require-preflight':'true'},payload:{operationName:'DefaultPositionWeights',variables:{}}});
     assert.equal(bad.statusCode,503);
     await app.inject('/reject');
     await app.inject('/recover');
@@ -89,7 +89,8 @@ test('GraphQL failures and handled auth rejection retain their classifications',
   assert.equal(logs.length, 4);
   assert.equal(logs[0].level, 'ERROR');
   assert.equal(logs[0].code, 'internal_error');
-  assert.equal(logs[0].route, '/api/default-position-weights');
+  assert.equal(logs[0].route, '/api/graphql');
+  assert.equal(logs[0].operation_name, 'DefaultPositionWeights');
   assert.equal(logs[1].level, 'INFO');
   assert.equal(logs[1].code, 'access_invalid');
   assert.equal(logs[2].level, 'WARN');
@@ -109,9 +110,9 @@ test('local rendering is stable and sink failure cannot throw into request proce
 test('unmatched routes, invalid JSON/content type and GraphQL pre-execution rejection emit safe completions', () => {
   const { logs, output } = capture(`
     await app.inject('/missing/private-secret?token=private-secret');
-    await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json'},payload:'{private-secret'});
-    await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/private-secret'},payload:'private-secret'});
-    await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'text/plain'},payload:'private-secret'});
+    await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/json'},payload:'{private-secret'});
+    await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/private-secret'},payload:'private-secret'});
+    await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'text/plain'},payload:'private-secret'});
   `);
   assert.equal(logs.length, 4);
   assert.equal(logs[0].route, 'unmatched');
@@ -126,7 +127,7 @@ test('HTTP 200 GraphQL errors and database codes remain diagnostic without raw e
     const { schema } = await import('./routes/graphql/schema.ts');
     schema.getQueryType().getFields().defaultPositionWeights.resolve = () => { throw new GraphQLError('private-secret', {extensions:{code:'BAD_USER_INPUT',status:422}}); };
     app.get('/db-failure', async () => { throw Object.assign(new Error('private-secret\n    at api/private-secret.ts:1:1'),{name:'PrismaClientKnownRequestError',code:'P2010',meta:{code:'08006'}}); });
-    const response = await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json'},payload:{variables:{}}});
+    const response = await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/json'},payload:{operationName:'DefaultPositionWeights',variables:{}}});
     assert.equal(response.statusCode,200);
     await app.inject('/db-failure');
   `);
@@ -231,7 +232,7 @@ test('late Apollo cache warnings preserve Lambda correlation and version', () =>
     };
     const { createHandler } = await import('./plugins/lambda.ts');
     const handler = createHandler(app);
-    const path = '/api/default-position-weights';
+    const path = '/api/graphql';
     await handler({version:'2.0',routeKey:'$default',rawPath:path,rawQueryString:'',headers:{'content-type':'application/json'},body:'{"variables":{}}',requestContext:{requestId:'url-id',http:{method:'POST',path,sourceIp:'192.0.2.1',protocol:'HTTP/1.1',userAgent:''}},isBase64Encoded:false}, {awsRequestId:'late-apollo',functionVersion:'42'});
     await new Promise(resolve => setTimeout(resolve,30));
   `);
@@ -269,9 +270,9 @@ test('resolved REST and fixed GraphQL targets enrich one completion without copy
   const headers={authorization:'Bearer '+canaries.bearer};
   const requests=[
    {url:'/api/teams/t_0'},
-   {url:'/api/accounts/id/'+fixtureUser},
-   {method:'POST',url:'/api/player-card',payload:{variables:{id:fixtureUser}}},
-   {method:'POST',url:'/api/team-players',payload:{variables:{teamId:'t_0'}}},
+   {url:'/api/accounts/'+fixtureUser},
+   {method:'POST',url:'/api/graphql',payload:{operationName:'PlayerCard',variables:{id:fixtureUser}}},
+   {method:'POST',url:'/api/graphql',payload:{operationName:'TeamPlayers',variables:{teamId:'t_0'}}},
    {method:'PATCH',url:'/api/accounts/'+fixtureUser,payload:{steamUrl:'https://example.test/'+canaries.internal}},
    {method:'PATCH',url:'/api/news/n_0',payload:{body:canaries.internal}},
    {url:'/api/rules/r_0'},
@@ -279,10 +280,10 @@ test('resolved REST and fixed GraphQL targets enrich one completion without copy
    {method:'POST',url:'/api/rules/r_0/move',payload:{direction:'up'}},
    {method:'DELETE',url:'/api/submissions/sub_0'},
    {url:'/api/teams/unknown-target-secret'},
-   {url:'/api/accounts/id/unknown-target-secret'},
-   {url:'/api/accounts/id/99999999-9999-4999-8999-999999999999'},
+   {url:'/api/accounts/unknown-target-secret'},
+   {url:'/api/accounts/99999999-9999-4999-8999-999999999999'},
    {url:'/api/accounts'},
-   {method:'POST',url:'/api/player-card',payload:{variables:{id:'99999999-9999-4999-8999-999999999999'}}},
+   {method:'POST',url:'/api/graphql',payload:{operationName:'PlayerCard',variables:{id:'99999999-9999-4999-8999-999999999999'}}},
   ];
   try{const statuses=[];for(const input of requests)statuses.push((await resources.inject({...input,headers})).statusCode);console.error(JSON.stringify(statuses));}finally{await resources.close();}
  `);
@@ -305,9 +306,21 @@ test('Apollo warning followed by an unexpected serialization failure completes o
    return original.apply(this,args);
   };
   JSONScalar.serialize=()=>{throw new TypeError('private-serialization-secret');};
-  await app.inject({method:'POST',url:'/api/default-position-weights',headers:{'content-type':'application/json'},payload:{variables:{}}});
+  await app.inject({method:'POST',url:'/api/graphql',headers:{'content-type':'application/json'},payload:{operationName:'DefaultPositionWeights',variables:{}}});
  `);
  assert.equal(logs.length,1);assert.equal(logs[0].event,'api.request.completed');
  assert.equal(logs[0].level,'ERROR');assert.equal(logs[0].code,'internal_error');
  assert.equal(logs[0].error_type,'TypeError');assert.ok(!output.includes('private-serialization-secret'));
+});
+
+test('only validated trusted names enter request logs, including denied protected reads', () => {
+  const { logs, output } = capture(`
+    await app.inject({method:'POST',url:'/api/graphql',payload:{operationName:'attacker-name-canary',variables:{}}});
+    await app.inject({method:'POST',url:'/api/graphql',payload:{operationName:'TeamStandings',variables:{}}});
+  `);
+  assert.equal(logs.length, 2);
+  assert.equal(logs[0].operation_name, undefined);
+  assert.equal(logs[1].operation_name, 'TeamStandings');
+  assert.equal(logs[1].status, 401);
+  assert.ok(!output.includes('attacker-name-canary'));
 });

@@ -40,7 +40,7 @@ export async function smokeDeployment({ functionName, region, functionUrl, publi
   if (publicRead.status !== 200 || !publicBody.trim()) throw new Error('Function URL could not read the current season');
   if (publicRead.headers.get('access-control-allow-origin') !== publicOrigin || publicRead.headers.has('access-control-allow-credentials')
     || !publicRead.headers.get('access-control-expose-headers')?.toLowerCase().split(/,\s*/).includes('retry-after')) throw new Error('Public response has incorrect CORS headers');
-  const preflight = await call('/api/users/me', { method: 'OPTIONS', headers: {
+  const preflight = await call('/api/accounts/me', { method: 'OPTIONS', headers: {
     origin: publicOrigin, 'access-control-request-method': 'GET', 'access-control-request-headers': 'authorization,content-type,apollo-require-preflight,idempotency-key',
   } });
   const allowedHeaders = preflight.headers.get('access-control-allow-headers')?.toLowerCase().split(/,\s*/) ?? [];
@@ -50,9 +50,9 @@ export async function smokeDeployment({ functionName, region, functionUrl, publi
     || ['authorization', 'content-type', 'apollo-require-preflight', 'idempotency-key'].some(header => !allowedHeaders.includes(header))) {
     throw new Error('Authorized browser preflight failed');
   }
-  const protectedRead = await call('/api/users/me', { headers: { origin: publicOrigin } });
+  const protectedRead = await call('/api/accounts/me', { headers: { origin: publicOrigin } });
   if (protectedRead.status !== 401 || protectedRead.headers.get('access-control-allow-origin') !== publicOrigin) throw new Error('Protected Function URL read must reject anonymous access with CORS');
-  const rejected = await call('/api/users/me', { method: 'OPTIONS', headers: { origin: 'https://untrusted.invalid', 'access-control-request-method': 'GET' } });
+  const rejected = await call('/api/accounts/me', { method: 'OPTIONS', headers: { origin: 'https://untrusted.invalid', 'access-control-request-method': 'GET' } });
   if (rejected.status !== 403 || rejected.headers.has('access-control-allow-origin')) throw new Error('Untrusted browser origin was allowed');
 }
 

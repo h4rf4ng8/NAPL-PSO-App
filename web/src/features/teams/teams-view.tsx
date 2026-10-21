@@ -25,7 +25,7 @@ import { isTeamCaptain } from '../../utils/league';
 export const PlayerCardModal = ({ player, team, onClose }: { player: Account; team?: TeamSummary | null; onClose: () => void }) =>
   <ShareableCardModal account={player} team={team} onClose={onClose}><TrophyHistory accountId={player.id} /></ShareableCardModal>;
 
-type TeamDetail = TeamSummary & Pick<Team, 'formation'> & { lineupUrl: string; descriptionUrl: string; rejectionReasonUrl: string; viewerInvitation: string | null };
+type TeamDetail = TeamSummary & Pick<Team, 'formation'> & { lineupUrl: string; descriptionUrl: string; rejectionReasonUrl?: string; viewerInvitation: string | null };
 
 export function TeamsView({ account, onUpdate }: { account: Account | null; onUpdate?: (account: Account) => void; currentSeason?: string }) {
   const [scope, setScope] = useState<string | null>(null);
@@ -87,7 +87,7 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
     {team && <>
       <p>{team.tag} · Captain: {team.ownerUsername} · {team.status}</p>
       <LazyText url={team.descriptionUrl} label="Read team description" />
-      {team.status === 'rejected' && <LazyText url={team.rejectionReasonUrl} label="Read review reason" />}
+      {team.status === 'rejected' && team.rejectionReasonUrl && <LazyText url={team.rejectionReasonUrl} label="Read review reason" />}
       {team.status === 'rejected' && account?.username === team.ownerUsername && <button onClick={() => { void dismiss(); }}>Dismiss and resubmit</button>}
       {account?.teamId === id && account.username !== team.ownerUsername && <button onClick={() => { void leave(); }}>Leave team</button>}
       <h4>ROSTER ({roster.data?.teamPlayers.totalCount ?? '…'})</h4>

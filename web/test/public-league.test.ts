@@ -1,3 +1,4 @@
+import { apiTarget } from './auth-fixture';
 import assert from 'node:assert/strict';
 import { after, afterEach, before, mock, test } from 'node:test';
 import React, { createElement } from 'react';
@@ -52,12 +53,12 @@ const team: Team = {
 const teamIdentity = { ...team, __typename: 'TeamIdentity' };
 function mockPublicReads() {
   return mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
-    const path = new URL(String(input)).pathname;
+    const path = apiTarget(input, init).split('?', 1)[0];
     const graph = (value: Record<string, unknown>) => Response.json({ data: value });
-    if (path === '/api/team-summaries') return graph({ teamSummaries: { __typename: 'TeamSummaryPage', ...page([{ ...team, __typename: 'TeamSummary', memberCount: 1, invitationCount: 0, seasonCount: 1, viewerInvitation: null }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
-    if (path === '/api/seasons') return graph({ seasons: { __typename: 'StringPage', ...page(['S1']), summaries: [{ games: 1, players: 1 }], pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
-    if (path === '/api/leaderboard') return graph({ leaderboard: { __typename: 'AccountSummaryPage', ...page([{ ...player, __typename: 'AccountSummary', team: teamIdentity, ranking: { __typename: 'AccountRanking', ...player.ranking } }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
-    if (path === '/api/home-news') return graph({ homeNews: { __typename: 'JsonPage', ...page([]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === 'TeamSummaries') return graph({ teamSummaries: { __typename: 'TeamSummaryPage', ...page([{ ...team, __typename: 'TeamSummary', memberCount: 1, invitationCount: 0, seasonCount: 1, viewerInvitation: null }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === 'Seasons') return graph({ seasons: { __typename: 'StringPage', ...page(['S1']), summaries: [{ games: 1, players: 1 }], pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === 'Leaderboard') return graph({ leaderboard: { __typename: 'AccountSummaryPage', ...page([{ ...player, __typename: 'AccountSummary', team: teamIdentity, ranking: { __typename: 'AccountRanking', ...player.ranking } }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === 'HomeNews') return graph({ homeNews: { __typename: 'JsonPage', ...page([]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
     assert.equal(init?.method, 'GET');
     if (path === '/api/schedule') return Response.json({ ...page([{ id: 'm1', season: 'S1', week: 1, homeTeamId: 't1', awayTeamId: 't2', scheduledDate: null,
       streamUrl: '', matchType: 'league', playoffRound: null, status: 'scheduled', homeScore: null, awayScore: null, linkedMatchId: null,
@@ -81,7 +82,7 @@ test('visitors can browse every public page without standings navigation or priv
   assert.deepEqual(navigation().map(button => button.children.join('')), ['teams', 'stats', 'schedule', 'news', 'transfers', 'rules']);
   assert.match(navigation()[0]!.props.className, /active/);
   assert.match(renderedText(), /Public Team/);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/team-summaries']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => apiTarget(call.arguments[0], call.arguments[1]))), new Set(['TeamSummaries']));
 
   for (const [page, expected] of [
     ['stats', /Public Player/], ['schedule', /SCHEDULED/], ['news', /MATCHUPS/],
@@ -94,14 +95,14 @@ test('visitors can browse every public page without standings navigation or priv
   await act(async () => { navigation().find(button => button.children.join('') === 'news')!.props.onClick(); });
   await act(async () => { renderer!.root.findAllByType('button').find(button => button.children.join('') === 'ARTICLES')!.props.onClick(); });
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
-  const paths = new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test','')));
+  const paths = new Set(fetch.mock.calls.map(call => apiTarget(call.arguments[0], call.arguments[1])));
   assert.ok([...paths].some(path => path.startsWith('/api/schedule?season=S1')));
-  assert.ok(paths.has('/api/home-news'));
+  assert.ok(paths.has('HomeNews'));
   assert.ok(paths.has('/api/transfers'));
   assert.ok(paths.has('/api/rules'));
   assert.ok(paths.has('/api/articles'));
   assert.ok(!paths.has('/api/standings'));
-  assert.ok(!paths.has('/api/team-records'));
+  assert.ok(!paths.has('TeamRecords'));
 });
 
 const schedule = (account: Account | null) => createElement(ApolloProvider, { client }, createElement(ScheduleView, { account }));
@@ -114,5 +115,5 @@ test('public schedule skips team records and hides data retained after its accou
   assert.match(renderedText(), /SCHEDULED/);
   assert.doesNotMatch(renderedText(), /91W-8D-7L/);
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/seasons', '/api/schedule?season=S1']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => apiTarget(call.arguments[0], call.arguments[1]))), new Set(['Seasons', '/api/schedule?season=S1']));
 });

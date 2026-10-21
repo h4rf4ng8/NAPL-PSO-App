@@ -5,13 +5,13 @@ import { pathSegment, storedImage } from '../payload/page.js';
 
 export type TeamRecord = Team & { owner_username: string; members: string[]; pending_members: { accountId: string; username: string; status: string; respondedAt: number | null }[]; seasons: string[] };
 
-export function teamDto(row: TeamRecord) {
+export function teamDto(row: TeamRecord, privateFields = false) {
   const invitations = row.pending_members.map(({ username, status, respondedAt }) => ({ username, status, respondedAt }));
   return {
     id: row.id, name: row.name, tag: row.tag, color: row.color, description: row.description,
     ownerUsername: row.owner_username, members: row.status === 'pending' ? [...new Set([row.owner_username, ...row.members])] : row.members, totw: row.totw, totwSetAt: timestamp(row.totw_set_at),
     status: row.status, logoUrl: storedImage(row.logo_url, `/api/media/teams/${pathSegment(row.id)}/logo`, row.status === 'approved'), createdAt: timestamp(row.created_at), reviewedAt: timestamp(row.reviewed_at),
-    reviewedBy: row.reviewed_by, rejectionReason: row.rejection_reason,
+    reviewedBy: row.reviewed_by, ...(privateFields && { rejectionReason: row.rejection_reason }),
     invitations, pendingMembers: invitations.map(entry => entry.username), seasons: row.seasons,
     formation: row.formation || DEFAULT_FORMATION, lineup: object(row.lineup),
   };

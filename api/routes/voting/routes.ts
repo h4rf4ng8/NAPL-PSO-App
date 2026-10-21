@@ -56,7 +56,7 @@ export function registerVoting(app: FastifyInstance, { db }: Dependencies): void
         request.resource = { type: 'voting_period', id: period.id };
         return voteTally(db, period.id);
     });
-    app.put('/api/voting/periods/:id/votes', async (request) => {
+    app.put('/api/voting/periods/:id/votes/me', async (request) => {
         const votes = voteInput.parse(request.body);
         await actorName(db, request);
         await db.transaction(async (tx) => {

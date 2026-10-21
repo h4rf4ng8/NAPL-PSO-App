@@ -1,22 +1,26 @@
 import { Crown, Plus, User } from 'lucide-react';
 import { useState } from 'react';
 import { settings as adminApi } from './api';
-import type { Account } from '../accounts/models';
+import type { AdminPlayer } from '../accounts/models';
 import type { RoleAssignment } from './models';
 import { C } from '../../theme/theme';
-import { useResource } from '../../hooks/use-resource';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
 
 
 // Admins Manager
-export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
-  const { data, loading, error: loadError, reload } = useResource(adminApi.getAdminList, []);
-  const dynamicAdmins = loadError ? [] : data ?? [];
+export const AdminsManager = () => {
+  const rolePage = useRestPage<RoleAssignment>('/api/roles');
+  const { data, loading, error: loadError, reload } = rolePage;
+  const dynamicAdmins = loadError ? [] : data?.nodes ?? [];
   const [saving, setSaving] = useState(false);
   const disabled = !data || loading || !!loadError || saving;
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const allPlayers = playerPage.data?.nodes ?? [];
 
   // Determine who's already an admin (super or dynamic)
   const lcDynamic = dynamicAdmins.map(a => a.username.toLowerCase());
@@ -30,13 +34,14 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
     .filter(p => !search || p.username.toLowerCase().includes(search.toLowerCase()))
     .slice(0, 20);
 
-  const saveRoles = async (roles: RoleAssignment[], message: string) => {
+  const saveRoles = async (change: (roles: RoleAssignment[]) => RoleAssignment[], message: string) => {
     if (disabled) return;
     setSaving(true); setError(''); setInfo('');
     try {
-      await adminApi.setAdminList(roles);
+      // Replacement writes must include off-page assignments from a fresh complete snapshot.
+      await adminApi.setAdminList(change(await adminApi.getAdminList()));
       setPickerOpen(false); setSearch('');
-      await reload();
+      rolePage.restart();
       setInfo(message);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not update administrators.');
@@ -50,7 +55,7 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
     if (allAdminUsernames.has(username.toLowerCase())) { setError('Already an admin'); return; }
     const player = allPlayers.find(p => p.username === username);
     if (!player) return;
-    await saveRoles([...dynamicAdmins, { userId: player.id, username: player.username, role: 'admin' }], `✓ ${username} promoted to admin`);
+    await saveRoles(roles => roles.some(role=>role.userId===player.id) ? roles : [...roles, { userId: player.id, username: player.username, role: 'admin' }], `✓ ${username} promoted to admin`);
   };
 
   const demote = async (username: string) => {
@@ -61,7 +66,7 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
       return;
     }
     if (!confirm(`Remove ${username} as admin?`)) return;
-    await saveRoles(dynamicAdmins.filter(a => a.username.toLowerCase() !== lc), `✓ ${username} demoted`);
+    await saveRoles(roles => roles.filter(a => a.username.toLowerCase() !== lc), `✓ ${username} demoted`);
   };
 
   // Display list: super admins first, then dynamic admins
@@ -90,7 +95,7 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
       {/* Current admins list */}
       <div>
         <h4 className="font-display text-xl tracking-wider mb-3" style={{ color: C.brandNavy }}>
-          CURRENT ADMINS ({fullList.length})
+          CURRENT ADMINS ({data?.totalCount ?? 0})
         </h4>
         <div className="space-y-2">
           {fullList.map(({ username, isSuper }) => (
@@ -121,6 +126,7 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
         </div>
       </div>
 
+      <PageButtons {...rolePage} hasNextPage={rolePage.data?.pageInfo.hasNextPage ?? false} />
       {/* Promote new admin */}
       <div className="rounded-xl p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
         <div className="flex items-center justify-between gap-2 mb-3">
@@ -144,6 +150,9 @@ export const AdminsManager = ({ allPlayers }: { allPlayers: Account[] }) => {
 
         {pickerOpen && (
           <div>
+            {playerPage.loading && <p role="status">Loading players…</p>}
+            {playerPage.error && <p role="alert">{playerPage.error}</p>}
+            <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
             <input
               autoFocus
               type="text"

@@ -9,8 +9,9 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import { RateLimiter } from '../../plugins/limits/auth.js';
 import type { Prisma } from '../../plugins/db/client.js';
 import { string, array, object } from '../../plugins/db/records.js';
-import { accountDto, currentAccountDto, positionRequestDto } from './dto.js';
+import { accountDto, currentAccountDto, positionRequestDto, playerCard, playerSummary } from './dto.js';
 import { provisionAccount, getCurrentAccount, listAccounts, loadRankedAccounts, findAccountByUsername, requireAccount, updateAccount, listPositionRequests, hasPendingPositionRequest, createPositionRequest, lockPositionRequest, reviewPositionRequest, deletePositionRequest } from './queries.js';
+import { pathSegment, detailUrl, page, pageInput, textPage } from '../payload/page.js';
 const awardSeason = z.string().trim().min(1).max(64);
 const historicalAwardId = z.string().trim().min(1).max(160);
 export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencies): void {
@@ -19,16 +20,27 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         config: {
             public: true
         }
-    }, async (request) => listAccounts(db, isAdmin(request)));
+    }, async (request) => {
+        const filters = z.object({ season: z.string().max(160).optional(), search: z.string().max(100).optional(), position: position.optional(), teamId: z.string().max(160).optional(), pendingImage: z.literal('1').optional() }).parse(request.query);
+        if (filters.pendingImage && !isAdmin(request)) throw new HttpError(403, 'admin_required');
+        const accounts = await listAccounts(db, isAdmin(request));
+        const rows = accounts.filter(row => (!filters.search || string(row.username).toLowerCase().includes(filters.search.toLowerCase()))
+            && (!filters.position || row.position === filters.position) && (!filters.teamId || (filters.teamId === 'unassigned' ? !row.teamId : row.teamId === filters.teamId)) && (!filters.pendingImage || Boolean(row.pendingImageUrl)));
+        return page(rows.map(row => ({ ...playerSummary(row, filters.season ?? 'all'), strikersId: row.strikersId, cheater: row.cheater,
+            ...(isAdmin(request) && { pendingImageUrl: row.pendingImageUrl }) })), `accounts:${JSON.stringify(filters)}:${isAdmin(request)}`, pageInput(request));
+    });
     app.get('/api/accounts/id/:id', async (request) => {
         const id = z.uuid().parse(parameters(request).id);
         if (actor(request).id !== id && !isAdmin(request))
             throw new HttpError(403, 'forbidden');
         const row = await requireAccount(db, id);
+        request.resource = { type: 'account', id: row.id };
         const population = await loadRankedAccounts(db);
         const calculated = population.find(account => account.id === id);
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
-        return { ...accountDto(row, true), ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats };
+        return { ...playerCard(calculated, query(request).season ?? 'all'), email: row.email,
+            pendingImageUrl: accountDto(row, true).pendingImageUrl,
+            statsUrl: detailUrl(`/api/accounts/${id}/stats`, row.stats) };
     });
     app.get('/api/accounts/:username', {
         config: {
@@ -37,12 +49,17 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
     }, async (request) => {
         const row = await findAccountByUsername(db, parameters(request).username!);
         if (!row) return null;
+        request.resource = { type: 'account', id: row.id };
         const population = await loadRankedAccounts(db);
         const calculated = population.find(account => account.id === row.id);
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
-        return { ...accountDto(row), ranking: calculated.ranking, cardStats: calculated.cardStats, seasonStats: calculated.seasonStats };
+        return playerCard(calculated, query(request).season ?? 'all');
     });
-    app.get('/api/users/me', async (request) => currentAccountDto(await getCurrentAccount(db, actor(request).id), request.userRoles));
+    app.get('/api/users/me', async (request) => {
+        const me = currentAccountDto(await getCurrentAccount(db, actor(request).id), request.userRoles);
+        if (me) request.resource = { type: 'account', id: String(me.id) };
+        return me ? { ...playerCard(me, query(request).season ?? 'all'), email: me.email, pendingImageUrl: me.pendingImageUrl, roles: me.roles } : null;
+    });
     app.post('/api/users/me', async (request) => {
         const input = z.strictObject({ providerToken: z.string().min(1).max(4096).optional() }).parse(request.body === undefined ? {} : request.body);
         const identity = actor(request);
@@ -56,6 +73,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
             username = profile.username;
         }
         const row = await provisionAccount(db, identity, username);
+        request.resource = { type: 'account', id: row.id };
         const population = await loadRankedAccounts(db);
         const calculated = population.find(account => account.id === row.id);
         if (!calculated) throw new HttpError(503, 'account_stats_unavailable');
@@ -71,6 +89,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         const input = (admin ? adminAccountPatch : profilePatch).parse(request.body);
         const { row, calculated } = await db.transaction(async (tx) => {
             const existing = await requireAccount(tx, id, true);
+            request.resource = { type: 'account', id: existing.id };
             if (!admin && input.position !== undefined && (!input.strikersId || existing.strikers_id || existing.team_id || array(existing.matches).length > 0))
                 throw new HttpError(403, 'position_review_required');
             if (!admin && input.strikersId !== undefined && existing.strikers_id && input.strikersId !== existing.strikers_id)
@@ -108,6 +127,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         const assignedBy = await actorName(db, request);
         await db.transaction(async (tx) => {
             const account = await requireAccount(tx, id, true);
+            request.resource = { type: 'account', id: account.id };
             const awards = Array.isArray(account.awards) ? account.awards : [];
             const exists = awards.some(value => {
                 const award = object(value);
@@ -132,6 +152,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         z.strictObject({}).parse(request.body ?? {});
         await db.transaction(async (tx) => {
             const account = await requireAccount(tx, id, true);
+            request.resource = { type: 'account', id: account.id };
             const awards = Array.isArray(account.awards) ? account.awards : [];
             const retained = awards.filter(value => {
                 const award = object(value);
@@ -144,8 +165,16 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
     });
     app.get('/api/position-requests', async (request) => {
         const q = query(request);
-        const rows = await listPositionRequests(db, { accountId: isAdmin(request) ? undefined : actor(request).id, status: q.status });
-        return rows.map(row => positionRequestDto(row));
+        const scope = z.enum(['mine']).optional().parse(q.scope);
+        const rows = await listPositionRequests(db, { accountId: scope !== 'mine' && isAdmin(request) ? undefined : actor(request).id, status: q.status });
+        return page(rows.map(row => { const { reason: _reason, ...summary } = positionRequestDto(row); return { ...summary, reasonUrl: `/api/position-requests/${pathSegment(row.id)}/reason` }; }), `position-requests:${q.status ?? ''}:${scope ?? ''}:${actor(request).id}`, pageInput(request));
+    });
+    app.get('/api/position-requests/:id/reason', async request => {
+        const rows = await listPositionRequests(db, { accountId: isAdmin(request) ? undefined : actor(request).id });
+        const row = rows.find(value => value.id === parameters(request).id);
+        if (!row) throw new HttpError(404, 'not_found');
+        request.resource = { type: 'position_request', id: row.id };
+        return textPage(row.reason ?? '', `position-request:${row.id}`, pageInput(request).after);
     });
     app.post('/api/position-requests', async (request) => {
         const input = z.strictObject({
@@ -174,6 +203,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth }: Dependencie
         const reviewer = await actorName(db, request_);
         return db.transaction(async (tx) => {
             const request = await lockPositionRequest(tx, parameters(request_).id!);
+            request_.resource = { type: 'position_request', id: request.id };
             if (request.status !== 'pending')
                 throw new HttpError(409, 'already_reviewed');
             if (input.status === 'approved') {

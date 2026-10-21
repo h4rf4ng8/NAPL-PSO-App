@@ -1,6 +1,6 @@
 import { ChevronRight, Star } from 'lucide-react';
 import React from 'react';
-import type { News, Team } from '../api/models';
+import type { News, TeamSummary as Team } from '../api/models';
 import { C } from '../theme/theme';
 
 // ============ POSITION BREAKDOWN ============
@@ -97,7 +97,7 @@ export const ArticleCard = ({ title, body, pinned, date, author }: { title: stri
   </article>
 );
 
-export const ResultRow = ({ r, home, away }: { r: News; home: Team | undefined; away: Team | undefined }) => {
+export const ResultRow = ({ r, home, away }: { r: Pick<News, 'date' | 'homeScore' | 'awayScore'>; home: Pick<Team, 'name'> | null | undefined; away: Pick<Team, 'name'> | null | undefined }) => {
   const homeWon = (r.homeScore || 0) > (r.awayScore || 0);
   const awayWon = (r.awayScore || 0) > (r.homeScore || 0);
   return (
@@ -131,7 +131,7 @@ export const ResultRow = ({ r, home, away }: { r: News; home: Team | undefined; 
   );
 };
 
-export const TeamPill = ({ team, fallback, dimmed = false }: { team?: Team | null | undefined; fallback: string | null; dimmed?: boolean }) => {
+export const TeamPill = ({ team, fallback, dimmed = false }: { team?: { name: string; tag: string; color: string | null } | null | undefined; fallback: string | null; dimmed?: boolean }) => {
   if (!team) return (
     <div className="font-mono text-[10px] tracking-wider px-2 py-1 rounded" style={{
       background: `${C.navyLight}33`, color: `${C.cream}66`, opacity: dimmed ? 0.5 : 1,

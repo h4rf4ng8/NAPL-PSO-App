@@ -6,7 +6,7 @@ import { HttpError } from '../../plugins/auth/identity.js';
 export function listSubmissions(database: Database, submittedByAccountId?: string): Promise<Submission[]> {
   return database.query<Submission>(Prisma.sql`SELECT s.*,COALESCE(a.username,s.submitted_by) AS submitted_by,COALESCE(r.username,s.reviewed_by) AS reviewed_by
     FROM asl.submissions s LEFT JOIN asl.accounts a ON a.id=s.submitted_by_account_id LEFT JOIN asl.accounts r ON r.id=s.reviewed_by_account_id
-    ${submittedByAccountId ? Prisma.sql`WHERE s.submitted_by_account_id=${submittedByAccountId}::uuid` : Prisma.empty}`);
+    ${submittedByAccountId ? Prisma.sql`WHERE s.submitted_by_account_id=${submittedByAccountId}::uuid` : Prisma.empty} ORDER BY s.id`);
 }
 export async function getSubmission(database: Database, id: string, lock = false): Promise<Submission | null> {
   // Approval/edit/reject must serialize against the same submission row.

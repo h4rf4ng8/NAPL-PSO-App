@@ -49,10 +49,10 @@ export default function App() {
   },[ready,userId,initialized]);
   const handleLogout=async()=>{
     loggingOut.current=true;activeUser.current=null;
-    setSession(null);setAccount(null);setLoadedFor(null);setError('');
+    setSession(undefined);setAccount(null);setLoadedFor(undefined);setError('');
     try {await auth.signOut();}
     catch(error) {setError(error instanceof Error?error.message:'Could not revoke the session.');}
-    finally {loggingOut.current=false;}
+    finally {loggingOut.current=false;setSession(null);}
   };
   const handleLogin=async()=>{if(loggingOut.current)return;const result=await auth.signInWithDiscord();if(!result.ok)setError(result.reason);};
   const loading=!ready||session===undefined||loadedFor!==userId;

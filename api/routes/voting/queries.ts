@@ -1,6 +1,6 @@
 import type { z } from 'zod';
 import type { periodInput, periodPatch, voteInput } from '@napl/contracts';
-import { VOTE_FIELDS } from '@napl/contracts';
+import { VOTE_FIELDS, VOTE_POSITIONS } from '@napl/contracts';
 import type { TotwVotingPeriod } from '../../generated/prisma/client.js';
 import { Prisma, type Database } from '../../plugins/db/client.js';
 import { isCanonicalUuid } from '../../plugins/db/records.js';
@@ -15,8 +15,17 @@ const winnerPositions = new Map<string, string>(VOTE_FIELDS.flatMap(({ key, pos,
 
 type Period = TotwVotingPeriod & { eligible_players: string[]; winners: Prisma.JsonValue | null };
 
+export async function voteTally(database: Database, periodId: string) {
+  const rows = await database.query<{ position: string; username: string; votes: number }>(Prisma.sql`SELECT v.position,a.username,count(*)::int AS votes
+    FROM asl.totw_votes v JOIN asl.accounts a ON a.id=v.voted_for_account_id
+    WHERE v.period_id=${periodId}::uuid GROUP BY v.position,a.username`);
+  return { totalVotes: rows.reduce((total, row) => total + row.votes, 0), positions: Object.fromEntries(VOTE_POSITIONS.map(position => [position,
+    rows.filter(row => row.position === position).toSorted((a, b) => b.votes - a.votes || a.username.localeCompare(b.username)).slice(0, 5).map(row => [row.username, row.votes]),
+  ])) };
+}
+
 export async function listVotingPeriods(database: Database): Promise<ReturnType<typeof periodDto>[]> {
-  const periods = await database.client.totwVotingPeriod.findMany();
+  const periods = await database.client.totwVotingPeriod.findMany({ orderBy: { id: 'asc' } });
   return Promise.all(periods.map(async period => periodDto(await hydratePeriod(database, period))));
 }
 

@@ -1,7 +1,9 @@
-import { BookOpen } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { content as contentApi } from './api';
-import type { Rule } from './models';
+import type { Rule, RuleSummary } from './models';
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { request } from '../../api/http';
 import { C } from '../../theme/theme';
 import { renderRulesBody } from '../../utils/content';
 
@@ -10,78 +12,24 @@ import { renderRulesBody } from '../../utils/content';
 // each section. Sections load fresh from the DB every time this view mounts
 // so admins' edits are visible immediately.
 export const RulesView = ({ onJump: _onJump }: { onJump: (view:string) => void }) => {
-  const [sections, setSections] = useState<Rule[]>([]);
-  const [loadError, setLoadError] = useState('');
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    void (async () => { try { const rows = await contentApi.listRulesSections(); if (alive) setSections(rows); } catch (error) { if (alive) setLoadError(error instanceof Error ? error.message : 'Could not load rules.'); } finally { if (alive) setLoading(false); } })();
-    return () => { alive = false; };
-  }, []);
-
-  const scrollTo = (id: string | null | undefined) => {
-    const el = document.querySelector(`#${CSS.escape(`rule-sec-${id}`)}`);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const page = useRestPage<RuleSummary>('/api/rules');
+  const [selected, setSelected] = useState<Rule | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const open = async (section: RuleSummary) => {
+    setError(''); setLoading(true);
+    try { setSelected(await request<Rule>(section.bodyUrl)); }
+    catch (error) { setError(error instanceof Error ? error.message : 'Could not load section.'); }
+    finally { setLoading(false); }
   };
-
-  return (
-    <div>
-      <div className="mb-4 flex items-center gap-3">
-        <BookOpen size={22} style={{ color: C.brandNavy }} />
-        <h1 className="font-display text-2xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>OFFICIAL ASL RULEBOOK</h1>
-      </div>
-
-      {loadError && <p role="alert">{loadError}</p>}
-      {loading ? (
-        <div className="font-mono text-sm py-8 text-center" style={{ color: `${C.brandNavy}77` }}>Loading rules...</div>
-      ) : (sections.length === 0 ? (
-        <div className="p-6 rounded text-center font-mono text-sm" style={{ background: `${C.brandNavy}0a`, border: `1px dashed ${C.brandNavy}44`, color: `${C.brandNavy}88` }}>
-          The rulebook hasn't been published yet. Check back soon.
-        </div>
-      ) : (
-        <div className="grid lg:grid-cols-4 gap-6">
-          {/* Table of contents — sticky on desktop */}
-          <aside className="lg:col-span-1">
-            <div className="lg:sticky lg:top-4 p-3 rounded" style={{ background: `${C.brandNavy}08`, border: `1px solid ${C.brandNavy}22` }}>
-              <div className="font-heading tracking-wider text-xs mb-2" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>CONTENTS</div>
-              <ol className="space-y-1 font-mono text-[11px]">
-                {sections.map((s, i) => (
-                  <li key={s.id}>
-                    <button
-                      onClick={() => scrollTo(s.id)}
-                      className="text-left hover:underline"
-                      style={{ color: C.brandNavy }}
-                    >{i + 1}. {s.title}</button>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </aside>
-
-          {/* The rulebook itself */}
-          <main className="lg:col-span-3 space-y-6">
-            {sections.map((s, i) => (
-              <section
-                key={s.id}
-                id={`rule-sec-${s.id}`}
-                className="p-4 rounded scroll-mt-4"
-                style={{ background: C.white, border: `1px solid ${C.brandNavy}22` }}
-              >
-                <div className="flex items-baseline gap-2 mb-2 pb-2" style={{ borderBottom: `1px solid ${C.brandNavy}22` }}>
-                  <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.brandNavy}66` }}>§ {i + 1}</div>
-                  <h2 className="font-display text-xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.15em' }}>{s.title.toUpperCase()}</h2>
-                </div>
-                <div>
-                  {renderRulesBody(s.body)}
-                </div>
-              </section>
-            ))}
-          </main>
-        </div>
-      ))}
+  return <div className="space-y-4"><h1 className="font-display text-2xl">OFFICIAL ASL RULEBOOK</h1>
+    {page.loading && <p role="status">Loading contents…</p>}
+    {(page.error || error) && <p role="alert">{page.error || error}<button onClick={page.restart}>Restart contents</button></p>}
+    <div className="grid lg:grid-cols-4 gap-6"><aside><h2>CONTENTS</h2><ol>{page.data?.nodes.map(section => <li key={section.id}><button onClick={() => { void open(section); }}>{section.title}</button></li>)}</ol>
+      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} /></aside>
+      <main className="lg:col-span-3">{loading && <p role="status">Loading rule section…</p>}{selected ? <section><h2 className="font-display text-xl">{selected.title}</h2>{renderRulesBody(selected.body)}</section> : <p>Choose a section to read the rulebook.</p>}</main>
     </div>
-  );
+  </div>;
 };
 
 // ============ RULES: admin manager ============
@@ -89,28 +37,16 @@ export const RulesView = ({ onJump: _onJump }: { onJump: (view:string) => void }
 // cards (up/down arrows to reorder — no drag). Each card can expand into an
 // editor with title + body textarea. Save persists to Supabase.
 export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
-  const [sections, setSections] = useState<Rule[]>([]);
-  const [loading, setLoading] = useState(true);
+  const page = useRestPage<RuleSummary>('/api/rules');
+  const sections = page.data?.nodes ?? [];
+  const loading = page.loading;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
-  const refresh = async () => {
-    setLoading(true);
-    try {
-      setSections(await contentApi.listRulesSections());
-      setMsg('');
-      return true;
-    }
-    catch (error) {
-      setMsg(error instanceof Error ? error.message : 'Could not load rules.');
-      return false;
-    }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { refresh(); }, []);
+  const refresh = async () => { page.restart(); return true; };
 
   const startNew = () => {
     const id = `rs_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
@@ -118,10 +54,11 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
     setEditTitle('');
     setEditBody('');
   };
-  const startEdit = (s: Rule) => {
-    setEditingId(s.id);
-    setEditTitle(s.title);
-    setEditBody(s.body || '');
+  const startEdit = async (s: RuleSummary) => {
+    setBusy(true); setMsg('');
+    try { const full = await request<Rule>(s.bodyUrl); setEditingId(full.id); setEditTitle(full.title); setEditBody(full.body); }
+    catch (error) { setMsg(error instanceof Error ? error.message : 'Could not load complete section.'); }
+    finally { setBusy(false); }
   };
   const cancelEdit = () => {
     setEditingId(null);
@@ -136,7 +73,7 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
     setBusy(true);
     try {
       const existing = sections.find(s => s.id === editingId);
-      const sortOrder = existing ? existing.sortOrder : sections.length;
+      const sortOrder = existing ? existing.sortOrder : page.data?.totalCount ?? 0;
       await contentApi.saveRulesSection({ id: editingId || crypto.randomUUID(), title, body: editBody, sortOrder });
       if (await refresh()) {
         cancelEdit();
@@ -147,7 +84,7 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
     }
     setBusy(false);
   };
-  const removeSection = async (s: Rule) => {
+  const removeSection = async (s: RuleSummary) => {
     if (!confirm(`Delete "${s.title}"? This can't be undone.`)) return;
     setBusy(true);
     try {
@@ -160,27 +97,12 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
     setBusy(false);
   };
   const move = async (idx: number, dir: number) => {
-    if (busy) return;
-    const newIdx = idx + dir;
-    if (newIdx < 0 || newIdx >= sections.length) return;
-    const reordered = [...sections];
-    const previous = reordered[idx];
-    reordered[idx] = reordered[newIdx];
-    reordered[newIdx] = previous;
-    setSections(reordered); // optimistic
-    setBusy(true);
-    try {
-      await contentApi.reorderRulesSections(reordered.map(s => s.id));
-      onRefresh?.();
-    } catch (error) {
-      alert('Reorder failed: ' + (error instanceof Error ? error.message : String(error)));
-      setSections(sections);
-    } finally {
-      setBusy(false);
-    }
+    if (busy || !sections[idx]) return;
+    setBusy(true); setMsg('');
+    try { await contentApi.moveRulesSection(sections[idx]!.id, dir < 0 ? 'up' : 'down'); page.restart(); onRefresh(); }
+    catch (error) { setMsg(error instanceof Error ? error.message : 'Could not move section.'); }
+    finally { setBusy(false); }
   };
-
-  
 
   return (
     <div className="space-y-4">
@@ -197,6 +119,8 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
         style={{ background: C.goldLight, color: C.navyDeep }}
       >+ NEW SECTION</button>
 
+      {page.error && <p role="alert">{page.error}<button onClick={page.restart}>Restart sections</button></p>}
+      <PageButtons {...page} loading={page.loading || editingId !== null || busy} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
       {loading ? (
         <div className="font-mono text-sm py-6 text-center" style={{ color: `${C.cream}55` }}>Loading...</div>
       ) : (
@@ -224,14 +148,14 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
                 <div className="flex flex-col gap-1">
                   <button
                     onClick={() => move(idx, -1)}
-                    disabled={idx === 0 || editingId !== null || busy}
+                    disabled={(idx === 0 && !page.canPrevious) || editingId !== null || busy}
                     className="text-xs px-1.5 py-0.5 rounded disabled:opacity-30"
                     style={{ background: `${C.cream}11`, color: C.cream }}
                     aria-label="Move up"
                   >▲</button>
                   <button
                     onClick={() => move(idx, 1)}
-                    disabled={idx === sections.length - 1 || editingId !== null || busy}
+                    disabled={(idx === sections.length - 1 && !page.data?.pageInfo.hasNextPage) || editingId !== null || busy}
                     className="text-xs px-1.5 py-0.5 rounded disabled:opacity-30"
                     style={{ background: `${C.cream}11`, color: C.cream }}
                     aria-label="Move down"
@@ -242,7 +166,7 @@ export const RulesManager = ({ onRefresh }: { onRefresh: () => void }) => {
                     <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}66` }}>§ {idx + 1}</div>
                     <div className="font-heading tracking-wider text-sm truncate" style={{ color: C.cream }}>{s.title}</div>
                   </div>
-                  <div className="font-mono text-[10px] mt-1" style={{ color: `${C.cream}55` }}>{(s.body || '').length} chars · updated {new Date(s.updatedAt).toLocaleDateString()}</div>
+                  <div className="font-mono text-[10px] mt-1" style={{ color: `${C.cream}55` }}>Updated {new Date(s.updatedAt).toLocaleDateString()}</div>
                 </div>
                 <div className="flex gap-1">
                   <button

@@ -1,7 +1,12 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { useQuery } from '@apollo/client/react';
+import { AccountAwardsDocument } from '../../api/generated/graphql';
+import { z } from 'zod';
 import { Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
-import type { Account, PlayerAward } from '../accounts/models';
+import type { PlayerAward, AdminPlayer } from '../accounts/models';
 import { AWARD_BY_ID, AWARD_TYPES, AwardIcon } from '../../components/Icons';
 import { EmptyState } from '../../components/Display';
 import { C } from '../../theme/theme';
@@ -13,10 +18,18 @@ import { AWARD } from '@napl/contracts/accounts';
 
 
 // Awards Manager
-export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPlayers: Account[]; onRefresh: () => void; currentSeason: string }) => {
+export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => void; currentSeason: string }) => {
   const [season, setSeason] = useState(currentSeason);
   const [awardId, setAwardId] = useState<(typeof AWARD)[keyof typeof AWARD]>(AWARD.STRIKER);
-  const [winnerUsername, setWinnerUsername] = useState('');
+  const [search,setSearch] = useState('');
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const [selected,setSelected] = useState<AdminPlayer|null>(null);
+  const [after,setAfter] = useState<string|null>(null);
+  const [previous,setPrevious] = useState<(string|null)[]>([]);
+  const awardPage = useQuery(AccountAwardsDocument,{variables:{id:selected?.id ?? '',first:10,after},skip:!selected});
+  const winnerUsername = selected?.username ?? '';
+  const allPlayers = [...(selected ? [selected] : []),...(playerPage.data?.nodes ?? []).filter(player=>player.id!==selected?.id)];
+  const setWinnerUsername = (name:string) => {setSelected(allPlayers.find(player=>player.username===name) ?? null);setAfter(null);setPrevious([]);};
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
@@ -34,13 +47,14 @@ export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPla
     setError(''); setInfo('');
     if (!winnerUsername) { setError('Pick a winner'); return; }
     if (!season.trim()) { setError('Season required'); return; }
-    const player = allPlayers.find(p => p.username === winnerUsername);
+    const player = selected;
     if (!player) { setError('Player not found'); return; }
     setBusy(true);
     try {
       await accountApi.assignAward(player.id, awardId, season.trim());
       setInfo(`✓ ${award.name} ${season.trim()} assigned to ${player.username}`);
-      setWinnerUsername('');
+      setPrevious([]); setAfter(null);
+      if (!after) await awardPage.refetch();
       await onRefresh();
     } catch (error_) {
       setError('Could not assign award: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -49,12 +63,14 @@ export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPla
     }
   };
 
-  const removeAward = async (player: Account, targetAward: PlayerAward) => {
+  const removeAward = async (player: AdminPlayer, targetAward: Pick<PlayerAward,'awardId'|'season'>) => {
     if (busy || !confirm(`Remove this award from ${player.username}?`)) return;
     setError(''); setInfo(''); setBusy(true);
     try {
       await accountApi.removeAward(player.id, targetAward.awardId, targetAward.season);
       setInfo(`✓ ${AWARD_BY_ID[targetAward.awardId]?.name ?? targetAward.awardId} ${targetAward.season} removed from ${player.username}`);
+      setPrevious([]); setAfter(null);
+      if (!after) await awardPage.refetch();
       await onRefresh();
     } catch (error_) {
       setError('Could not remove award: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -63,14 +79,8 @@ export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPla
     }
   };
 
-  // List all current award holders (across all seasons)
-  const allAwards:(PlayerAward & {player:Account})[] = [];
-  allPlayers.forEach(p => {
-    (p.awards || []).forEach(aw => {
-      allAwards.push({ ...aw, player: p });
-    });
-  });
-  allAwards.sort((a, b) => (b.assignedAt || 0) - (a.assignedAt || 0));
+  const awards = z.array(z.object({awardId:z.string(),season:z.string(),assignedBy:z.string().optional()})).safeParse(awardPage.data?.accountAwards.nodes ?? []);
+  const allAwards = selected && awards.success && !awardPage.loading ? awards.data.map(award=>({...award,player:selected})) : [];
 
   return (
     <div className="space-y-5">
@@ -118,6 +128,9 @@ export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPla
           </div>
           <div>
             <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}88` }}>WINNER</label>
+            <input aria-label="Find award player" placeholder="Find player…" value={search} onChange={event=>setSearch(event.target.value)} />
+            <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
+            {playerPage.error && <p role="alert">{playerPage.error}</p>}
             <select
               value={winnerUsername}
               onChange={(e) => setWinnerUsername(e.target.value)}
@@ -157,8 +170,14 @@ export const AwardsManager = ({ allPlayers, onRefresh, currentSeason }: { allPla
       {/* CURRENT AWARDS LIST */}
       <div>
         <h4 className="font-display text-xl tracking-wider mb-3" style={{ color: C.cream }}>
-          CURRENT WINNERS ({allAwards.length})
+          {selected ? `${selected.username}'s AWARDS (${awardPage.data?.accountAwards.totalCount ?? 0})` : 'SELECT A PLAYER TO REVIEW AWARDS'}
         </h4>
+        {awardPage.error && <p role="alert">{awardPage.error.message}</p>}
+        {!awards.success && <p role="alert">Invalid award history response. Reload the selected player.</p>}
+        {awardPage.loading && <p role="status">Loading awards…</p>}
+        <PageButtons loading={awardPage.loading} canPrevious={previous.length > 0} hasNextPage={awardPage.data?.accountAwards.pageInfo.hasNextPage ?? false}
+          previous={()=>{setAfter(previous.at(-1) ?? null);setPrevious(previous.slice(0,-1));}}
+          next={()=>{setPrevious([...previous,after]);setAfter(awardPage.data?.accountAwards.pageInfo.endCursor ?? null);}} />
         {allAwards.length === 0 ? (
           <EmptyState icon={<Trophy size={40} />} text="No awards assigned yet." />
         ) : (

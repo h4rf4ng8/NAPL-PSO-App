@@ -1,3 +1,4 @@
+import { auth } from '../../auth/session';
 import { Clock, Plus, User } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { accounts as accountApi } from './api';
@@ -5,6 +6,7 @@ import type { Account } from './models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { compressImage } from '../../utils/input';
+import { MediaImage } from '../../components/MediaImage';
 
 
 // UploadImage Modal
@@ -40,9 +42,10 @@ export const UploadImageModal = ({ account, onClose, onSave }: { account: Accoun
       if (preview === null) {
         // Removing the picture entirely — this takes effect immediately
         // (removing isn't something that needs moderation)
-        const updated = await accountApi.patchAccount(account.id,{imageUrl: null, pendingImageUrl: null});
-        onSave(updated);
-      } else if (preview === account.imageUrl) {
+        await accountApi.patchAccount(account.id,{imageUrl: null, pendingImageUrl: null});
+        const updated = await auth.getCurrent();
+        if (updated) onSave(updated);
+      } else if (preview === account.imageUrl || preview === account.pendingImageUrl) {
         // No change
         onClose();
         setBusy(false);
@@ -50,8 +53,9 @@ export const UploadImageModal = ({ account, onClose, onSave }: { account: Accoun
       } else {
         // New picture — goes to pending, awaits admin approval.
         // The old imageUrl stays live until an admin approves.
-        const updated = await accountApi.patchAccount(account.id,{pendingImageUrl: preview});
-        onSave(updated);
+        await accountApi.patchAccount(account.id,{pendingImageUrl: preview});
+        const updated = await auth.getCurrent();
+        if (updated) onSave(updated);
         setSubmitted(true);
         setBusy(false);
         return;
@@ -113,7 +117,7 @@ export const UploadImageModal = ({ account, onClose, onSave }: { account: Accoun
             border: `2px solid ${C.navyLight}66`,
           }}>
             {preview ? (
-              <img src={preview} alt="preview" style={{
+              <MediaImage src={preview} alt="preview" style={{
                 width: '100%', height: '100%', objectFit: 'cover',
               }} />
             ) : (

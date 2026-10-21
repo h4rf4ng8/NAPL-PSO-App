@@ -1,0 +1,100 @@
+query LeagueOverview($season: String = "all") {
+  leagueOverview(season: $season) {
+    season
+    playerCount
+    activeTeamCount
+    me {
+      id username position teamId imageUrl pendingImageUrl country email roles
+      stats ranking { score percentile ranked gamesPlayed tier }
+      team { id name tag color ownerUsername status logoUrl totw totwSetAt }
+      season cardStats { label value }
+      totwUntil cheater strikersId steamUrl createdAt awardCount championshipCount awardPreview championshipPreview previewHasMore
+    }
+    tickerHasMore
+    tickerNews { id title type pinned createdAt }
+    activeVotingPeriod { id season closesAt status }
+  }
+}
+
+query Leaderboard($season: String = "all", $position: String, $sortBy: String = "ovr", $sortDir: String = "desc", $first: Int = 10, $after: String) {
+  leaderboard(season: $season, position: $position, sortBy: $sortBy, sortDir: $sortDir, first: $first, after: $after) {
+    nodes {
+      id username position teamId imageUrl country stats
+      ranking { score percentile ranked gamesPlayed tier }
+      team { id name tag color ownerUsername status logoUrl totw totwSetAt }
+    }
+    pageInfo { endCursor hasNextPage }
+    totalCount
+  }
+}
+
+query PlayerCard($id: ID!, $season: String = "all") {
+  accountCard(id: $id, season: $season) {
+    id username position teamId imageUrl country
+    stats ranking { score percentile ranked gamesPlayed tier }
+      team { id name tag color ownerUsername status logoUrl totw totwSetAt }
+    season cardStats { label value }
+    totwUntil cheater strikersId steamUrl createdAt awardCount championshipCount awardPreview championshipPreview previewHasMore
+  }
+}
+
+query Seasons($first: Int = 10, $after: String) {
+  seasons(first: $first, after: $after) { nodes summaries pageInfo { endCursor hasNextPage } totalCount }
+}
+
+query AccountAwards($id: ID!, $first: Int = 10, $after: String) {
+  accountAwards(id: $id, first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+
+query AccountChampionships($id: ID!, $first: Int = 10, $after: String) {
+  accountChampionships(id: $id, first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+
+query HomeSummary { homeSummary }
+query HomeNews($kind: String!, $first: Int = 10, $after: String, $upcomingOnly: Boolean = false) {
+  homeNews(kind: $kind, first: $first, after: $after, upcomingOnly: $upcomingOnly) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+query TeamSummaries($first: Int = 10, $after: String, $scope: String, $status: String, $search: String) {
+  teamSummaries(first: $first, after: $after, scope: $scope, status: $status, search: $search) {
+    nodes { id name tag color ownerUsername status logoUrl totw totwSetAt createdAt reviewedAt reviewedBy memberCount invitationCount seasonCount viewerInvitation }
+    pageInfo { endCursor hasNextPage } totalCount
+  }
+}
+query HallOfFame($season: String, $awardId: String, $first: Int = 10, $after: String) {
+  hallOfFame(season: $season, awardId: $awardId, first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+query DecoratedPlayers($first: Int = 10, $after: String) {
+  decoratedPlayers(first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+query VotingCandidates($periodId: ID!, $position: String, $first: Int = 10, $after: String) {
+  votingCandidates(periodId: $periodId, position: $position, first: $first, after: $after) {
+    nodes { id username position teamId imageUrl country stats ranking { score percentile ranked gamesPlayed tier }
+      team { id name tag color ownerUsername status logoUrl totw totwSetAt } }
+    pageInfo { endCursor hasNextPage } totalCount
+  }
+}
+
+query TeamStandings($season: String = "all", $first: Int = 10, $after: String) {
+  standings(season: $season, first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+query SeasonChampions($first: Int = 10, $after: String) {
+  seasonChampions(first: $first, after: $after) { nodes pageInfo { endCursor hasNextPage } totalCount }
+}
+query TeamPlayers($teamId: ID!, $season: String = "all", $first: Int = 10, $after: String) {
+  teamPlayers(teamId: $teamId, season: $season, first: $first, after: $after) {
+    nodes {
+      id username position teamId imageUrl country stats season
+      ranking { score percentile ranked gamesPlayed tier }
+      team { id name tag color ownerUsername status logoUrl totw totwSetAt }
+      cardStats { label value }
+      totwUntil cheater strikersId steamUrl createdAt awardCount championshipCount awardPreview championshipPreview previewHasMore
+    }
+    pageInfo { endCursor hasNextPage } totalCount
+  }
+}
+query ImportAccountMatches($strikersIds: [String!]!, $first: Int = 30, $after: String) {
+  importAccountMatches(strikersIds: $strikersIds, first: $first, after: $after) {
+    nodes { username strikersId }
+    pageInfo { endCursor hasNextPage } totalCount
+  }
+}

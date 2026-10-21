@@ -3,9 +3,10 @@ import { z } from 'zod';
 import type { Dependencies } from '../../app.js';
 import { actor } from '../../plugins/auth/identity.js';
 import { listAdmins, adminUserIds, requireAdminAccounts, replaceAdmins, appendRoleAudit } from './queries.js';
+import { page, pageInput } from '../payload/page.js';
 
 export function registerAdmin(app: FastifyInstance, { db }: Dependencies): void {
-    app.get('/api/roles', { config: { role: 'super_admin' } }, async () => listAdmins(db));
+    app.get('/api/roles', { config: { role: 'super_admin' } }, async request => page(await listAdmins(db), 'roles', pageInput(request)));
     app.put('/api/roles', { config: { role: 'super_admin' } }, async (request) => {
         const { userIds } = z.strictObject({ userIds: z.array(z.uuid()).max(100) }).parse(request.body);
         await db.transaction(async (tx) => {

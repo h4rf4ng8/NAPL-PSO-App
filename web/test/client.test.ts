@@ -1,3 +1,4 @@
+import { page } from './page-fixture';
 import assert from 'node:assert/strict';
 import { afterEach, mock, test } from 'node:test';
 import { gql } from '@apollo/client';
@@ -35,8 +36,8 @@ test('identity reset keeps a stable client, aborts old requests and ignores late
     return fetchResponse.promise;
   });
   const query = TeamRecordsDocument;
-  oldClient.cache.writeQuery({ query, data: { teamRecords: [] } });
-  assert.deepEqual(oldClient.cache.readQuery({ query }), { teamRecords: [] });
+  oldClient.cache.writeQuery({ query, data: { teamRecords: page([]) } });
+  assert.deepEqual(oldClient.cache.readQuery({ query }), { teamRecords: page([]) });
   const pending = (async () => {
     try {
       await oldClient.query({ query, fetchPolicy: 'network-only' });
@@ -53,13 +54,13 @@ test('identity reset keeps a stable client, aborts old requests and ignores late
   assert.deepEqual(oldClient.cache.extract(), {});
   assert.deepEqual(newClient.cache.extract(), {});
 
-  fetchResponse.resolve(Response.json({ data: { teamRecords: [] } }));
+  fetchResponse.resolve(Response.json({ data: { teamRecords: page([]) } }));
   await pending;
   assert.deepEqual(newClient.cache.extract(), {});
 });
 
 test('local SDK sign-out clears cached identity data without cookies or custom broadcasts', async () => {
-  client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: [] } });
+  client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: page([]) } });
   await auth.signOut();
   assert.deepEqual(client.cache.extract(), {});
 });

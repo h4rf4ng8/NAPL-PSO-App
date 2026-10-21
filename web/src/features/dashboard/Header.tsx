@@ -9,8 +9,8 @@ import { isAdmin } from '../../utils/league';
 
 interface Props {
   account: Account; season: string; setSeason: (season: string) => void;
-  allSeasons: string[]; tickerNews: News[]; view: string; setView: (view: string) => void;
-  currentVotingPeriod: VotingPeriod | null; onLogout: () => void; theme: ThemeMode; toggleTheme: () => void;
+  allSeasons: string[]; tickerNews: Pick<News, 'id' | 'title' | 'type' | 'pinned'>[]; view: string; setView: (view: string) => void;
+  currentVotingPeriod: Pick<VotingPeriod, 'id' | 'closesAt' | 'status'> | null; onLogout: () => void; theme: ThemeMode; toggleTheme: () => void;
 }
 export function Header({ account, season, setSeason, allSeasons, tickerNews, view, setView, currentVotingPeriod, onLogout, theme, toggleTheme }: Props) {
   const [moreOpen, setMoreOpen] = useState(false);
@@ -149,7 +149,7 @@ export function Header({ account, season, setSeason, allSeasons, tickerNews, vie
           <div className="asl-ticker">
             <div className="asl-ticker-track">
               {[...tickerNews, ...tickerNews].map((n, i) => (
-                <span key={i}>{n.title || n.body || 'NEWS'}</span>
+                <span key={i}>{n.title || 'NEWS'}</span>
               ))}
             </div>
           </div>

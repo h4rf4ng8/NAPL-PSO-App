@@ -20,6 +20,7 @@ afterEach(async () => {
   mock.restoreAll();
   await resetClient();
 });
+const savedPage=(value:unknown)=>({nodes:value===null?[{index:0,key:null,value:null}]:Object.entries(value as Record<string,unknown>).map(([key,value],index)=>({index,key,value})),totalCount:value===null?1:Object.keys(value as object).length,pageInfo:{endCursor:null,hasNextPage:false}});
 const previewPath = '/api/account-card-previews';
 const savedPath = '/api/settings/position_weights';
 const defaultPath = '/api/default-position-weights';
@@ -46,7 +47,7 @@ function transport(saved: () => Response | Promise<Response>, previews = () => P
 }
 
 test('saved REST weightings render unchanged without fetching defaults', async () => {
-  const calls = transport(() => Response.json({ ST: { goalsPerGame: 0.73, assistsPerGame: 0.27 } }));
+  const calls = transport(() => Response.json(savedPage({ ST: { goalsPerGame: 0.73, assistsPerGame: 0.27 } })));
   await mount();
   assert.match(text(), /73%/);
   assert.match(text(), /27%/);
@@ -61,7 +62,7 @@ test('a confirmed null saved value fetches defaults once after loading', async (
   await mount();
   assert.match(text(), /Loading weightings/);
   assert.equal(calls.includes(defaultPath), false);
-  await act(async () => { saved.resolve(Response.json(null)); });
+  await act(async () => { saved.resolve(Response.json(savedPage(null))); });
   await flush();
   assert.match(text(), /62%/);
   assert.equal(calls.filter(path => path === defaultPath).length, 1);
@@ -74,7 +75,7 @@ test('saved weightings errors suppress defaults and retry recovers saved values'
   let attempts = 0;
   const calls = transport(() => ++attempts === 1
     ? Response.json({ message: 'Weightings unavailable' }, { status: 503 })
-    : Response.json({ GK: { catchesPerGame: 0.91, cleanSheetPct: 0.09 } }));
+    : Response.json(savedPage({ GK: { catchesPerGame: 0.91, cleanSheetPct: 0.09 } })));
   await mount();
   assert.match(text(), /Weightings unavailable/);
   assert.equal(calls.includes(defaultPath), false);
@@ -88,7 +89,7 @@ test('saved weightings errors suppress defaults and retry recovers saved values'
 
 test('preview loading and error remain visible independently of saved weightings', async () => {
   const previews = Promise.withResolvers<Response>();
-  transport(() => Response.json({ ST: { goalsPerGame: 1 } }), () => previews.promise);
+  transport(() => Response.json(savedPage({ ST: { goalsPerGame: 1 } })), () => previews.promise);
   await mount();
   assert.match(text(), /Loading card previews/);
   assert.match(text(), /100%/);

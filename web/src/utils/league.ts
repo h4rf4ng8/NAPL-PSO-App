@@ -47,7 +47,7 @@ export const flagUrl = (country: string | null | undefined) => {
 // ============ CAPTAIN STAR ============
 // Small helper: returns true if the given account is the captain (owner) of
 // the given APPROVED team. Used by PlayerCard, roster views, standings, etc.
-export const isTeamCaptain = (account: Account | null | undefined, team: Team | null | undefined) =>
+export const isTeamCaptain = (account: Account | null | undefined, team: Pick<Team, 'status' | 'ownerUsername'> | null | undefined) =>
   !!(account && team && team.status === 'approved' &&
     team.ownerUsername && account.username &&
     team.ownerUsername.toLowerCase() === account.username.toLowerCase());

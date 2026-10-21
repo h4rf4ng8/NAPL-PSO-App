@@ -4,7 +4,7 @@ import React, { createElement } from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { ApolloProvider } from '@apollo/client/react';
 import { client, resetClient } from '../src/api/client';
-import { TeamRecordsDocument } from '../src/api/generated/graphql';
+import { page } from './page-fixture';
 import { PublicLeague } from '../src/features/dashboard/PublicLeague';
 import { ScheduleView } from '../src/features/matches/schedule-view';
 import type { Account } from '../src/features/accounts/models';
@@ -49,24 +49,23 @@ const team: Team = {
   formation: '2-1-2', lineup: {}, status: 'approved', logoUrl: null, createdAt: 1,
   reviewedAt: null, reviewedBy: null, rejectionReason: null,
 };
-const responses: Record<string, unknown> = {
-  '/api/accounts': [player],
-  '/api/teams': [team],
-  '/api/schedule': [{ id: 'm1', season: 'S1', week: 1, homeTeamId: 't1', awayTeamId: 't2', scheduledDate: null,
-    streamUrl: '', matchType: 'league', playoffRound: null, status: 'scheduled', homeScore: null, awayScore: null,
-    linkedMatchId: null, notes: 'Public fixture', createdAt: 1, updatedAt: 1 }],
-  '/api/news': [],
-  '/api/transfers': [],
-  '/api/rules': [{ id: 'r1', title: 'Public rules', body: 'Play fairly.', sortOrder: 0, updatedAt: 1 }],
-  '/api/articles': [],
-};
-
+const teamIdentity = { ...team, __typename: 'TeamIdentity' };
 function mockPublicReads() {
   return mock.method(globalThis, 'fetch', async (input: string | URL | Request, init?: RequestInit) => {
-    const path = String(input).replace('http://api.example.test','');
+    const path = new URL(String(input)).pathname;
+    const graph = (value: Record<string, unknown>) => Response.json({ data: value });
+    if (path === '/api/team-summaries') return graph({ teamSummaries: { __typename: 'TeamSummaryPage', ...page([{ ...team, __typename: 'TeamSummary', memberCount: 1, invitationCount: 0, seasonCount: 1, viewerInvitation: null }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === '/api/seasons') return graph({ seasons: { __typename: 'StringPage', ...page(['S1']), summaries: [{ games: 1, players: 1 }], pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === '/api/leaderboard') return graph({ leaderboard: { __typename: 'AccountSummaryPage', ...page([{ ...player, __typename: 'AccountSummary', team: teamIdentity, ranking: { __typename: 'AccountRanking', ...player.ranking } }]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
+    if (path === '/api/home-news') return graph({ homeNews: { __typename: 'JsonPage', ...page([]), pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } } });
     assert.equal(init?.method, 'GET');
-    assert.ok(Object.hasOwn(responses, path), `Unexpected public request: ${path}`);
-    return Response.json(responses[path]);
+    if (path === '/api/schedule') return Response.json({ ...page([{ id: 'm1', season: 'S1', week: 1, homeTeamId: 't1', awayTeamId: 't2', scheduledDate: null,
+      streamUrl: '', matchType: 'league', playoffRound: null, status: 'scheduled', homeScore: null, awayScore: null, linkedMatchId: null,
+      notesUrl: '/api/schedule/m1/notes', createdAt: 1, updatedAt: 1, homeTeam: team, awayTeam: null, homeRecord: { w: 91, d: 8, l: 7 }, awayRecord: null }]), weekRange: { min: 1, max: 1, count: 1 } });
+    if (path === '/api/rules') return Response.json(page([{ id: 'r1', title: 'Public rules', bodyUrl: '/api/rules/r1', sortOrder: 0, createdAt: 1, updatedAt: 1 }]));
+    if (path === '/api/rules/r1') return Response.json({ id: 'r1', title: 'Public rules', body: 'Play fairly.', sortOrder: 0, createdAt: 1, updatedAt: 1 });
+    assert.ok(['/api/transfers', '/api/articles'].includes(path), `Unexpected public request: ${path}`);
+    return Response.json(page([]));
   });
 }
 
@@ -82,11 +81,11 @@ test('visitors can browse every public page without standings navigation or priv
   assert.deepEqual(navigation().map(button => button.children.join('')), ['teams', 'stats', 'schedule', 'news', 'transfers', 'rules']);
   assert.match(navigation()[0]!.props.className, /active/);
   assert.match(renderedText(), /Public Team/);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/accounts', '/api/teams']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/team-summaries']));
 
   for (const [page, expected] of [
     ['stats', /Public Player/], ['schedule', /SCHEDULED/], ['news', /MATCHUPS/],
-    ['transfers', /TRANSFER MARKET/], ['rules', /Play fairly/], ['teams', /Public Team/],
+    ['transfers', /TRANSFER MARKET/], ['rules', /Public rules/], ['teams', /Public Team/],
   ] as const) {
     await act(async () => { navigation().find(button => button.children.join('') === page)!.props.onClick(); });
     assert.match(renderedText(), expected);
@@ -96,8 +95,8 @@ test('visitors can browse every public page without standings navigation or priv
   await act(async () => { renderer!.root.findAllByType('button').find(button => button.children.join('') === 'ARTICLES')!.props.onClick(); });
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
   const paths = new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test','')));
-  assert.ok(paths.has('/api/schedule'));
-  assert.ok(paths.has('/api/news'));
+  assert.ok([...paths].some(path => path.startsWith('/api/schedule?season=S1')));
+  assert.ok(paths.has('/api/home-news'));
   assert.ok(paths.has('/api/transfers'));
   assert.ok(paths.has('/api/rules'));
   assert.ok(paths.has('/api/articles'));
@@ -105,17 +104,15 @@ test('visitors can browse every public page without standings navigation or priv
   assert.ok(!paths.has('/api/team-records'));
 });
 
+const schedule = (account: Account | null) => createElement(ApolloProvider, { client }, createElement(ScheduleView, { account }));
+
 test('public schedule skips team records and hides data retained after its account changes', async () => {
   const fetch = mockPublicReads();
-  client.cache.writeQuery({ query: TeamRecordsDocument, data: { teamRecords: [
-    { teamId: 't1', season: 'all', w: 91, d: 8, l: 7, played: 106, gf: 200, ga: 50, gd: 150, pts: 281 },
-  ] } });
-  const schedule = (account: Account | null) => createElement(ApolloProvider, { client }, createElement(ScheduleView, { account }));
   await act(async () => { renderer = create(schedule(player)); });
   assert.match(renderedText(), /91W-8D-7L/);
   await act(async () => { renderer!.update(schedule(null)); });
   assert.match(renderedText(), /SCHEDULED/);
   assert.doesNotMatch(renderedText(), /91W-8D-7L/);
   assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
-  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/schedule', '/api/teams']));
+  assert.deepEqual(new Set(fetch.mock.calls.map(call => String(call.arguments[0]).replace('http://api.example.test',''))), new Set(['/api/seasons', '/api/schedule?season=S1']));
 });

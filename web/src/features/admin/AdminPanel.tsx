@@ -1,7 +1,11 @@
+import { useRestPage } from '../../hooks/use-rest-page';
+import { PageButtons } from '../../components/PageButtons';
+import { LazyText } from '../content/LazyText';
+import { loadTeamForEdit } from '../teams/api';
+import type { TeamSummary } from '../teams/models';
 import { BookOpen, Calendar, CheckCircle, Crown, MessageSquare, Sparkles, TrendingUp, Trophy, User, Users, XCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { teams as teamApi } from '../teams/api';
-import { accounts as accountApi } from '../accounts/api';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Team } from '../teams/models';
@@ -21,42 +25,29 @@ import { PicturesManager } from './PicturesManager';
 import { WeightingsManager } from './WeightingsManager';
 import { IntegrationsManager } from './IntegrationsManager';
 import { AdminsManager } from './AdminsManager';
-import { partitionReviewTeams } from './team-review';
 // AdminPanel
 export const AdminPanel = ({ account }: { account: Account }) => {
   const [section, setSection] = useState('teams');
-  const [teams, setTeams] = useState<Team[]>([]);
   const [loadError, setLoadError] = useState('');
-  const requestId = useRef(0);
-  const [allPlayers, setAllPlayers] = useState<Account[]>([]);
+  const [championsOpen,setChampionsOpen] = useState(false);
   const [tab, setTab] = useState('pending');
   const [currentSeason, setCurrentSeason] = useState('S1');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
-  const allTeams = teams; // alias for clarity
+  const teamPage = useRestPage<TeamSummary>(section === 'teams' ? '/api/teams?status='+tab : null);
+  const teams = teamPage.data?.nodes ?? [];
 
   const refresh = async () => {
-    const currentRequest = ++requestId.current;
-    try {
-      const [teamRows, playerRows, season] = await Promise.all([
-        teamApi.listTeams(),
-        accountApi.listAccounts(),
-        adminApi.getSeason(),
-      ]);
-      if (currentRequest !== requestId.current) return;
-      setTeams(teamRows.sort((a, b) => b.createdAt - a.createdAt));
-      setAllPlayers(playerRows);
-      setCurrentSeason(season);
-      setLoadError('');
-    } catch {
-      if (currentRequest === requestId.current) setLoadError('Could not load admin data.');
-    }
+    teamPage.restart();
+    try { setCurrentSeason(await adminApi.getSeason()); }
+    catch { setLoadError('Could not load current season.'); }
   };
   useEffect(() => {
-    void refresh();
-    return () => { requestId.current += 1; };
+    let active=true;
+    void adminApi.getSeason().then(season=>{if(active)setCurrentSeason(season);}).catch(()=>{if(active)setLoadError('Could not load current season.');});
+    return ()=>{active=false;};
   }, []);
 
-  const review = async (team: Team, status: 'approved' | 'rejected', reason = '') => {
+  const review = async (team: TeamSummary, status: 'approved' | 'rejected', reason = '') => {
     setLoadError('');
     try {
       await teamApi.reviewTeam(team.id, status, reason);
@@ -65,12 +56,12 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       setLoadError(`Could not ${status === 'approved' ? 'approve' : 'reject'} ${team.name}.`);
     }
   };
-  const approve = (team: Team) => review(team, 'approved');
-  const reject = (team: Team) => {
+  const approve = (team: TeamSummary) => review(team, 'approved');
+  const reject = (team: TeamSummary) => {
     const reason = prompt('Reason for rejection?') || '';
     return review(team, 'rejected', reason);
   };
-  const removeTeam = async (team: Team) => {
+  const removeTeam = async (team: TeamSummary) => {
     if (!confirm(`Delete ${team.name}?`)) return;
     setLoadError('');
     try {
@@ -81,8 +72,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
     }
   };
 
-  const { pending, approved, rejected } = partitionReviewTeams(teams);
-  const visible = tab === 'pending' ? pending : (tab === 'approved' ? approved : rejected);
+  const visible = teams.filter(team=>team.status===tab);
 
   
 
@@ -93,7 +83,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
         <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>ADMIN PANEL</h3>
       </div>
 
-      {loadError && <p role="alert" className="mb-3 font-mono text-xs" style={{ color: C.redLight }}>{loadError}</p>}
+      {(loadError || teamPage.error) && <p role="alert" className="mb-3 font-mono text-xs" style={{ color: C.redLight }}>{loadError || teamPage.error}</p>}
 
       {/* TOP-LEVEL ADMIN SECTION TABS */}
       <div className="flex gap-1 mb-5 p-1 rounded flex-wrap" style={{ background: `${C.navyDeep}88` }}>
@@ -129,7 +119,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       </div>
 
       {section === 'admins' && isSuperAdmin(account) && (
-        <AdminsManager allPlayers={allPlayers} />
+        <AdminsManager />
       )}
 
       {section === 'weights' && isSuperAdmin(account) && (
@@ -141,7 +131,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       )}
 
       {section === 'import' && (
-        <ImportMatchManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
+        <ImportMatchManager account={account} currentSeason={currentSeason} onRefresh={refresh} />
       )}
 
       {section === 'rules' && (
@@ -149,21 +139,21 @@ export const AdminPanel = ({ account }: { account: Account }) => {
       )}
 
       {section === 'pictures' && (
-        <PicturesManager allPlayers={allPlayers} onRefresh={refresh} />
+        <PicturesManager onRefresh={refresh} />
       )}
 
       {section === 'players' && (
-        <PlayersManager allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
+        <PlayersManager currentSeason={currentSeason} onRefresh={refresh} />
       )}
 
       {section === 'totw' && (
-        <TotwManager allPlayers={allPlayers} onRefresh={refresh} />
+        <TotwManager onRefresh={refresh} />
       )}
 
       {section === 'season' && (
         <SeasonManager
           account={account}
-          allPlayers={allPlayers}
+
           currentSeason={currentSeason}
           onRefresh={refresh}
         />
@@ -171,8 +161,9 @@ export const AdminPanel = ({ account }: { account: Account }) => {
 
       {section === 'awards' && (
         <div className="space-y-8">
-          <AwardsManager allPlayers={allPlayers} onRefresh={refresh} currentSeason={currentSeason} />
-          <SeasonChampionsManager account={account} allPlayers={allPlayers} allTeams={allTeams} currentSeason={currentSeason} onRefresh={refresh} />
+          <AwardsManager onRefresh={refresh} currentSeason={currentSeason} />
+          <button onClick={()=>setChampionsOpen(open=>!open)}>{championsOpen ? 'Close championship editor' : 'Edit championships'}</button>
+          {championsOpen && <SeasonChampionsManager account={account} currentSeason={currentSeason} onRefresh={refresh} />}
         </div>
       )}
 
@@ -180,9 +171,9 @@ export const AdminPanel = ({ account }: { account: Account }) => {
         <>
           <div className="flex gap-1 mb-4 p-1 rounded" style={{ background: `${C.navyDeep}88` }}>
             {[
-              { id: 'pending', label: `PENDING (${pending.length})`, color: C.goldLight },
-              { id: 'approved', label: `APPROVED (${approved.length})`, color: C.greenLight },
-              { id: 'rejected', label: `REJECTED (${rejected.length})`, color: C.redLight },
+              { id: 'pending', label: 'PENDING', color: C.goldLight },
+              { id: 'approved', label: 'APPROVED', color: C.greenLight },
+              { id: 'rejected', label: 'REJECTED', color: C.redLight },
             ].map(t => {
               const active = tab === t.id;
               return (
@@ -200,6 +191,8 @@ export const AdminPanel = ({ account }: { account: Account }) => {
             })}
           </div>
 
+          {teamPage.loading && <p role="status">Loading team reviews…</p>}
+          <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
           {visible.length === 0 ? (
             <EmptyState icon={<CheckCircle size={40} />} text="Nothing here." />
           ) : (
@@ -219,12 +212,10 @@ export const AdminPanel = ({ account }: { account: Account }) => {
                         }}>{t.tag}</span>
                       </div>
                       <div className="font-mono text-[10px] tracking-wider mt-1" style={{ color: `${C.cream}66` }}>
-                        BY <span style={{ color: C.cream }}>{t.ownerUsername.toUpperCase()}</span> • {new Date(t.createdAt).toLocaleString()}
+                        BY <span style={{ color: C.cream }}>{t.ownerUsername.toUpperCase()}</span> • {new Date(t.createdAt ?? 0).toLocaleString()}
                       </div>
-                      {t.description && <p className="font-body text-sm mt-2" style={{ color: `${C.cream}cc` }}>{t.description}</p>}
-                      {t.rejectionReason && (
-                        <p className="font-mono text-xs mt-1" style={{ color: C.redLight }}>REJECTION: {t.rejectionReason}</p>
-                      )}
+                      <LazyText url={`/api/teams/${encodeURIComponent(t.id)}/text/description`} label="Read team description" />
+                      {tab === 'rejected' && <LazyText url={`/api/teams/${encodeURIComponent(t.id)}/text/rejectionReason`} label="Read rejection reason" />}
                     </div>
                     <div className="flex gap-2 flex-shrink-0">
                       {tab === 'pending' && (
@@ -239,7 +230,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
                       )}
                       {tab === 'approved' && (
                         <>
-                          <button onClick={() => setEditingTeam(t)} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded" style={{
+                          <button onClick={() => { void loadTeamForEdit(t.id).then(setEditingTeam).catch(()=>setLoadError('Could not load team editor.')); }} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded" style={{
                             background: `${C.navyLight}88`, color: C.cream, border: `1px solid ${C.navyLight}`,
                           }}>EDIT</button>
                           <button onClick={() => removeTeam(t)} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded" style={{

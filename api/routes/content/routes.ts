@@ -4,13 +4,24 @@ import { articleInput, newsInput, ruleInput, scheduleInput, transferInput, id } 
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import type { Dependencies } from '../../app.js';
 import { actor, actorName } from '../../plugins/auth/identity.js';
+import { HttpError } from '../../plugins/auth/identity.js';
+import { pathSegment, page, pageInput, textPage } from '../payload/page.js';
+import { listTeams } from '../teams/queries.js';
+import { loadTeamRecords } from '../matches/records.js';
+import { isAdmin } from '../../plugins/auth/identity.js';
 import { params as parameters, query } from '../../plugins/request.js';
 import * as queries from './queries.js';
 import { newsDto, ruleDto, articleDto, scheduleDto, transferDto } from './dto.js';
 export function registerContent(app: FastifyInstance, { db, webhookUrl }: Dependencies): void {
-    app.get('/api/news', { config: { public: true } }, async () => {
+    app.get('/api/news', { config: { public: true } }, async (request) => {
         const rows = await queries.listNews(db);
-        return rows.map(row => newsDto(row));
+        return page(rows.map(row => { const { body: _body, notes: _notes, ...summary } = newsDto(row); return { ...summary, bodyUrl: `/api/news/${pathSegment(row.id)}/body`, notesUrl: `/api/news/${pathSegment(row.id)}/notes` }; }), 'news', pageInput(request));
+    });
+    app.get('/api/news/:id/:field', { config: { public: true } }, async request => {
+        const field = z.enum(['body', 'notes']).parse(parameters(request).field);
+        const row = await db.client.news.findUnique({ where: { id: parameters(request).id! } });
+        if (!row) throw new HttpError(404, 'not_found');
+        return textPage(row[field] ?? '', `news:${row.id}:${field}`, pageInput(request).after);
     });
     app.post('/api/news', { config: { role: 'admin' } }, async (request) => {
         const input = newsInput.parse(request.body);
@@ -29,7 +40,12 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
     app.get('/api/rules', { config: { public: true } }, async (request) => {
         const rows = await queries.listRules(db);
         query(request);
-        return rows.map(value => ruleDto(value));
+        return page(rows.map(value => { const { body: _body, ...summary } = ruleDto(value); return { ...summary, bodyUrl: `/api/rules/${pathSegment(value.id)}` }; }), 'rules', pageInput(request));
+    });
+    app.get('/api/rules/:id', { config: { public: true } }, async request => {
+        const row = await db.client.ruleSection.findUnique({ where: { id: parameters(request).id! } });
+        if (!row) throw new HttpError(404, 'not_found');
+        return ruleDto(row);
     });
     app.post('/api/rules', { config: { role: 'admin' } }, async (request) => {
         const input = ruleInput.parse(request.body);
@@ -47,7 +63,12 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
     app.get('/api/articles', { config: { public: true } }, async (request) => {
         const rows = await queries.listArticles(db);
         query(request);
-        return rows.map(value => articleDto(value));
+        return page(rows.map(value => { const { body: _body, excerpt: _excerpt, ...summary } = articleDto(value); return { ...summary, bodyUrl: `/api/articles/slug/${pathSegment(value.slug)}`, excerptUrl: `/api/articles/${pathSegment(value.id)}/excerpt` }; }), 'articles', pageInput(request));
+    });
+    app.get('/api/articles/:id/excerpt', { config: { public: true } }, async request => {
+        const row = await db.client.article.findUnique({ where: { id: parameters(request).id! } });
+        if (!row) throw new HttpError(404, 'not_found');
+        return textPage(row.excerpt ?? '', `article:${row.id}:excerpt`, pageInput(request).after);
     });
     app.post('/api/articles', { config: { role: 'admin' } }, async (request) => {
         const input = articleInput.parse(request.body);
@@ -65,8 +86,33 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
 
     app.get('/api/schedule', { config: { public: true } }, async (request) => {
         const { season } = query(request);
-        const rows = await queries.listSchedule(db, season);
-        return rows.map(value => scheduleDto(value));
+        const { week } = z.object({ week: z.coerce.number().int().min(1).max(10_000).optional() }).parse(request.query);
+        const [rows, teams, records] = await Promise.all([queries.listSchedule(db, season), listTeams(db, { id: request.identity?.id, admin: isAdmin(request) }), request.identity ? loadTeamRecords(db) : []]);
+        const byId = new Map(teams.map(team => [team.id, { id: team.id, name: team.name, tag: team.tag, color: team.color }]));
+        const recordById = new Map(records.filter(row => row.season === 'all').map(row => [row.teamId, { w: row.w, d: row.d, l: row.l }]));
+        const weeks = new Set(rows.map(row => row.week));
+        const result = page(rows.filter(row => !week || row.week === week).map(value => { const { notes: _notes, streamUrl, ...summary } = scheduleDto(value); return { ...summary,
+            homeTeam: byId.get(value.home_team_id) ?? null, awayTeam: byId.get(value.away_team_id) ?? null,
+            homeRecord: request.identity ? recordById.get(value.home_team_id) ?? { w: 0, d: 0, l: 0 } : null,
+            awayRecord: request.identity ? recordById.get(value.away_team_id) ?? { w: 0, d: 0, l: 0 } : null,
+            streamUrl: streamUrl ? `/api/schedule/${pathSegment(value.id)}/stream` : null,
+            notesUrl: `/api/schedule/${pathSegment(value.id)}/notes` }; }), `schedule:${season ?? ''}:${week ?? ''}:${Boolean(request.identity)}`, pageInput(request));
+        return { ...result, weekRange: { min: weeks.size > 0 ? Math.min(...weeks) : null, max: weeks.size > 0 ? Math.max(...weeks) : null, count: weeks.size } };
+    });
+    app.get('/api/schedule/:id/stream', { config: { public: true } }, async (request, reply) => {
+        const row = await db.client.scheduledMatch.findUnique({ where: { id: parameters(request).id! } });
+        if (!row?.stream_url || !/^https?:\/\//.test(row.stream_url)) throw new HttpError(404, 'not_found');
+        return reply.redirect(new URL(row.stream_url).href);
+    });
+    app.get('/api/schedule/:id/links/streamUrl', { config: { role: 'admin' } }, async request => {
+        const row = await db.client.scheduledMatch.findUnique({ where: { id: parameters(request).id! } });
+        if (!row) throw new HttpError(404, 'not_found');
+        return textPage(row.stream_url ?? '', `schedule:${row.id}:stream`, pageInput(request).after);
+    });
+    app.get('/api/schedule/:id/notes', { config: { public: true } }, async request => {
+        const row = await db.client.scheduledMatch.findUnique({ where: { id: parameters(request).id! } });
+        if (!row) throw new HttpError(404, 'not_found');
+        return textPage(row.notes ?? '', `schedule:${row.id}:notes`, pageInput(request).after);
     });
     app.post('/api/schedule', { config: { role: 'admin' } }, async (request) => {
         const input = scheduleInput.parse(request.body);
@@ -104,6 +150,24 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
         return {
             ok: true
         };
+    });
+    app.post('/api/rules/:id/move', { config: { role: 'admin' } }, async request => {
+        const { direction } = z.strictObject({ direction: z.enum(['up', 'down']) }).parse(request.body);
+        const id = parameters(request).id!;
+        await db.transaction(async tx => {
+            const rows = await tx.client.ruleSection.findMany({ select: { id: true, sort_order: true }, orderBy: [{ sort_order: 'asc' }, { id: 'asc' }] });
+            const index = rows.findIndex(row => row.id === id);
+            if (index === -1) throw new HttpError(404, 'not_found');
+            const current = rows[index]!;
+            request.resource = { type: 'rule', id: current.id };
+            const adjacent = index + (direction === 'up' ? -1 : 1);
+            if (adjacent < 0 || adjacent >= rows.length) return;
+            rows[index] = rows[adjacent]!;
+            rows[adjacent] = current;
+            const updatedAt = new Date();
+            for (const [order, row] of rows.entries()) await tx.client.ruleSection.update({ where: { id: row.id }, data: { sort_order: order, updated_at: updatedAt } });
+        });
+        return { ok: true };
     });
     app.post('/api/schedule/bulk', {
         config: {
@@ -151,7 +215,12 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl }: Depend
         config: {
             public: true
         }
-    }, async (request) => { const season = query(request).season; const rows = await queries.listTransfers(db, season); return rows.map(value => transferDto(value)); });
+    }, async (request) => {
+        const season = query(request).season;
+        const [rows, teams] = await Promise.all([queries.listTransfers(db, season), listTeams(db, { id: request.identity?.id, admin: isAdmin(request) })]);
+        const byId = new Map(teams.map(team => [team.id, { id: team.id, name: team.name, tag: team.tag, color: team.color, logoUrl: team.logoUrl }]));
+        return page(rows.map(value => ({ ...transferDto(value), fromTeam: byId.get(value.from_team_id ?? '') ?? null, toTeam: byId.get(value.to_team_id ?? '') ?? null })), `transfers:${season ?? ''}:${request.identity?.id ?? 'anonymous'}`, pageInput(request));
+    });
     app.post('/api/transfers', {
         config: {
             role: 'admin'

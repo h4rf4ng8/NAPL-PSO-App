@@ -100,7 +100,7 @@ test('administrator reads return roles and propagate authorization failures', as
   mock.method(globalThis, 'fetch', async (url, options) => {
     assert.equal(String(url).replace('http://api.example.test',''), '/api/roles');
     assert.equal(options?.method, 'GET');
-    return Response.json(roles);
+    return Response.json({nodes:roles,totalCount:roles.length,pageInfo:{endCursor:null,hasNextPage:false}});
   });
   assert.deepEqual(await settings.getAdminList(), roles);
   mock.method(globalThis, 'fetch', async () => Response.json({ error: 'super_admin_required' }, { status: 403 }));

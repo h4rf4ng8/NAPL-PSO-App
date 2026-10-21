@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createApp } from '../helper.js';
+import { collectPage, readFields } from '../responses.js';
+import { newsDto, ruleDto, articleDto, scheduleDto } from '../../routes/content/dto.js';
+import { needVotingPeriod } from '../../routes/voting/queries.js';
+import { periodDto } from '../../routes/voting/dto.js';
 import { type Database, type Row, Prisma, connectDatabase } from '../../plugins/db/client.js';
 import { accountDto } from '../../routes/accounts/dto.js';
 import { provisionAccount, syncVerifiedDiscordUsername } from '../../routes/accounts/queries.js';
@@ -9,8 +13,7 @@ import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { accountMatchPageSchema } from '@napl/contracts/accounts';
 import { inStandings } from '../../../web/src/features/teams/selectors.js';
 import type { Team } from '../../../web/src/features/teams/models.js';
-import { mapAccount } from '../../../web/src/features/accounts/api.js';
-import type { PublicAccountFieldsFragment } from '../../../web/src/api/generated/graphql.js';
+const headers = (user?: string): Record<string, string> => user ? { authorization: `Bearer ${user}` } : {};
 const alice = '11111111-1111-4111-8111-111111111111', bob = '22222222-2222-4222-8222-222222222222', admin = '33333333-3333-4333-8333-333333333333', newUser = '44444444-4444-4444-8444-444444444444';
 const verify = async (token: string) => {
     if (![alice, bob, admin, newUser].includes(token))
@@ -93,10 +96,52 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             payload
         })
     });
-    const ok = async (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, user?: string, payload?: object) => {
+    const contentSnapshot = async (resource: string, id: string): Promise<Row> => {
+        if (resource === 'news') return newsDto(await database.client.news.findUniqueOrThrow({ where: { id } }));
+        if (resource === 'rules') return ruleDto(await database.client.ruleSection.findUniqueOrThrow({ where: { id } }));
+        if (resource === 'articles') {
+            const row = await database.client.article.findUniqueOrThrow({ where: { id } });
+            return { ...articleDto(row), coverImageUrl: row.cover_image_url };
+        }
+        return scheduleDto(await database.client.scheduledMatch.findUniqueOrThrow({ where: { id } }));
+    };
+    // Writes acknowledge effects; these business assertions inspect the complete changed record.
+    // The separate response-budget suite checks the public page/detail transport contracts.
+    const ok = async (method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE', url: string, user?: string, payload?: object): Promise<Row> => {
         const response = await call(method, url, user, payload);
         assert.equal(response.statusCode, 200, `${method} ${url}: ${response.body}`);
-        return response.json<Record<string, unknown>>();
+        const result = response.json<Row>();
+        const path = new URL(url, 'http://localhost').pathname;
+        const resource = path.split('/', 3)[2]!;
+        if (method !== 'GET') {
+            if (resource === 'users' && typeof result.id === 'string') return (await call('GET', '/api/users/me', user)).json<Row>();
+            if (['news', 'rules', 'articles', 'schedule'].includes(resource) && typeof result.id === 'string') return contentSnapshot(resource, result.id);
+            if (resource === 'teams' && typeof result.id === 'string' && !path.endsWith('/membership')) return ok('GET', `/api/teams/${encodeURIComponent(result.id)}`, user);
+            return path === '/api/voting/periods' && typeof result.id === 'string' ? periodDto(await needVotingPeriod(database, result.id)) : result;
+        }
+        if (resource === 'settings' && !path.endsWith('/current_season')) return readFields(app, url, headers(user));
+        if (path.startsWith('/api/accounts/') && typeof result.id === 'string') {
+            const history = async (collection: string) => {
+                const descriptors = await collectPage<{ detailUrl: string }>(app, `/api/accounts/${String(result.id)}/history/${collection}`, headers(user));
+                const records: Row[] = [];
+                for (const descriptor of descriptors) records.push(await readFields(app, descriptor.detailUrl, headers(user)));
+                return records;
+            };
+            return { ...result, matches: await history('matches'), championships: await history('championships') };
+        }
+        if (resource === 'teams' && typeof result.id === 'string') {
+            const base = `/api/teams/${encodeURIComponent(result.id)}`;
+            return { ...result, members: await collectPage(app, `${base}/members`, headers(user)),
+                seasons: await collectPage(app, `${base}/seasons`, headers(user)),
+                lineup: await readFields(app, String(result.lineupUrl), headers(user)) };
+        }
+        if (['news', 'rules', 'articles', 'schedule'].includes(resource) && !path.startsWith('/api/articles/slug/')) {
+            const metadata = await collectPage<{ id: string }>(app, url, headers(user));
+            const records: Row[] = [];
+            for (const row of metadata) records.push(await contentSnapshot(resource, row.id));
+            return records as unknown as Row;
+        }
+        return path.startsWith('/api/articles/slug/') && result.id ? contentSnapshot('articles', String(result.id)) : result;
     };
     try {
         const rows = await database.query(Prisma.sql `SELECT rolsuper,rolbypassrls FROM pg_roles WHERE rolname=current_user`);
@@ -128,19 +173,20 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             const otherSeasonMatch = { ...match, id: 'legacy_match_other_season', season: 'S1', date: 3, strikersMatchId: 125 };
             const championship = { season: 'S0', placement: '1st', teamId: 'legacy_team', awardedAt: 1, historicalField: 'kept' };
             await ok('PATCH', `/api/accounts/${bob}`, admin, { matches: [match, secondMatch, otherSeasonMatch], championships: [championship] });
-            const response = await call('POST', '/api/standings', alice, { variables: {} });
-            const result = response.json<{ errors?: unknown; data: { accounts: PublicAccountFieldsFragment[] } }>();
+            const response = await call('POST', '/api/player-card', alice, { variables: { id: bob, season: 'S0' } });
+            const result = response.json<{ errors?: unknown; data: { accountCard: { stats: { games: number } } } }>();
             assert.equal(result.errors, undefined);
-            const decoded = mapAccount(result.data.accounts.find(account => account.id === bob)!);
-            assert.deepEqual(decoded.matches, []);
-            assert.equal(decoded.seasonStats?.S0?.games, 2);
-            assert.equal(decoded.seasonStats?.S1?.games, 1);
-            assert.deepEqual(decoded.championships, [championship]);
+            assert.equal(result.data.accountCard.stats.games, 2);
+            const nextSeason = await call('POST', '/api/player-card', alice, { variables: { id: bob, season: 'S1' } });
+            assert.equal(nextSeason.json().data.accountCard.stats.games, 1);
+            const rawChampionships = await collectPage<{ detailUrl: string }>(app, `/api/accounts/${bob}/history/championships`);
+            assert.deepEqual(await readFields(app, rawChampionships[0]!.detailUrl), championship);
             const firstResponse = await call('POST', '/api/account-matches', undefined, { variables: { id: bob, first: 1, season: "S0" } });
             assert.equal(firstResponse.statusCode, 200, firstResponse.body);
             const firstPage = accountMatchPageSchema.parse(firstResponse.json<{ data: { accountMatches: unknown } }>().data.accountMatches);
-            assert.equal(firstPage.nodes[0]?.strikersMatchId, '123');
-            assert.equal(firstPage.nodes[0]?.historicalField, 'kept');
+            const rawMatch = await readFields(app, String(firstPage.nodes[0]?.detailUrl));
+            assert.equal(rawMatch.strikersMatchId, '123');
+            assert.equal(rawMatch.historicalField, 'kept');
             assert.equal(firstPage.pageInfo.hasNextPage, true);
             assert.ok(firstPage.pageInfo.endCursor);
             const secondResponse = await call('POST', '/api/account-matches', undefined, {
@@ -163,15 +209,15 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 assert.equal(saved.title, '');
                 assert.equal(saved.body, '');
                 await database.execute(Prisma.sql `UPDATE asl.news SET author=NULL, notes=NULL WHERE id='nullable_news'`);
-                const news = (await call('GET', '/api/news')).json<Row[]>().find(row => row.id === 'nullable_news');
+                const news = (await collectPage<Row>(app, '/api/news')).find(row => row.id === 'nullable_news');
                 assert.equal(news?.author, '');
-                const response = await call('POST', '/api/dashboard', alice, { variables: {} });
-                const result = response.json<{ errors?: unknown; data: { news: Row[]; me: Row } }>();
+                const response = await call('POST', '/api/home-news', alice, { variables: { kind: 'announcement' } });
+                const result = response.json<{ errors?: unknown; data: { homeNews: { nodes: Row[] } } }>();
                 assert.equal(result.errors, undefined, response.body);
-                assert.equal(result.data.me.id, alice);
-                const projected = result.data.news.find(row => row.id === 'nullable_news');
+                assert.equal((await ok('GET', '/api/users/me', alice)).id, alice);
+                const projected = result.data.homeNews.nodes.find(row => row.id === 'nullable_news');
                 assert.equal(projected?.title, '');
-                assert.equal(projected?.body, '');
+                assert.equal((await collectPage<string>(app, String(projected?.bodyUrl))).join(''), '');
                 assert.equal(projected?.author, '');
             }
         });
@@ -204,7 +250,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
         assert.match(blockedTeamUpdate.json<{ message: string }>().message, /team name or tag/i);
         assert.equal((await ok('GET', '/api/teams/home')).name, 'Home Team');
         await t.test('new teams participate in current-season standings and admin exclusions persist', async () => {
-            const readTeam = async () => (await call('GET', '/api/teams/home', alice)).json<Team>();
+            const readTeam = async () => await ok('GET', '/api/teams/home', alice) as unknown as Team;
             assert.equal(inStandings(await readTeam(), 'S1'), true);
             assert.equal((await call('PATCH', '/api/teams/home', alice, { seasons: ['S1'] })).statusCode, 403);
             await ok('PATCH', '/api/teams/home', admin, { seasons: ['S1'] });
@@ -254,14 +300,14 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 if (saved.createdAt !== undefined) assert.equal(patched.createdAt, saved.createdAt);
                 if (fixture.path !== 'news') assert.ok(Number(patched.updatedAt) >= Number(saved.updatedAt));
                 if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(patched.author, 'Original writer');
-                const listed = (await call('GET', url)).json<Row[]>();
+                const listed = await ok('GET', url) as unknown as Row[];
                 assert.deepEqual(listed.find(row => row.id === fixture.input.id), patched);
                 if (fixture.path === 'articles') assert.deepEqual(await ok('GET', '/api/articles/slug/content-article'), patched);
                 const replaced = await ok('POST', url, admin, fixture.input);
                 if (fixture.path === 'news' || fixture.path === 'articles') assert.equal(replaced.author, 'Admin');
-                assert.equal((await call('GET', url)).json<Row[]>().filter(row => row.id === fixture.input.id).length, 1);
+                assert.equal((await collectPage<Row>(app, url)).filter(row => row.id === fixture.input.id).length, 1);
                 assert.deepEqual(await ok('DELETE', itemUrl, admin), { ok: true });
-                assert.equal((await call('GET', url)).json<Row[]>().some(row => row.id === fixture.input.id), false);
+                assert.equal((await collectPage<Row>(app, url)).some(row => row.id === fixture.input.id), false);
                 assert.equal((await call('PATCH', itemUrl, admin, fixture.patch)).statusCode, 404);
             }
         });
@@ -273,7 +319,7 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
                 { ...fixture, id: 'schedule_original', season },
                 { ...fixture, id: 'schedule_other', season: 'Untouched season' }
             ] });
-            const readSeason = async (name: string) => (await call('GET', `/api/schedule?season=${encodeURIComponent(name)}`)).json<Row[]>();
+            const readSeason = async (name: string) => await ok('GET', `/api/schedule?season=${encodeURIComponent(name)}`) as unknown as Row[];
             const original = await readSeason(season);
             const other = await readSeason('Untouched season');
             const replacement = [{ ...fixture, id: 'schedule_replacement' }];
@@ -286,7 +332,8 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             assert.equal((await call('PUT', '/api/schedule/season/%20', admin, { matches: replacement })).statusCode, 400);
             const response = await call('PUT', url, admin, { matches: replacement });
             assert.equal(response.statusCode, 200, response.body);
-            const saved = response.json<Row[]>();
+            assert.equal(response.json().ok, true);
+            const saved = await readSeason(season);
             assert.equal(saved[0]?.season, season);
             assert.equal(saved[0]?.id, 'schedule_replacement');
             assert.deepEqual(await readSeason(season), saved);
@@ -309,22 +356,21 @@ test('real PostgreSQL authorization, atomic commands and cutover', {
             const responses = await Promise.all(versions.map(matches => call('PUT', url, admin, { matches })));
             assert.ok(responses.some(response => response.statusCode === 200));
             assert.ok(responses.every(response => [200, 409].includes(response.statusCode)), responses.map(response => response.body).join('\n'));
-            const saved = (await call('GET', `/api/schedule?season=${encodeURIComponent(season)}`)).json<Row[]>();
+            const saved = await collectPage<Row>(app, `/api/schedule?season=${encodeURIComponent(season)}`);
             const savedIds = saved.map(row => String(row.id)).toSorted((a, b) => a.localeCompare(b));
             assert.equal(saved.length, 20);
             assert.ok(versions.some((matches, index) => responses[index]?.statusCode === 200 && JSON.stringify(matches.map(match => match.id).toSorted((a, b) => a.localeCompare(b))) === JSON.stringify(savedIds)), JSON.stringify(savedIds));
         });
-        const publicLeague = await call('POST', '/api/standings', alice, { variables: {} });
+        const publicLeague = await call('POST', '/api/leaderboard', alice, { variables: {} });
         assert.equal(publicLeague.statusCode, 200, publicLeague.body);
-        const publicData = publicLeague.json<{ data: { accounts: Array<Record<string, unknown>>; teams: Array<Record<string, unknown>> } }>().data;
-        assert.ok(publicData.accounts.some(account => account.username === 'Alice'));
-        assert.equal(publicData.accounts.find(account => account.username === 'Alice')?.email, undefined);
-        assert.deepEqual(publicData.teams.map(team => String(team.name)).toSorted((a, b) => a.localeCompare(b)), ['Away Team', 'Home Team']);
-        const memberLeague = await call('POST', '/api/dashboard', alice, {
-            variables: {},
-        });
+        const publicData = publicLeague.json<{ data: { leaderboard: { nodes: Row[] } } }>().data;
+        assert.ok(publicData.leaderboard.nodes.some(account => account.username === 'Alice'));
+        assert.equal(publicData.leaderboard.nodes.find(account => account.username === 'Alice')?.email, undefined);
+        const teams = await collectPage<{ name: string }>(app, '/api/teams');
+        assert.deepEqual(teams.map(team => team.name).toSorted((a, b) => a.localeCompare(b)), ['Away Team', 'Home Team']);
+        const memberLeague = await call('POST', '/api/league-overview', alice, { variables: {} });
         assert.equal(memberLeague.statusCode, 200, memberLeague.body);
-        const memberData = memberLeague.json<{ data: { me: { email: string }; admins?: unknown } }>().data;
+        const memberData = memberLeague.json<{ data: { leagueOverview: { me: { email: string }; admins?: unknown } } }>().data.leagueOverview;
         assert.equal(memberData.me.email, 'alice@private.test');
         assert.equal('weightings' in memberData, false);
         assert.equal(memberData.admins, undefined);

@@ -7,6 +7,7 @@ import { HttpError } from '../../plugins/auth/identity.js';
 import type { Database, Prisma } from '../../plugins/db/client.js';
 import { string, object } from '../../plugins/db/records.js';
 import { getSetting, settingKey, readSetting, saveSetting, championshipTeam, lockChampionshipAccounts, saveChampionships } from './queries.js';
+import { fieldPage, fieldValue } from '../payload/details.js';
 
 const championsInput = z.record(z.string().min(1).max(160), z.strictObject({
     winnerTeamId: id.nullable(), runnerUpTeamId: id.nullable(), setAt: z.number()
@@ -45,7 +46,13 @@ async function setChampions(database: Database, next: z.infer<typeof championsIn
 
 export function registerSettings(app: FastifyInstance, { db }: Dependencies): void {
     app.get('/api/settings/:key', { config: { public: true } }, async (request) => {
-        return getSetting(db, settingKey.parse(parameters(request).key));
+        const key = settingKey.parse(parameters(request).key);
+        const value = await getSetting(db, key);
+        return key === 'current_season' ? value : fieldPage(value, `/api/settings/${key}`, request);
+    });
+    app.get('/api/settings/:key/fields/:field', { config: { public: true } }, async request => {
+        const key = settingKey.parse(parameters(request).key);
+        return fieldValue(await getSetting(db, key), parameters(request).field!, `setting:${key}`, request);
     });
     app.put('/api/settings/:key', { config: { role: 'admin' } }, async (request) => {
         const key = settingKey.parse(parameters(request).key);

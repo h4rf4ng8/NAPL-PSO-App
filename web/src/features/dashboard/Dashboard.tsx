@@ -1,4 +1,7 @@
+import { mergeSeasonPages } from './season-pages';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { SelectedPlayerCard } from '../accounts/SelectedPlayerCard';
+import type { PlayerSelection } from '../accounts/StatsView';
 import type { Account } from '../accounts/models';
 import { ShareableCardModal } from '../../components/ShareableCardModal';
 import { TierPreview } from './TierPreview';
@@ -12,33 +15,33 @@ import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
 import { ScheduleView, StandingsView } from '../matches';
 import { TeamsView, TransfersView } from '../teams';
 import { VotingTab } from '../voting';
-import { mapMemberLeague } from './api';
+import { mapCurrentCard } from '../accounts/api';
 import { useQuery } from '@apollo/client/react';
-import { MemberLeagueDataDocument } from '../../api/generated/graphql';
+import { LeagueOverviewDocument, SeasonsDocument } from '../../api/generated/graphql';
 import { Header } from './Header';
 import { MatchLog } from './MatchLog';
 import { MyCard, type CardAction } from './MyCard';
-import { activePeriod, collectSeasons } from './selectors';
 import { useView } from './use-view';
 
 export function Dashboard({ account, onLogout, onUpdate }: { account: Account; onLogout: () => void; onUpdate: (account: Account) => void }) {
   const [view, setView] = useView();
   const [modal, setModal] = useState<CardAction | null>(null);
-  const [selectedPlayer, setSelectedPlayer] = useState<Account | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<PlayerSelection | null>(null);
+  const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
-  const { data: result, loading, error, refetch } = useQuery(MemberLeagueDataDocument);
-  const data = useMemo(() => result ? mapMemberLeague(result) : undefined, [result]);
+  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season } });
+  const data = useMemo(() => result?.leagueOverview.me ? { me: mapCurrentCard(result.leagueOverview.me), currentSeason: result.leagueOverview.season, tickerNews: result.leagueOverview.tickerNews, period: result.leagueOverview.activeVotingPeriod } : undefined, [result]);
+  const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const updateRef = useRef(onUpdate);
   updateRef.current = onUpdate;
   useEffect(() => { if (data?.me.id === account.id) updateRef.current(data.me); }, [data, account.id]);
 
-  const players = data?.players ?? [];
-  const teams = data?.teams ?? [];
+  const teams = data?.me._team ? [data.me._team] : [];
   const currentSeason = data?.currentSeason ?? 'S1';
-  const allSeasons = useMemo(() => collectSeasons(players, currentSeason), [players, currentSeason]);
+  const allSeasons = seasonData?.seasons.nodes ?? [currentSeason];
   const myTeam = teams.find(team => team.id === account.teamId && team.status === 'approved');
-  const period = activePeriod(data?.periods ?? []);
+  const period = data?.period ?? null;
   const cardAccount = { ...(data?.me ?? account), stats: getStatsForSeason(data?.me ?? account, season), _cardSeason: season };
   const closeModal = () => setModal(null);
   const savedAccount = (updated: Account) => {
@@ -56,28 +59,30 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
       <Header account={account} season={season} setSeason={setSeason}
         allSeasons={allSeasons} tickerNews={data?.tickerNews ?? []} view={view} setView={setView}
         currentVotingPeriod={period} onLogout={onLogout} theme={theme} toggleTheme={toggleTheme} />
+{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
+      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
       <main className="relative max-w-6xl mx-auto px-4 py-6 fade-in">
         {loading && !data && <p role="status">Loading league…</p>}
         {error && <p role="alert">{error.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
-        {data && view === 'home' && <HomeView account={data.me} allPlayers={players} allTeams={teams} news={data.news} currentSeason={currentSeason} onJump={setView} onUpdate={savedAccount} />}
+        {view === 'home' && <HomeView account={data?.me ?? account} allTeams={teams} currentSeason={data?.currentSeason} onJump={setView} onUpdate={savedAccount} />}
         {data && view === 'me' && <MyCard account={data.me} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} onEdit={setModal} />}
         {view === 'matches' && <MatchLog account={account} season={season} />}
         {data && view === 'teams' && <TeamsView account={data.me} onUpdate={savedAccount} currentSeason={currentSeason} />}
-        {data && view === 'leaderboard' && <StatsView allPlayers={players} allTeams={teams} onPlayerClick={setSelectedPlayer} />}
-        {view === 'hof' && <HallOfFameView allPlayers={players} allTeams={teams} onPlayerClick={setSelectedPlayer} />}
+        {data && view === 'leaderboard' && <StatsView allTeams={teams} onPlayerClick={setSelectedPlayer} />}
+        {view === 'hof' && <HallOfFameView allTeams={teams} onPlayerClick={setSelectedPlayer} />}
         {view === 'tiers' && <TierPreview />}
         {view === 'standings' && <StandingsView />}
         {view === 'schedule' && <ScheduleView account={account} />}
         {view === 'transfers' && <TransfersView account={account} />}
         {view === 'rules' && <RulesView onJump={setView} />}
         {view === 'news' && <NewsHub account={account} allTeams={teams} />}
-        {data && view === 'vote' && (period ? <VotingTab account={data.me} period={period} allPlayers={players} /> : <p>No voting period is open.</p>)}
+        {data && view === 'vote' && (period ? <VotingTab account={data.me} period={period} /> : <p>No voting period is open.</p>)}
         {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} /> : <p role="alert">Administrator access is required.</p>)}
       </main>
       {modal === 'pos' && <EditPositionModal account={account} onClose={closeModal} />}
       {modal === 'image' && <UploadImageModal account={account} onClose={closeModal} onSave={savedAccount} />}
       {data && modal === 'share' && <ShareableCardModal account={cardAccount} team={myTeam} onClose={closeModal} />}
-      {selectedPlayer && <ShareableCardModal account={selectedPlayer} team={teams.find(team => team.id === selectedPlayer.teamId)} onClose={() => setSelectedPlayer(null)} />}
+      {selectedPlayer && <SelectedPlayerCard selection={selectedPlayer} teams={teams} onClose={() => setSelectedPlayer(null)} />}
     </div>
   );
 }

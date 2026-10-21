@@ -1,17 +1,19 @@
+import { mergeSeasonPages } from '../dashboard/season-pages';
 import { BarChart3 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { useQuery } from '@apollo/client/react';
+import { LeaderboardDocument, SeasonsDocument } from '../../api/generated/graphql';
+import { accountStatsSchema } from '@napl/contracts/accounts';
 
-import type { Account } from './models';
-import type { Team } from '../teams/models';
+export interface PlayerSelection { id: string; season?: string; }
+import type { TeamSummary as Team } from '../teams/models';
 import { CaptainStar } from '../../components/Icons';
 
 import { C } from '../../theme/theme';
 import { numericRowValue } from '../../utils/input';
-import { isTeamCaptain } from '../../utils/league';
-import { getStatsForSeason } from '../../utils/rankings';
 import { POSITIONS, POS } from '@napl/contracts/league';
 // Stats View
-export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { allPlayers?: Account[]; allTeams?: Team[]; onPlayerClick?: (account:Account) => void }) => {
+export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[]; onPlayerClick?: (account:PlayerSelection) => void }) => {
   // Default sort: OVR descending (same as the old leaderboard default)
   const [sortBy, setSortBy] = useState('ovr');
   const [sortDir, setSortDir] = useState('desc');
@@ -20,66 +22,27 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
   // individual seasons (like 'S1') aggregate only that season's matches.
   const [seasonFilter, setSeasonFilter] = useState('all');
 
-  const teamByUsername = (u: string) => allTeams.find(t => (t.members || []).some(m => m.toLowerCase() === u.toLowerCase()));
-
-  // Build the list of seasons present in any player's match history.
-  // Always includes 'all' at the top of the dropdown.
-  const seasons = useMemo(() => {
-    const set = new Set<string>();
-    allPlayers.forEach(p => {
-      if (p.seasonStats) Object.keys(p.seasonStats).forEach(s => { if (s !== 'all') set.add(s); });
-      else (p.matches || []).forEach(m => set.add(m.season || 'S1'));
-    });
-    return [...set].sort((a,b)=>b.localeCompare(a));
-  }, [allPlayers]);
-
-  // Build rows — one per player, with every stat flattened for sorting.
-  // getStatsForSeason() handles the aggregation: 'all' returns the stored
-  // all-time totals; a specific season sums only that season's matches.
-  const rows = useMemo(() => {
-    return allPlayers
-      .filter(p => posFilter === 'ALL' || p.position === posFilter)
-      .map(p => {
-        const s = getStatsForSeason(p, seasonFilter);
-        const g = s.goals || 0;
-        const a = s.assists || 0;
-        // OVR always comes from the player's all-time percentile ranking so
-        // the STATS table matches the OVR shown on each player's card.
-        // (Per-season "form" OVRs would need their own ranking pool — not
-        // worth the complexity for now; the season filter still filters
-        // every other stat column, just not the OVR itself.)
-        const ovr = p.ranking.score;
-        return {
-          player: p,
-          team: teamByUsername(p.username),
-          ovr,
-          gp: s.games || 0,
-          g, a,
-          pts: g + a,
-          motm: s.motm || 0,
-          tkl: s.tackles || 0,
-          pass: s.passes || 0,
-          cs: s.cleanSheets || 0,
-          dfl: s.deflects || 0,
-          catches: s.catches || 0,
-          w: s.wins || 0,
-          d: s.draws || 0,
-          l: s.losses || 0,
-          _seasonStats: s, // passed through if player card is opened
-        };
-      });
-  }, [allPlayers, allTeams, posFilter, seasonFilter]);
-
-  const sorted = useMemo(() => {
-    const sorted = [...rows].sort((x, y) => {
-      const a = numericRowValue(x,sortBy);
-      const b = numericRowValue(y,sortBy);
-      return sortDir === 'asc' ? a - b : b - a;
-    });
-    return sorted;
-  }, [rows, sortBy, sortDir]);
+  const [seasonPageError, setSeasonPageError] = useState('');
+  const [after, setAfter] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<{ cursor: string | null; offset: number }[]>([]);
+  const [offset, setOffset] = useState(0);
+  const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
+  const seasons = seasonData?.seasons.nodes ?? [];
+  const { data, loading, error, refetch } = useQuery(LeaderboardDocument, { variables: {
+    season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
+    sortBy, sortDir, after,
+  } });
+  const sorted = useMemo(() => (data?.leaderboard.nodes ?? []).map(player => {
+    const s = accountStatsSchema.parse(player.stats);
+    return { player, team: player.team ?? allTeams.find(team => team.id === player.teamId),
+      ovr: player.ranking.score, gp: s.games, g: s.goals, a: s.assists,
+      pts: s.goals + s.assists, motm: s.motm, tkl: s.tackles, pass: s.passes,
+      cs: s.cleanSheets, dfl: s.deflects, catches: s.catches, w: s.wins, d: s.draws, l: s.losses };
+  }), [data, allTeams]);
+  const resetPage = () => { setAfter(null); setPrevious([]); setOffset(0); };
 
   const toggleSort = (col: string) => {
+    resetPage();
     if (sortBy === col) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
@@ -137,7 +100,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
           {/* Season chips — ALL TIME + each season that has data */}
           <div className="flex gap-1 rounded p-0.5 flex-wrap" style={{ background: `${C.navyLight}33` }}>
             <button
-              onClick={() => setSeasonFilter('all')}
+              onClick={() => { setSeasonFilter('all'); resetPage(); }}
               className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
               style={seasonFilter === 'all'
                 ? { background: C.goldLight, color: C.brandNavyDeep }
@@ -147,7 +110,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
             {seasons.map(s => (
               <button
                 key={s}
-                onClick={() => setSeasonFilter(s)}
+                onClick={() => { setSeasonFilter(s); resetPage(); }}
                 className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
                 style={seasonFilter === s
                   ? { background: C.goldLight, color: C.brandNavyDeep }
@@ -161,7 +124,7 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
             {['ALL', ...POSITIONS].map(p => (
               <button
                 key={p}
-                onClick={() => setPosFilter(p)}
+                onClick={() => { setPosFilter(p); resetPage(); }}
                 className="px-2.5 py-1 font-mono text-xs tracking-widest rounded transition-colors"
                 style={posFilter === p
                   ? { background: C.gold, color: C.brandNavyDeep }
@@ -177,6 +140,10 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
         Click any column header to sort. Click again to reverse.
       </div>
 
+      {loading && <p role="status">Loading players…</p>}
+      {error && <p role="alert">{error.message} <button onClick={() => { resetPage(); void refetch({ after: null }).catch(() => {}); }}>Retry</button></p>}
+{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
+      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
       {/* Scrollable table — scrolls horizontally on narrow screens so no column
           gets squished. Sticky player column makes scrolling easier to follow. */}
       <div className="rounded-lg overflow-x-auto" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33` }}>
@@ -206,17 +173,17 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
             {sorted.map((row, i) => (
               <tr
                 key={row.player.username}
-                onClick={() => onPlayerClick?.({ ...row.player, stats: row._seasonStats, _cardSeason: seasonFilter, _team: row.team })}
+                onClick={() => onPlayerClick?.({ id: row.player.id, season: seasonFilter })}
                 className="cursor-pointer transition-colors hover:opacity-90"
                 style={{
                   background: i % 2 === 0 ? `${C.navyDeep}44` : 'transparent',
                   borderBottom: `1px solid ${C.navyLight}22`,
                 }}
               >
-                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{i + 1}</td>
+                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{offset + i + 1}</td>
                 <td className="px-3 py-2 font-heading tracking-wider text-sm" style={{ color: C.cream }}>
                   <div className="flex items-center gap-1.5">
-                    {row.team && isTeamCaptain(row.player, row.team) && <CaptainStar size={11} />}
+                    {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <CaptainStar size={11} />}
                     {row.player.username}
                   </div>
                 </td>
@@ -245,6 +212,10 @@ export const StatsView = ({ allPlayers = [], allTeams = [], onPlayerClick }: { a
             )}
           </tbody>
         </table>
+      </div>
+      <div className="flex gap-3 mt-3">
+        <button disabled={loading || previous.length === 0} onClick={() => { const prior = previous.at(-1); setAfter(prior?.cursor ?? null); setOffset(prior?.offset ?? 0); setPrevious(previous.slice(0, -1)); }}>Previous players</button>
+        <button disabled={loading || !data?.leaderboard.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, { cursor: after, offset }]); setOffset(offset + sorted.length); setAfter(data?.leaderboard.pageInfo.endCursor ?? null); }}>Next players</button>
       </div>
     </div>
   );

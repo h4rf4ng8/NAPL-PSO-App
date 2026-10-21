@@ -4,12 +4,17 @@ import React, { useEffect, useState } from 'react';
 import { content as contentApi } from './api';
 import type { Account } from '../accounts/models';
 import type { News } from './models';
-import type { Team } from '../teams/models';
+import type { TeamSummary as Team } from '../teams/models';
 import { EmptyState, TeamPill } from '../../components/Display';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { isAdmin } from '../../utils/league';
-import { useResource } from '../../hooks/use-resource';
+import { useQuery } from '@apollo/client/react';
+import { HomeNewsDocument } from '../../api/generated/graphql';
+import { readText } from '../../api/page';
+import { LazyText } from './LazyText';
+import type { NewsSummary } from './models';
+import { newsSummarySchema } from './models';
 
 // ============ NEWS VIEW ============
 // ============ NEWS HUB (news + articles sub-navigation) ============
@@ -97,7 +102,12 @@ export const NewsHub = ({ account, allTeams }: { account: Account | null; allTea
 
 const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Team[]; }) => {
   const [subtab, setSubtab] = useState('matchups');
-  const { data: news = [], loading, error, reload: refresh } = useResource(() => contentApi.listNews(), []);
+  const [after, setAfter] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<(string | null)[]>([]);
+  const kind = subtab === 'announcements' ? 'announcement' : (subtab === 'results' ? 'result' : 'matchup');
+  const { data, loading, error, refetch: refresh } = useQuery(HomeNewsDocument, { variables: { kind, after } });
+  const news = (data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
+  const [editError, setEditError] = useState('');
   const [showCompose, setShowCompose] = useState(false);
   const [editing, setEditing] = useState<News | null>(null);
 
@@ -113,14 +123,17 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
     if (!confirm('Delete this news item?')) return;
     try {
       await contentApi.deleteNews(id);
-      await refresh();
+      setAfter(null); setPrevious([]); await refresh({ after: null });
     } catch (deleteError) {
       alert('Could not delete: ' + (deleteError instanceof Error ? deleteError.message : String(deleteError)));
     }
   };
-  const handleEdit = (item: News) => {
-    setEditing(item);
-    setShowCompose(true);
+  const handleEdit = async (item: NewsSummary) => {
+    setEditError('');
+    try {
+      const [body, notes] = await Promise.all([readText(item.bodyUrl), readText(item.notesUrl)]);
+      setEditing({ ...item, body, notes }); setShowCompose(true);
+    } catch (error) { setEditError(error instanceof Error ? error.message : 'Could not load post.'); }
   };
 
   const isAdminUser = isAdmin(account);
@@ -157,7 +170,7 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
           return (
             <button
               key={s.id}
-              onClick={() => setSubtab(s.id)}
+              onClick={() => { setSubtab(s.id); setAfter(null); setPrevious([]); }}
               className="flex-1 px-3 py-2 font-heading tracking-wider text-[10px] sm:text-[11px] rounded transition-all flex items-center justify-center gap-1.5"
               style={{
                 background: active ? `${C.goldLight}22` : 'transparent',
@@ -169,7 +182,8 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
         })}
       </div>
 
-      {error && <div role="alert" className="mb-4 font-mono text-xs" style={{ color: C.redLight }}>{error}</div>}
+      {error && <div role="alert" className="mb-4 font-mono text-xs" style={{ color: C.redLight }}>{error.message} <button onClick={() => { setAfter(null); setPrevious([]); void refresh({ after: null }).catch(() => {}); }}>Restart page</button></div>}
+      {editError && <p role="alert">{editError}</p>}
       {loading && <div className="mb-4 font-mono text-xs" style={{ color: `${C.cream}66` }}>Loading news...</div>}
 
       {/* MATCHUPS */}
@@ -178,8 +192,8 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
           ? <EmptyState icon={<Calendar size={40} />} text="No matchups posted yet." />
           : <div className="space-y-2">
               {matchups.map(m => {
-                const home = teamById(m.homeTeamId);
-                const away = teamById(m.awayTeamId);
+                const home = m.homeTeam ?? teamById(m.homeTeamId);
+                const away = m.awayTeam ?? teamById(m.awayTeamId);
                 const upcoming = (m.date || 0) >= Date.now();
                 return (
                   <div key={m.id} className="rounded-lg p-4" style={{
@@ -197,7 +211,7 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
                           <span className="font-display text-xl" style={{ color: `${C.cream}77` }}>VS</span>
                           <TeamPill team={away} fallback={m.awayTeamId} />
                         </div>
-                        {m.notes && <p className="font-body text-sm mt-2" style={{ color: `${C.cream}cc` }}>{m.notes}</p>}
+                        <LazyText url={m.notesUrl} label="Matchup notes" />
                       </div>
                       {isAdminUser && (
                         <div className="flex gap-1">
@@ -229,7 +243,7 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
                         {a.pinned && <Star size={12} style={{ color: C.goldLight }} />}
                         <span className="font-display text-xl tracking-wider" style={{ color: C.cream }}>{a.title}</span>
                       </div>
-                      <p className="font-body text-sm whitespace-pre-wrap" style={{ color: `${C.cream}dd` }}>{a.body}</p>
+                      <LazyText url={a.bodyUrl} label="Read announcement" />
                       <div className="font-mono text-[10px] tracking-wider mt-2" style={{ color: `${C.cream}55` }}>
                         BY {(a.author || 'admin').toUpperCase()} • {new Date(a.createdAt).toLocaleDateString()}
                       </div>
@@ -252,8 +266,8 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
           ? <EmptyState icon={<Trophy size={40} />} text="No results posted yet." />
           : <div className="space-y-2">
               {results.map(r => {
-                const home = teamById(r.homeTeamId);
-                const away = teamById(r.awayTeamId);
+                const home = r.homeTeam ?? teamById(r.homeTeamId);
+                const away = r.awayTeam ?? teamById(r.awayTeamId);
                 const homeWon = (r.homeScore || 0) > (r.awayScore || 0);
                 const awayWon = (r.awayScore || 0) > (r.homeScore || 0);
                 return (
@@ -283,7 +297,7 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
                             <TeamPill team={away} fallback={r.awayTeamId} dimmed={!awayWon && r.homeScore !== r.awayScore} />
                           </div>
                         </div>
-                        {r.notes && <p className="font-body text-sm mt-2" style={{ color: `${C.cream}cc` }}>{r.notes}</p>}
+                        <LazyText url={r.notesUrl} label="Result notes" />
                       </div>
                       {isAdminUser && (
                         <div className="flex gap-1">
@@ -298,6 +312,10 @@ const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Te
             </div>
       )}
 
+      <div className="flex gap-3 my-3">
+        <button disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous posts</button>
+        <button disabled={loading || !data?.homeNews.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.homeNews.pageInfo.endCursor ?? null); }}>Next posts</button>
+      </div>
       {showCompose && (
         <NewsComposeModal
           existing={editing}

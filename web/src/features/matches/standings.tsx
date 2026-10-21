@@ -1,14 +1,11 @@
+import { mergeSeasonPages } from '../dashboard/season-pages';
+import { z } from 'zod';
+import { useQuery } from '@apollo/client/react';
+import { TeamStandingsDocument, SeasonsDocument } from '../../api/generated/graphql';
+import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Trophy } from 'lucide-react';
-import { useEffect,useMemo,useState } from 'react';
-import { teams as teamApi } from '../teams/api';
-import { inStandings } from '../teams/selectors';
-import { skipToken, useQuery } from '@apollo/client/react';
-import { TeamRecordsDocument } from '../../api/generated/graphql';
-import { mapTeamRecords } from './api';
-import type { TeamRecord } from '@napl/contracts/matches';
+import { useState } from 'react';
 
-import type { Account } from '../accounts/models';
-import type { Team } from '../teams/models';
 import { C } from '../../theme/theme';
 
 // ============ TEAM STANDINGS ============
@@ -16,40 +13,20 @@ import { C } from '../../theme/theme';
 // dedup by (team_id + strikersMatchId) so a match only counts once per team
 // regardless of how many players logged it. Tiebreakers follow Rulebook 2.1.3:
 // Points → Wins → Goal Diff → Total Goals → team name alphabetically.
-export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { allTeams?: Team[]; allPlayers?: Account[]; records?: TeamRecord[] }) => {
+const standingsRowSchema = z.object({
+  rank: z.number(), team: z.object({ id: z.string(), name: z.string(), tag: z.string(), color: z.string().nullable(), logoUrl: z.string().nullable() }),
+  played: z.number(), w: z.number(), d: z.number(), l: z.number(), gf: z.number(), ga: z.number(), gd: z.number(), pts: z.number(),
+});
+export const TeamStandings = () => {
+  const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
-  const { data, loading: recordsLoading, error: recordsError, refetch } = useQuery(TeamRecordsDocument, records ? skipToken : {});
-  const teamRecords = records ?? (data ? mapTeamRecords(data) : []);
-
-  // Available seasons for the filter dropdown
-  const seasons = useMemo(() => {
-    const set = new Set<string>();
-    teamRecords.forEach(row => { if (row.season !== 'all') set.add(row.season); });
-    allPlayers.forEach(p => Object.keys(p.seasonStats || {}).forEach(s => { if (s !== 'all') set.add(s); }));
-    return [...set].sort((a,b)=>a.localeCompare(b));
-  }, [teamRecords, allPlayers]);
-
-  // Aggregate stats per team. team.seasons is an EXCLUSION list — if the
-  // current season is in it, the team is hidden from this view. Empty list
-  // means "participates in all seasons" (default).
-  const standings = useMemo(() => {
-    const approvedTeams = allTeams.filter(t => inStandings(t, season));
-    const rows = approvedTeams.map(team => {
-      const record = teamRecords.find(item => item.teamId === team.id && item.season === season);
-      return { team, played: record?.played || 0, w: record?.w || 0, d: record?.d || 0, l: record?.l || 0,
-        gf: record?.gf || 0, ga: record?.ga || 0, gd: record?.gd || 0, pts: record?.pts || 0 };
-    });
-    // Rulebook 2.1.3.2 tiebreakers: Points → Wins → GD → GF → name
-    // (Head-to-head omitted for now — complex, add later if needed)
-    return rows.sort((a, b) => {
-      if (b.pts !== a.pts) return b.pts - a.pts;
-      if (b.w   !== a.w)   return b.w   - a.w;
-      if (b.gd  !== a.gd)  return b.gd  - a.gd;
-      return b.gf  === a.gf ? a.team.name.localeCompare(b.team.name) : b.gf  - a.gf;
-    });
-  }, [teamRecords, allTeams, season]);
-
-  const hasAnyMatches = teamRecords.some(row => row.season === season && row.played > 0);
+  const [after, setAfter] = useState<string | null>(null);
+  const [previous, setPrevious] = useState<(string | null)[]>([]);
+  const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
+  const seasons = seasonData?.seasons.nodes ?? [];
+  const { data, loading: recordsLoading, error: recordsError, refetch } = useQuery(TeamStandingsDocument, { variables: { season, after } });
+  const standings = (data?.standings.nodes ?? []).map(row => standingsRowSchema.parse(row));
+  const hasAnyMatches = standings.length > 0;
 
   return (
     <div className="space-y-3">
@@ -61,7 +38,7 @@ export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { all
         {seasons.length > 0 && (
           <select
             value={season}
-            onChange={(e) => setSeason(e.target.value)}
+            onChange={(e) => { setSeason(e.target.value); setAfter(null); setPrevious([]); }}
             className="rounded px-2 py-1 font-mono text-[11px] tracking-wider"
             style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
           >
@@ -71,7 +48,7 @@ export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { all
         )}
       </div>
 
-      {recordsError && <p role="alert">{recordsError.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
+      {recordsError && <p role="alert">{recordsError.message} <button onClick={() => { setAfter(null); setPrevious([]); void refetch({ after: null }).catch(() => {}); }}>Try again</button></p>}
       {recordsLoading ? <p role="status">Loading standings…</p> : (hasAnyMatches ? (
         <div className="rounded-lg overflow-x-auto" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
           <table className="w-full text-sm">
@@ -90,16 +67,16 @@ export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { all
               </tr>
             </thead>
             <tbody>
-              {standings.map((row, idx) => (
+              {standings.map(row => (
                 <tr key={row.team.id} style={{
                   borderBottom: `1px solid ${C.navyLight}22`,
-                  background: idx === 0 ? `${C.goldLight}11` : 'transparent',
+                  background: row.rank === 1 ? `${C.goldLight}11` : 'transparent',
                 }}>
-                  <td className="px-3 py-2 font-mono text-xs" style={{ color: C.brandNavy }}>{idx + 1}</td>
+                  <td className="px-3 py-2 font-mono text-xs" style={{ color: C.brandNavy }}>{row.rank}</td>
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-2">
                       {row.team.logoUrl && (
-                        <img src={row.team.logoUrl} alt="" className="w-5 h-5 rounded shrink-0 object-cover" />
+                        <MediaImage src={mediaUrl(row.team.logoUrl)} alt="" className="w-5 h-5 rounded shrink-0 object-cover" />
                       )}
                       <span className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>{row.team.name}</span>
                       <span className="font-mono text-[9px] px-1 rounded" style={{ background: `${row.team.color || C.navyLight}33`, color: `${C.brandNavy}88` }}>{row.team.tag}</span>
@@ -125,36 +102,15 @@ export const TeamStandings = ({ allTeams = [], allPlayers = [], records }: { all
           NO APPROVED MATCHES YET
         </div>
       ))}
+      <div className="flex gap-3"><button disabled={recordsLoading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous teams</button>
+      <button disabled={recordsLoading || !data?.standings.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.standings.pageInfo.endCursor ?? null); }}>Next teams</button>
+{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
+      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}</div>
     </div>
   );
 };
 
-// ============ STANDINGS VIEW (main nav tab) ============
-// Full-page wrapper around TeamStandings. Loads teams + players fresh each
-// time this view mounts so freshly-imported matches show up right away.
-export const StandingsView = () => {
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [loadError, setLoadError] = useState('');
-  const [loading, setLoading] = useState(true);
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    void (async () => { try { const t = await teamApi.listTeams(); if (alive) setTeams(t); } catch (error) { if (alive) setLoadError(error instanceof Error ? error.message : 'Could not load standings.'); } finally { if (alive) setLoading(false); } })();
-    return () => { alive = false; };
-  }, []);
-
-  return (
-    <div>
-      <div className="mb-4 flex items-center gap-3">
-        <Trophy size={22} style={{ color: C.brandNavy }} />
-        <h1 className="font-display text-2xl tracking-wider" style={{ color: C.brandNavyDeep, letterSpacing: '0.2em' }}>LEAGUE STANDINGS</h1>
-      </div>
-      {loadError && <p role="alert">{loadError}</p>}
-      {loading ? (
-        <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading standings...</div>
-      ) : (
-        <TeamStandings allTeams={teams} />
-      )}
-    </div>
-  );
-};
+export const StandingsView = () => <div>
+  <h1 className="font-display text-2xl tracking-wider mb-4">LEAGUE STANDINGS</h1>
+  <TeamStandings />
+</div>;

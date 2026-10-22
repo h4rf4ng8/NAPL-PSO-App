@@ -90,6 +90,18 @@ test('deployment grants cannot update the bootstrap or create unbounded applicat
   assert.equal(boundary[2].Condition.Bool['lambda:InvokedViaFunctionUrl'], true);
 });
 
+test('both deployment identities can process exactly the application transforms', () => {
+  const resources = template.Transform.map((transform: string) =>
+    'arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/' + transform.replace('AWS::', ''));
+  for (const role of ['GitHubDeployRole', 'CloudFormationExecutionRole']) {
+    const statements = bootstrap.Resources[role].Properties.Policies[0].PolicyDocument.Statement;
+    const transforms = statements.find(statement => statement.Sid === 'UseApplicationTransforms');
+    assert.equal(transforms.Effect, 'Allow');
+    assert.equal(transforms.Action, 'cloudformation:CreateChangeSet');
+    assert.deepEqual(new Set(transforms.Resource.map(resource => resource['Fn::Sub'])), new Set(resources));
+  }
+});
+
 test('deployment artifacts stay private, encrypted, and require TLS', () => {
   const bucket = bootstrap.Resources.DeploymentBucket;
   assert.equal(bucket.DeletionPolicy, 'Retain');

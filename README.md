@@ -38,7 +38,7 @@ NAPL is a league application built with React and a Fastify API running on AWS L
 
 ![Browser, CloudFront, Lambda and Supabase architecture](docs/system-architecture.png)
 
-Vercel serves the static app; browser API requests pass through CloudFront and AWS WAF to Lambda using origin access control (OAC). Lambda verifies Supabase access tokens and enforces authorization and league operations, while Supabase Auth manages browser sessions and refresh. Public assets and signed file transfers connect directly to Supabase Storage; [runtime](api/plugins/runtime.ts), [request checks](api/app.ts), and [browser auth](web/src/auth/session.ts) implement these boundaries.
+League rules live in the API so every screen uses the same rankings and validation.
 
 ## Sequence Diagrams
 

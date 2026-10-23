@@ -48,7 +48,7 @@ Radical-simplicity coding guidelines distilled from George Hotz's public philoso
 
 ## Refactoring evidence and structure changes
 
-- Before deleting code, read its definitions and callers and record the evidence that it is unused.
+- Before deleting code, read its definitions and callers and record the evidence that it is unused or that it can be simplified or the logic can be condensed/simplified by deleting/pruning existing code.
 - Use dependency-cruiser to check dependency boundary rules.
 - Work in small batches and run typecheck/tests after each batch. Separate architecture changes from cleanup; record the current behavior, structural change, and smallest parity check for each pass.
 - For an identical edit across more than two files, use a tested codemod.

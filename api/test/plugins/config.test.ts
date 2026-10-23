@@ -56,3 +56,9 @@ test('production uses one database URL and requires PostgreSQL with verified TLS
   const url = 'postgres://db.example/app?sslmode=verify-full';
   assert.equal(readConfig({ ...production, DATABASE_URL: url }).DATABASE_URL, url);
 });
+
+test('CloudFront trust is explicit and rejects misspelled settings', () => {
+  assert.equal(readConfig(environment).TRUST_CLOUDFRONT, false);
+  assert.equal(readConfig({ ...environment, TRUST_CLOUDFRONT: 'true' }).TRUST_CLOUDFRONT, true);
+  assert.throws(() => readConfig({ ...environment, TRUST_CLOUDFRONT: 'yes' }));
+});

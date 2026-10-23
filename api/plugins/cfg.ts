@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const schema = z.object({
+  TRUST_CLOUDFRONT: z.enum(['true', 'false']).default('false').transform(value => value === 'true'),
   LOG_LEVEL: z.enum(['debug', 'info']).default('info'),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('production'),
   PORT: z.coerce.number().pipe(z.int().min(1).max(65_535)).default(3000),

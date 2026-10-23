@@ -25,7 +25,7 @@ test('writes only current validated parameters, with injected settings taking pr
   assert.deepEqual(params, {
     DatabaseUrl: 'postgres://injected.example/app?sslmode=verify-full', SupabaseUrl: env.SUPABASE_URL,
     SupabasePublishableKey: env.SUPABASE_PUBLISHABLE_KEY, SupabaseSecretKey: 'injected-storage-secret', SupabaseJwksUrl: env.SUPABASE_JWKS_URL,
-    PublicOrigin: env.PUBLIC_ORIGIN, DiscordTransferWebhook: '', RolePermissionsBoundaryArn: env.APPLICATION_ROLE_BOUNDARY_ARN,
+    PublicOrigin: env.PUBLIC_ORIGIN, DiscordTransferWebhook: '', CloudFrontDistributionId: '', CloudFrontDomainName: '', RolePermissionsBoundaryArn: env.APPLICATION_ROLE_BOUNDARY_ARN,
   });
   assert.equal((await stat(files.outputPath)).mode & 0o777, 0o600);
 });
@@ -62,4 +62,22 @@ test('missing, empty or whitespace Storage secrets stop deployment without writi
     });
     await assert.rejects(readFile(files.outputPath));
   }
+});
+
+
+test('CloudFront deployment requires a valid paired identity without leaking invalid inputs', async t => {
+  for (const settings of [
+    { CLOUDFRONT_DISTRIBUTION_ID: 'E123' },
+    { CLOUDFRONT_DOMAIN_NAME: 'example.cloudfront.net' },
+    { CLOUDFRONT_DISTRIBUTION_ID: 'E123', CLOUDFRONT_DOMAIN_NAME: 'private.invalid' },
+  ]) {
+    const files = await paths(t);
+    await assert.rejects(prepareSamParams({ ...files, environment: { ...env, ...settings } }), /CloudFrontDistributionId and CloudFrontDomainName/);
+    await assert.rejects(readFile(files.outputPath));
+  }
+  const files = await paths(t);
+  await prepareSamParams({ ...files, environment: { ...env, CLOUDFRONT_DISTRIBUTION_ID: 'E123', CLOUDFRONT_DOMAIN_NAME: 'example.cloudfront.net' } });
+  const params = JSON.parse(await readFile(files.outputPath, 'utf8'));
+  assert.equal(params.CloudFrontDistributionId, 'E123');
+  assert.equal(params.CloudFrontDomainName, 'example.cloudfront.net');
 });

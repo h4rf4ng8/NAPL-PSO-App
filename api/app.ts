@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import type { Database, Row } from './plugins/db/client.js';
 import { object, string } from './plugins/db/records.js';
 import { HttpError, type Identity, actor, isAdmin, roles } from './plugins/auth/identity.js';
+import { cloudFrontIp } from './plugins/request.js';
 import { registerAccounts } from './routes/accounts/routes.js';
 import { registerTeams } from './routes/teams/routes.js';
 import { registerContent } from './routes/content/routes.js';
@@ -73,6 +74,7 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
         delete current.request;
     });
     app.decorateRequest('identity', null);
+    app.decorateRequest('viewerIp', null);
     app.decorateRequest('operationName', null);
     app.decorateRequest('userRoles');
     const resourceTypes = { accounts: 'account', teams: 'team', news: 'news', rules: 'rule', articles: 'article', schedule: 'schedule', transfers: 'transfer', submissions: 'submission', voting: 'voting_period', 'position-requests': 'position_request' } as const;
@@ -170,18 +172,29 @@ export function createApp(dependencies: Dependencies): FastifyInstance {
                 done(null, origin === dependencies.config.PUBLIC_ORIGIN);
             },
             methods: ['GET', 'HEAD', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-            allowedHeaders: ['Authorization', 'Content-Type', 'Apollo-Require-Preflight', 'Idempotency-Key'],
+            allowedHeaders: ['X-Amz-Content-Sha256', 'Authorization', 'Content-Type', 'Apollo-Require-Preflight', 'Idempotency-Key'],
             exposedHeaders: ['Retry-After', 'X-Request-Id'],
             credentials: false,
         });
         scope.addHook('onRequest', async request => {
             request.userRoles = [];
             if (!request.url.split('?', 1)[0]?.startsWith('/api/')) return;
-            const authorization = request.headers.authorization;
+            // This flag is enabled only with the Function URL restricted to our OAC distribution.
+            const edge = dependencies.config.TRUST_CLOUDFRONT && Boolean(request.awsLambda?.event);
+            if (dependencies.config.TRUST_CLOUDFRONT) request.viewerIp = cloudFrontIp(request);
+            const supplied = request.headers['x-napl-authorization'];
+            if (supplied !== undefined && !edge) throw new GatewayError(401, 'access_invalid');
+            const awsSignature = edge && request.headers.authorization?.startsWith('AWS4-HMAC-SHA256 ');
+            if (!awsSignature && supplied !== undefined && request.headers.authorization !== undefined) throw new GatewayError(401, 'access_invalid');
+            const authorization = supplied ?? (awsSignature ? undefined : request.headers.authorization);
+            if (authorization !== undefined && typeof authorization !== 'string') throw new GatewayError(401, 'access_invalid');
+            delete request.headers.authorization;
+            delete request.headers['x-napl-authorization'];
             if (authorization !== undefined) {
                 const bearer = /^Bearer ([^\s,]+)$/i.exec(authorization);
                 if (!bearer) throw new GatewayError(401, 'access_invalid');
                 request.identity = await dependencies.auth.supabase.verify(bearer[1]!);
+                request.headers.authorization = authorization;
             }
             // Forwarded headers and cookies never establish identity or limiter addresses.
             for (const header of Object.keys(request.headers)) {

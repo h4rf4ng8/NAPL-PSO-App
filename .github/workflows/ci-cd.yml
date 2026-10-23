@@ -158,6 +158,8 @@ jobs:
           SUPABASE_JWKS_URL: ${{ vars.SUPABASE_JWKS_URL }}
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
           APPLICATION_ROLE_BOUNDARY_ARN: ${{ vars.APPLICATION_ROLE_BOUNDARY_ARN }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+          CLOUDFRONT_DOMAIN_NAME: ${{ vars.CLOUDFRONT_DOMAIN_NAME }}
         run: |
           pnpm run env:sam
           install -m 600 api/.env.sam.json api/.env.sam.yaml
@@ -211,6 +213,8 @@ jobs:
         if: steps.release.outputs.current == 'true'
         env:
           PUBLIC_ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+          CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CLOUDFRONT_DISTRIBUTION_ID }}
+          CLOUDFRONT_DOMAIN_NAME: ${{ vars.CLOUDFRONT_DOMAIN_NAME }}
         run: |
           FUNCTION_URL=$(aws cloudformation describe-stacks \
             --stack-name napl-api \
@@ -221,7 +225,9 @@ jobs:
             --function-name napl-api-api:live \
             --region "$AWS_REGION" \
             --url "$FUNCTION_URL" \
-            --origin "$PUBLIC_ORIGIN"
+            --origin "$PUBLIC_ORIGIN" \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --domain-name "$CLOUDFRONT_DOMAIN_NAME"
       - name: Remove deployment parameters
         if: always()
         run: rm -f api/.env.sam.json api/.env.sam.yaml "$RUNNER_TEMP/prod-ca-2021.crt"

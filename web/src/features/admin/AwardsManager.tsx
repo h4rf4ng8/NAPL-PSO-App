@@ -67,7 +67,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   };
 
   const assignAward = async () => {
-    if (busy) return;
+    if (busy || refreshError) return;
     setError(''); setInfo('');
     if (!winnerUsername) { setError('Pick a winner'); return; }
     if (!season.trim()) { setError('Season required'); return; }
@@ -86,7 +86,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   };
 
   const removeAward = async (player: AdminPlayer, targetAward: Pick<PlayerAward,'awardId'|'season'>) => {
-    if (busy) return;
+    if (busy || refreshError) return;
     setError(''); setInfo(''); setBusy(true);
     try {
       await accountApi.removeAward(player.id, targetAward.awardId, targetAward.season);
@@ -127,7 +127,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
       {refreshError && <Alert><AlertDescription>{refreshError}</AlertDescription><Button variant="outline" className="mt-2" disabled={busy} onClick={() => void refreshAfterWrite()}>Retry refresh</Button></Alert>}
-      <Button className="w-full sm:w-auto" onClick={() => void assignAward()} disabled={busy || !selected || !season.trim()}>{busy ? 'Saving…' : `Assign ${award.name}`}</Button>
+      <Button className="w-full sm:w-auto" onClick={() => void assignAward()} disabled={busy || !!refreshError || !selected || !season.trim()}>{busy ? 'Saving…' : `Assign ${award.name}`}</Button>
     </Card>
     <section className="space-y-3"><h3 className="text-lg font-semibold">{selected ? `${selected.username}’s awards (${awardPage.data?.accountAwards.totalCount ?? 0})` : 'Award history'}</h3>
       {!selected && <p className="text-sm text-muted-foreground">Select a player to review their awards.</p>}
@@ -140,7 +140,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
         const name = AWARD_BY_ID[item.awardId]?.name ?? item.awardId;
         return <Card key={key} className="flex flex-wrap items-center gap-3 p-4"><AwardIcon awardId={item.awardId} size={28} /><div className="min-w-0 flex-1 space-y-1"><h4 className="flex flex-wrap items-center gap-2 font-medium">{name}<Badge variant="secondary">{item.season}</Badge></h4><p className="text-xs text-muted-foreground">{item.player.username}{item.assignedBy ? ` · Assigned by ${item.assignedBy}` : ''}</p></div>
           <AlertDialog open={removing === key} onOpenChange={open => { if (!busy) setRemoving(open ? key : null); }}>
-            <AlertDialogTrigger asChild><Button variant="outline" className="text-destructive" disabled={busy}>Remove award</Button></AlertDialogTrigger>
+            <AlertDialogTrigger asChild><Button variant="outline" className="text-destructive" disabled={busy || !!refreshError}>Remove award</Button></AlertDialogTrigger>
             <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove {name}?</AlertDialogTitle><AlertDialogDescription>This removes the {item.season} award from {item.player.username}’s record and player card.</AlertDialogDescription></AlertDialogHeader>
               {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
               <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void removeAward(item.player, item); }}>{busy ? 'Removing…' : 'Remove award'}</AlertDialogAction></AlertDialogFooter>

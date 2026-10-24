@@ -1,3 +1,9 @@
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { usePageCursor } from '../../hooks/use-page-cursor';
 import { useQuery } from '@apollo/client/react';
 import { TeamSummariesDocument } from '../../api/generated/graphql';
@@ -10,9 +16,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Champions } from './models';
-import { Dialog } from '../../components/Dialog';
 import { EmptyState } from '../../components/Display';
-import { C } from '../../theme/theme';
+
+import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
+
 
 
 
@@ -33,6 +41,7 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
   const [loaded,setLoaded] = useState(false);
   const [champions, setChampions] = useState<Champions>({});             // { S1: { winnerTeamId, runnerUpTeamId } }
   const [editingSeason, setEditingSeason] = useState(currentSeason);
+  const [newSeason, setNewSeason] = useState('');
   const [winnerTeamId, setWinnerTeamId] = useState('');
   const [runnerUpTeamId, setRunnerUpTeamId] = useState('');
   const [busy, setBusy] = useState(false);
@@ -153,222 +162,56 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
     setBusy(false);
   };
 
-  return (
-    <div>
-      {!loaded && <p role="status">Loading complete championship settings…</p>}
-      {teamPage.error && <p role="alert">{teamPage.error}</p>}
-      <input aria-label="Find championship team" placeholder="Find team…" value={teamSearch} onChange={event=>setTeamSearch(event.target.value)} />
-      <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
-      <div className="flex items-center gap-2 mb-4">
-        <Trophy size={22} style={{ color: C.goldLight }} />
-        <h3 className="font-display text-2xl tracking-wider" style={{ color: C.cream }}>SEASON CHAMPIONS</h3>
+  const confirmation = (kind: 'save' | 'clear') => <AlertDialogContent>
+    <AlertDialogHeader><AlertDialogTitle>{kind === 'save' ? `Save ${editingSeason} champions?` : `Clear ${editingSeason} championships?`}</AlertDialogTitle><AlertDialogDescription>
+      {kind === 'save' ? `Trophies will be awarded to the selected teams’ current rosters. ${champions[editingSeason] ? `Previous ${editingSeason} trophies will be removed first, including trophies held by players who have since transferred.` : 'Players keep their trophies if they later transfer.'}` : `Every player with a ${editingSeason} championship trophy will lose it. This cannot be undone.`}
+    </AlertDialogDescription></AlertDialogHeader>
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy || !loaded} onClick={event => { event.preventDefault(); void (kind === 'save' ? doSave() : doClear()); }}>{busy ? 'Working…' : (kind === 'save' ? 'Award trophies' : 'Clear championships')}</AlertDialogAction></AlertDialogFooter>
+  </AlertDialogContent>;
+
+  return <div className="space-y-5">
+    <div className="space-y-2"><h3 className="flex items-center gap-2 text-xl font-semibold"><Trophy className="size-5" />Season champions</h3><p className="text-sm leading-relaxed text-muted-foreground">Award gold and silver trophies to the selected teams’ current rosters. Players keep their trophy after transferring. Editing a recorded season replaces its previous trophies.</p></div>
+    {!loaded && <p role="status" className="text-sm text-muted-foreground">Loading complete championship settings…</p>}
+    {teamPage.error && <Alert variant="destructive"><AlertDescription>{teamPage.error}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+    <Card className="space-y-5 p-4 sm:p-5">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2"><Label htmlFor="championship-season">Season</Label><Select value={editingSeason} onValueChange={setEditingSeason} disabled={busy || !loaded}><SelectTrigger id="championship-season"><SelectValue /></SelectTrigger><SelectContent>{knownSeasons.map(season => <SelectItem key={season} value={season}>{season}</SelectItem>)}{!knownSeasons.includes(editingSeason) && <SelectItem value={editingSeason}>{editingSeason}</SelectItem>}</SelectContent></Select></div>
+        <form className="space-y-2" onSubmit={event => { event.preventDefault(); if (!newSeason.trim()) {
+          return;
+        }
+
+        setEditingSeason(newSeason.trim().toUpperCase()); setNewSeason(''); }}><Label htmlFor="new-championship-season">Add another season</Label><div className="flex gap-2"><Input id="new-championship-season" value={newSeason} onChange={event => setNewSeason(event.target.value)} placeholder="Season name" disabled={busy || !loaded} /><Button type="submit" variant="outline" disabled={busy || !loaded || !newSeason.trim()}>Add</Button></div></form>
       </div>
-      <p className="font-body text-sm mb-4" style={{ color: `${C.cream}99` }}>
-        Pick the season winner (gold trophy) and runner-up (silver trophy). The trophy is awarded to the team's <span style={{ color: C.goldLight }}>current roster</span> — players who later transfer keep their trophy. Editing a season replaces the previous result.
-      </p>
-
-      {/* SEASON PICKER + TEAM PICKERS */}
-      <div className="rounded-xl p-4 mb-6" style={{ background: `${C.navyDeep}88`, border: `1px solid ${C.navyLight}66` }}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>SEASON</div>
-            <div className="flex gap-2">
-              <select
-                value={editingSeason}
-                onChange={(e) => setEditingSeason(e.target.value)}
-                className="flex-1 px-3 py-2 font-body text-sm rounded focus:outline-none"
-                style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}88`, color: C.cream }}
-              >
-                {knownSeasons.map(s => <option key={s} value={s} style={{ background: C.navyDeep }}>{s}</option>)}
-                {!knownSeasons.includes(editingSeason) && (
-                  <option value={editingSeason} style={{ background: C.navyDeep }}>{editingSeason}</option>
-                )}
-              </select>
-              <input
-                type="text"
-                placeholder="New season..."
-                onKeyDown={(e) => { if (!(e.key === 'Enter' && e.currentTarget.value.trim())) {
-                  return;
-                }
-
-                setEditingSeason(e.currentTarget.value.trim().toUpperCase()); e.currentTarget.value = ''; }}
-                className="w-28 px-2 py-2 font-mono text-[11px] rounded focus:outline-none"
-                style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}88`, color: C.cream }}
-                title="Type a new season name and press Enter"
-              />
-            </div>
-          </div>
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>
-              🥇 WINNER (GOLD TROPHY)
-            </div>
-            <select
-              value={winnerTeamId}
-              onChange={(e) => setWinnerTeamId(e.target.value)}
-              className="w-full px-3 py-2 font-body text-sm rounded focus:outline-none"
-              style={{ background: C.navyDeep, border: `1px solid ${C.gold}66`, color: C.cream }}
-            >
-              <option value="" style={{ background: C.navyDeep }}>— None —</option>
-              {approvedTeams.map(t => (
-                <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
-                  {t.name} ({playerCount(t.id)} players)
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <div className="font-mono text-[10px] tracking-[0.2em] mb-1" style={{ color: `${C.cream}99` }}>
-              🥈 RUNNER-UP (SILVER TROPHY)
-            </div>
-            <select
-              value={runnerUpTeamId}
-              onChange={(e) => setRunnerUpTeamId(e.target.value)}
-              className="w-full px-3 py-2 font-body text-sm rounded focus:outline-none"
-              style={{ background: C.navyDeep, border: `1px solid #cdd3dc66`, color: C.cream }}
-            >
-              <option value="" style={{ background: C.navyDeep }}>— None —</option>
-              {approvedTeams.map(t => (
-                <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>
-                  {t.name} ({playerCount(t.id)} players)
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {error && <div className="mt-3 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{error}</div>}
-        {info && <div className="mt-3 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.green}22`, color: C.greenLight }}>{info}</div>}
-
-        <div className="flex gap-2 mt-3 flex-wrap">
-          <button
-            onClick={requestSave}
-            disabled={busy}
-            className="flex-1 py-2.5 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-            style={{
-              background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldLight} 100%)`,
-              color: C.brandNavy,
-              boxShadow: `0 4px 12px ${C.gold}66`,
-            }}
-          >{busy ? 'WORKING...' : `SAVE ${editingSeason} CHAMPIONS`}</button>
-          {champions[editingSeason] && (
-            <button
-              onClick={requestClear}
-              disabled={busy}
-              className="px-4 py-2.5 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-              style={{ background: 'transparent', color: C.redLight, border: `1px solid ${C.red}88` }}
-            >CLEAR {editingSeason}</button>
-          )}
-        </div>
-
-        {/* Roster preview */}
-        {(winnerTeamId || runnerUpTeamId) && (
-          <div className="mt-4 pt-4 grid grid-cols-1 md:grid-cols-2 gap-3" style={{ borderTop: `1px solid ${C.navyLight}44` }}>
-            {winnerTeamId && (
-              <div>
-                <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: C.goldLight }}>
-                  PLAYERS GETTING THE GOLD TROPHY
-                </div>
-                <div className="font-body text-xs" style={{ color: C.cream }}>
-                  {playerCount(winnerTeamId) === 0
-                    ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
-                    : <ChampionRoster teamId={winnerTeamId} />}
-                </div>
-              </div>
-            )}
-            {runnerUpTeamId && (
-              <div>
-                <div className="font-mono text-[10px] tracking-wider mb-1" style={{ color: '#cdd3dc' }}>
-                  PLAYERS GETTING THE SILVER TROPHY
-                </div>
-                <div className="font-body text-xs" style={{ color: C.cream }}>
-                  {playerCount(runnerUpTeamId) === 0
-                    ? <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>No current players on this team</span>
-                    : <ChampionRoster teamId={runnerUpTeamId} />}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+      <div className="space-y-3 border-t pt-4"><Label htmlFor="championship-team-search">Search teams</Label><Input id="championship-team-search" aria-label="Find championship team" placeholder="Find team…" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} disabled={busy} /><PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} /></div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2"><Label htmlFor="championship-winner">Winner · Gold trophy</Label><Select value={winnerTeamId || 'none'} onValueChange={value => setWinnerTeamId(value === 'none' ? '' : value)} disabled={busy || !loaded}><SelectTrigger id="championship-winner"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{winnerTeamId && approvedTeams.every(team => team.id !== winnerTeamId) && <SelectItem value={winnerTeamId}>{teamById(winnerTeamId)?.name || 'Selected winner'}</SelectItem>}{approvedTeams.map(team => <SelectItem key={team.id} value={team.id}>{team.name} ({playerCount(team.id)} players)</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2"><Label htmlFor="championship-runner-up">Runner-up · Silver trophy</Label><Select value={runnerUpTeamId || 'none'} onValueChange={value => setRunnerUpTeamId(value === 'none' ? '' : value)} disabled={busy || !loaded}><SelectTrigger id="championship-runner-up"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem>{runnerUpTeamId && approvedTeams.every(team => team.id !== runnerUpTeamId) && <SelectItem value={runnerUpTeamId}>{teamById(runnerUpTeamId)?.name || 'Selected runner-up'}</SelectItem>}{approvedTeams.map(team => <SelectItem key={team.id} value={team.id}>{team.name} ({playerCount(team.id)} players)</SelectItem>)}</SelectContent></Select></div>
       </div>
-
-      {/* CONFIRMATION MODAL */}
-      {confirming && (
-        <Dialog onClose={() => setConfirming(null)} label="Confirm championship change" className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: `${C.black}cc`, backdropFilter: 'blur(8px)' }}>
-          <div className="max-w-md w-full rounded-xl p-5" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-            <div className="font-display text-xl tracking-wider mb-2" style={{ color: C.brandNavy }}>
-              {confirming === 'save' ? `SAVE ${editingSeason} CHAMPIONS?` : `CLEAR ${editingSeason}?`}
-            </div>
-            <div className="font-body text-sm mb-4" style={{ color: `${C.brandNavy}cc` }}>
-              {confirming === 'save'
-                ? `This will award trophies to the current rosters. ${champions[editingSeason] ? `Any previous ${editingSeason} trophies will be removed first (players who have since transferred will lose them).` : ''}`
-                : `Every player who currently holds a ${editingSeason} trophy will lose it. This cannot be undone.`}
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setConfirming(null)}
-                disabled={busy}
-                className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
-                style={{ background: 'transparent', color: C.brandNavy, border: `1px solid ${C.navyLight}` }}
-              >CANCEL</button>
-              <button
-                onClick={confirming === 'save' ? doSave : doClear}
-                disabled={busy}
-                className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-                style={{
-                  background: confirming === 'save' ? C.gold : C.red,
-                  color: confirming === 'save' ? C.brandNavy : C.onColor,
-                }}
-              >{busy ? 'WORKING...' : (confirming === 'save' ? 'YES, AWARD' : 'YES, CLEAR')}</button>
-            </div>
-          </div>
-        </Dialog>
-      )}
-
-      {/* PAST SEASONS LIST */}
-      <div>
-        <h4 className="font-display text-lg tracking-wider mb-2" style={{ color: C.cream }}>
-          RECORD ({Object.keys(champions).length} season{Object.keys(champions).length === 1 ? '' : 's'})
-        </h4>
-        {Object.keys(champions).length === 0 ? (
-          <EmptyState icon={<Trophy size={40} />} text="No season champions recorded yet." />
-        ) : (
-          <div className="space-y-1.5">
-            {Object.entries(champions).sort(([a], [b]) => a.localeCompare(b)).map(([season, info]) => {
-              const w = info.winnerTeamId ? teamById(info.winnerTeamId) : null;
-              const r = info.runnerUpTeamId ? teamById(info.runnerUpTeamId) : null;
-              return (
-                <div key={season} className="rounded p-2.5 flex items-center gap-3" style={{
-                  background: `${C.navyDeep}aa`, border: `1px solid ${C.gold}33`,
-                }}>
-                  <div className="font-display text-lg tracking-wider" style={{ color: C.goldLight, width: 48 }}>{season}</div>
-                  <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-1">
-                    <div className="font-body text-sm" style={{ color: C.cream }}>
-                      🥇 <span style={{ color: C.goldLight }}>Winner:</span> {w ? w.name : <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>—</span>}
-                    </div>
-                    <div className="font-body text-sm" style={{ color: C.cream }}>
-                      🥈 <span style={{ color: '#cdd3dc' }}>Runner-Up:</span> {r ? r.name : <span style={{ color: `${C.cream}66`, fontStyle: 'italic' }}>—</span>}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setEditingSeason(season); reset(); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                    className="font-mono text-[10px] tracking-wider px-2 py-1 rounded"
-                    style={{ background: 'transparent', color: C.goldLight, border: `1px solid ${C.gold}44` }}
-                  >EDIT</button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      <div className="flex flex-wrap gap-2">
+        <AlertDialog open={confirming === 'save'} onOpenChange={open => { if (!open && !busy) setConfirming(null); }}><AlertDialogTrigger asChild><Button onClick={requestSave} disabled={busy || !loaded}>Save {editingSeason} champions</Button></AlertDialogTrigger>{confirmation('save')}</AlertDialog>
+        {champions[editingSeason] && <AlertDialog open={confirming === 'clear'} onOpenChange={open => { if (!open && !busy) setConfirming(null); }}><AlertDialogTrigger asChild><Button variant="outline" className="text-destructive" onClick={requestClear} disabled={busy || !loaded}>Clear {editingSeason}</Button></AlertDialogTrigger>{confirmation('clear')}</AlertDialog>}
       </div>
-    </div>
-  );
+      {(winnerTeamId || runnerUpTeamId) && <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+        {winnerTeamId && <section className="space-y-2"><h4 className="text-sm font-semibold">Gold trophy roster</h4>{playerCount(winnerTeamId) === 0 ? <p className="text-sm text-muted-foreground">No current players on this team.</p> : <ChampionRoster key={winnerTeamId} teamId={winnerTeamId} />}</section>}
+        {runnerUpTeamId && <section className="space-y-2"><h4 className="text-sm font-semibold">Silver trophy roster</h4>{playerCount(runnerUpTeamId) === 0 ? <p className="text-sm text-muted-foreground">No current players on this team.</p> : <ChampionRoster key={runnerUpTeamId} teamId={runnerUpTeamId} />}</section>}
+      </div>}
+    </Card>
+    <section className="space-y-3"><h3 className="text-lg font-semibold">Championship record <Badge variant="secondary">{Object.keys(champions).length} seasons</Badge></h3>
+      {loaded && Object.keys(champions).length === 0 && <EmptyState icon={<Trophy className="size-8" />} text="No season champions recorded yet." />}
+      {Object.entries(champions).sort(([a], [b]) => a.localeCompare(b)).map(([season, record]) => <Card key={season} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center"><h4 className="font-semibold">{season}</h4><div className="min-w-0 flex-1 space-y-1 text-sm"><p><span className="text-muted-foreground">Winner: </span>{record.winnerTeamId ? teamById(record.winnerTeamId)?.name || 'Recorded team' : 'None'}</p><p><span className="text-muted-foreground">Runner-up: </span>{record.runnerUpTeamId ? teamById(record.runnerUpTeamId)?.name || 'Recorded team' : 'None'}</p></div><Button variant="outline" disabled={busy} onClick={() => { setEditingSeason(season); reset(); document.querySelector<HTMLButtonElement>('#championship-season')?.focus(); }}>Edit {season}</Button></Card>)}
+    </section>
+  </div>;
 };
-
 
 function ChampionRoster({teamId}:{teamId:string}) {
   const page = useRestPage<string>(`/api/teams/${encodeURIComponent(teamId)}/members`);
-  return <div>{page.loading && <p role="status">Loading roster…</p>}{page.error && <p role="alert">{page.error}</p>}
-    {(page.data?.nodes ?? []).join(', ')}
+  return <div className="space-y-2">
+    {page.loading && <p role="status" className="text-sm text-muted-foreground">Loading roster…</p>}
+    {page.error && <Alert variant="destructive"><AlertDescription>{page.error}</AlertDescription></Alert>}
+    <div className="flex flex-wrap gap-1">{(page.data?.nodes ?? []).map(username => <Badge key={username} variant="secondary">{username}</Badge>)}</div>
     <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
   </div>;
 }

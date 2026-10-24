@@ -12,3 +12,6 @@ api/generated/
 coverage/
 .build/
 .vercel/
+.ripwire_quality_baseline
+test-results/
+playwright-report/

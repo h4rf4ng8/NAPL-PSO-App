@@ -98,7 +98,7 @@ export function ThemeButton({ theme, onToggle }: { theme: ThemeMode; onToggle: (
 
 export function AccountMenu({ account, onLogout }: { account: Account; onLogout: () => void }) {
   return <DropdownMenu>
-    <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2" aria-label={`Account menu for ${account.username}`}><Avatar className="size-7"><AvatarFallback>{account.username.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="hidden max-w-40 truncate sm:inline">{account.username}</span></Button></DropdownMenuTrigger>
+    <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2" aria-label={`Account menu for ${account.username}`}><Avatar aria-hidden="true" className="size-7"><AvatarFallback>{account.username.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="hidden max-w-40 truncate sm:inline">{account.username}</span></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuLabel className="break-words">{account.username}{isAdmin(account) && <Badge className="ml-2" variant="secondary">Admin</Badge>}</DropdownMenuLabel>
       <DropdownMenuSeparator />

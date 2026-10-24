@@ -37,6 +37,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 export const AdminPanel = ({ account }: { account: Account }) => {
   const [section, setSection] = useState('teams');
   const [loadError, setLoadError] = useState('');
+  const [receipt, setReceipt] = useState('');
+  const [refreshError, setRefreshError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [championsOpen, setChampionsOpen] = useState(false);
   const [tab, setTab] = useState('pending');
   const [currentSeason, setCurrentSeason] = useState('S1');
@@ -56,9 +59,12 @@ export const AdminPanel = ({ account }: { account: Account }) => {
   };
   const teams = teamPage.data?.nodes ?? [];
   const refresh = async () => {
-    teamPage.restart();
-    try { setCurrentSeason(await adminApi.getSeason()); }
-    catch { setLoadError('Could not load current season.'); }
+    cursor.restart(); setRefreshError(''); setRefreshing(true);
+    try {
+      if (section === 'teams') await teamQuery.refetch({ after: null });
+      setCurrentSeason(await adminApi.getSeason());
+    } catch { setRefreshError('Changes were saved, but refreshing the administration view failed.'); }
+    finally { setRefreshing(false); }
   };
   useEffect(() => {
     let active = true;
@@ -86,18 +92,21 @@ export const AdminPanel = ({ account }: { account: Account }) => {
     }
   };
   const review = async (team: TeamSummary, status: 'approved' | 'rejected', reason = '') => {
-    setLoadError(''); setBusy(true);
-    try { await teamApi.reviewTeam(team.id, status, reason); setRejectingTeam(null); await refresh(); }
-    catch { setLoadError(`Could not ${status === 'approved' ? 'approve' : 'reject'} ${team.name}.`); }
-    finally { setBusy(false); }
+    setLoadError(''); setReceipt(''); setBusy(true);
+    try { await teamApi.reviewTeam(team.id, status, reason); }
+    catch { setLoadError(`Could not ${status === 'approved' ? 'approve' : 'reject'} ${team.name}.`); setBusy(false); return; }
+    setReceipt(`${team.name} ${status}.`); setRejectingTeam(null);
+    await refresh(); setBusy(false);
   };
   const removeTeam = async () => {
     if (!deletingTeam) return;
-    setLoadError(''); setBusy(true);
-    try { await teamApi.deleteTeam(deletingTeam.id); setDeletingTeam(null); await refresh(); }
-    catch { setLoadError(`Could not delete ${deletingTeam.name}.`); }
-    finally { setBusy(false); }
+    setLoadError(''); setReceipt(''); setBusy(true);
+    try { await teamApi.deleteTeam(deletingTeam.id); }
+    catch { setLoadError(`Could not delete ${deletingTeam.name}.`); setBusy(false); return; }
+    setReceipt(`${deletingTeam.name} deleted.`); setDeletingTeam(null);
+    await refresh(); setBusy(false);
   };
+  const teamActionsDisabled = busy || refreshing || !!refreshError;
   const visible = teams.filter(team => team.status === tab);
   const sections = [
     { id: 'teams', label: 'Teams', icon: Users }, { id: 'totw', label: 'Team of the Week', icon: Trophy },
@@ -111,6 +120,8 @@ export const AdminPanel = ({ account }: { account: Account }) => {
     <header className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-3xl font-semibold tracking-tight">Administration</h1><p className="mt-1 text-sm text-muted-foreground">Manage league operations and review changes.</p></div><Badge variant="secondary">{currentSeason}</Badge></header>
     {loadingEditor && <p role="status" className="text-sm text-muted-foreground">Loading team editor…</p>}
     {(loadError || teamPage.error) && <Alert variant="destructive"><AlertDescription>{loadError || teamPage.error}</AlertDescription></Alert>}
+    {receipt && <Alert role="status"><AlertDescription>{receipt}</AlertDescription></Alert>}
+    {refreshError && <Alert variant="destructive"><AlertDescription>{refreshError}<Button className="ml-2" variant="outline" disabled={refreshing} onClick={() => { void refresh(); }}>{refreshing ? 'Refreshing…' : 'Retry administration refresh'}</Button></AlertDescription></Alert>}
     <div className="grid min-w-0 gap-6 xl:grid-cols-[13rem_minmax(0,1fr)]">
       <nav className="hidden space-y-1 xl:block" aria-label="Administration sections">{sections.map(item => <Button key={item.id} variant={section === item.id ? 'secondary' : 'ghost'} aria-current={section === item.id ? 'page' : undefined} onClick={() => setSection(item.id)} className="w-full justify-start gap-3"><item.icon className="size-4" />{item.label}</Button>)}</nav>
       <div className="space-y-2 xl:hidden"><Label htmlFor="admin-section">Administration section</Label><Select value={section} onValueChange={setSection}><SelectTrigger id="admin-section" aria-label="Admin section"><SelectValue /></SelectTrigger><SelectContent>{sections.map(item => <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>)}</SelectContent></Select></div>
@@ -129,15 +140,15 @@ export const AdminPanel = ({ account }: { account: Account }) => {
           {teamPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading team reviews…</p>}
           {!teamPage.loading && visible.length === 0 && <Card><CardContent className="space-y-2 py-12 text-center"><CheckCircle className="mx-auto size-8 text-muted-foreground" /><p className="font-medium">Nothing here.</p><p className="text-sm text-muted-foreground">No {tab} teams on this page.</p></CardContent></Card>}
           {visible.map(team => <Card key={team.id}><CardHeader className="pb-3"><div className="flex flex-wrap items-center gap-2"><CardTitle className="break-words text-xl">{team.name}</CardTitle><Badge variant="outline">{team.tag}</Badge></div><p className="break-words text-sm text-muted-foreground">By {team.ownerUsername} · {new Date(team.createdAt ?? 0).toLocaleString()}</p></CardHeader><CardContent className="space-y-4"><LazyText url={`/api/teams/${encodeURIComponent(team.id)}/text/description`} label="Read team description" />{tab === 'rejected' && <LazyText url={`/api/teams/${encodeURIComponent(team.id)}/text/rejectionReason`} label="Read rejection reason" />}<div className="flex flex-wrap gap-2">
-            {tab === 'pending' && <><Button disabled={busy} onClick={() => review(team, 'approved')}><CheckCircle className="mr-2 size-4" />APPROVE</Button><Button variant="outline" disabled={busy} onClick={() => { setLoadError(''); setRejectionReason(''); setRejectingTeam(team); }}><XCircle className="mr-2 size-4" />Reject</Button></>}
-            {tab === 'approved' && <><Button variant="outline" disabled={busy || loadingEditor} onClick={() => { void openTeamEditor(team); }}>Edit</Button><Button variant="outline" className="text-destructive" disabled={busy || loadingEditor} onClick={() => { setLoadError(''); setDeletingTeam(team); }}>Delete</Button></>}
-            {tab === 'rejected' && <Button disabled={busy} onClick={() => review(team, 'approved')}>Re-approve</Button>}
+            {tab === 'pending' && <><Button disabled={teamActionsDisabled} onClick={() => review(team, 'approved')}><CheckCircle className="mr-2 size-4" />APPROVE</Button><Button variant="outline" disabled={teamActionsDisabled} onClick={() => { setLoadError(''); setRejectionReason(''); setRejectingTeam(team); }}><XCircle className="mr-2 size-4" />Reject</Button></>}
+            {tab === 'approved' && <><Button variant="outline" disabled={teamActionsDisabled || loadingEditor} onClick={() => { void openTeamEditor(team); }}>Edit</Button><Button variant="outline" className="text-destructive" disabled={teamActionsDisabled || loadingEditor} onClick={() => { setLoadError(''); setDeletingTeam(team); }}>Delete</Button></>}
+            {tab === 'rejected' && <Button disabled={teamActionsDisabled} onClick={() => review(team, 'approved')}>Re-approve</Button>}
           </div></CardContent></Card>)}
           <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
         </TabsContent></Tabs></div>}
       </div>
     </div>
-    {editingTeam && <EditTeamModal key={editingTeam.id} team={editingTeam} onClose={() => setEditingTeam(null)} onSaved={() => { setEditingTeam(null); void refresh(); }} />}
+    {editingTeam && <EditTeamModal key={editingTeam.id} team={editingTeam} onClose={() => setEditingTeam(null)} onSaved={() => { setReceipt('Team changes saved.'); setEditingTeam(null); void refresh(); }} />}
     {rejectingTeam && <ModalShell title={`Reject ${rejectingTeam.name}`} onClose={() => { if (!busy) setRejectingTeam(null); }} maxWidth="max-w-lg"><div className="space-y-4"><p className="text-sm text-muted-foreground">Give the captain context for the review so they can revise their submission.</p><div className="space-y-2"><Label htmlFor="team-rejection-reason">Reason <span className="text-muted-foreground">(optional)</span></Label><Textarea id="team-rejection-reason" value={rejectionReason} onChange={event => setRejectionReason(event.target.value)} rows={4} disabled={busy} /></div>{loadError && <Alert variant="destructive"><AlertDescription>{loadError}</AlertDescription></Alert>}<div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={() => setRejectingTeam(null)}>Cancel</Button><Button variant="destructive" disabled={busy} onClick={() => { void review(rejectingTeam, 'rejected', rejectionReason); }}>{busy ? 'Saving…' : 'Reject team'}</Button></div></div></ModalShell>}
     <AlertDialog open={deletingTeam !== null} onOpenChange={open => { if (!open && !busy) setDeletingTeam(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete {deletingTeam?.name}?</AlertDialogTitle><AlertDialogDescription>This permanently removes the team. Review the selected team before continuing.</AlertDialogDescription></AlertDialogHeader>{loadError && <Alert variant="destructive"><AlertDescription>{loadError}</AlertDescription></Alert>}<AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={busy} onClick={event => { event.preventDefault(); void removeTeam(); }}>{busy ? 'Deleting…' : 'Delete team'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
   </div>;

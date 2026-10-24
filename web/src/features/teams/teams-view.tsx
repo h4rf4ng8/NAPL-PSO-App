@@ -43,15 +43,27 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
   const [selected, setSelected] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
   const [actionError, setActionError] = useState('');
+  const [receipt, setReceipt] = useState('');
+  const [refreshError, setRefreshError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const [responding, setResponding] = useState<string | null>(null);
+  const [responded, setResponded] = useState<Set<string>>(() => new Set());
   const { data, loading, error, refetch } = useQuery(TeamSummariesDocument, { variables: { scope, search, status: scope ? null : 'approved', after } });
   const reset = () => { setAfter(null); setPrevious([]); };
   const refreshed = async () => { const me = account ? await auth.getCurrent() : null; if (me) onUpdate?.(me); reset(); await refetch({ after: null }); };
+  const refreshAfterChange = async (message: string) => {
+    setReceipt(message); setRefreshError(''); setRefreshing(true);
+    try { await refreshed(); }
+    catch (error) { setRefreshError('Your change was saved, but refreshing failed: ' + (error instanceof Error ? error.message : String(error))); }
+    finally { setRefreshing(false); }
+  };
   const invitation = async (id: string, accept: boolean) => {
-    setActionError(''); setResponding(id);
-    try { await teamApi.respondInvitation(id, accept); await refreshed(); }
-    catch (error) { setActionError(error instanceof Error ? error.message : 'Could not respond to invitation.'); }
-    finally { setResponding(null); }
+    setActionError(''); setReceipt(''); setResponding(id);
+    try { await teamApi.respondInvitation(id, accept); }
+    catch (error) { setActionError(error instanceof Error ? error.message : 'Could not respond to invitation.'); setResponding(null); return; }
+    setResponded(previous => new Set([...previous, id]));
+    await refreshAfterChange(accept ? 'Invitation accepted.' : 'Invitation declined.');
+    setResponding(null);
   };
   return <div className="space-y-6">
     <header className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-3xl font-semibold tracking-tight">Teams</h1><p className="mt-1 text-sm text-muted-foreground">Meet the league’s squads, explore their lineups, and find your place.</p></div>{account && <Button onClick={() => setShowSubmit(true)}><Plus className="mr-2 size-4" />Submit team</Button>}</header>
@@ -61,22 +73,24 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
     </div>
     {error && <Alert variant="destructive"><AlertDescription>{error.message}<Button variant="link" onClick={() => { reset(); void refetch({ after: null }).catch(() => {}); }}>Restart teams</Button></AlertDescription></Alert>}
     {actionError && <Alert variant="destructive"><AlertDescription>{actionError}</AlertDescription></Alert>}
+    {receipt && <Alert role="status"><AlertDescription>{receipt}</AlertDescription></Alert>}
+    {refreshError && <Alert variant="destructive"><AlertDescription>{refreshError}<Button className="ml-2" variant="outline" disabled={refreshing} onClick={() => { void refreshAfterChange(receipt); }}>{refreshing ? 'Refreshing…' : 'Retry refresh'}</Button></AlertDescription></Alert>}
     {loading && <div role="status" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3"><span className="sr-only">Loading teams…</span>{[0, 1, 2].map(index => <Skeleton key={index} className="h-64 rounded-xl" />)}</div>}
     {!loading && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{data?.teamSummaries.nodes.map(team => <Card key={team.id} className="flex min-w-0 flex-col overflow-hidden">
       <CardHeader className="gap-4"><div className="flex items-center justify-between gap-3"><div className="flex size-16 shrink-0 items-center justify-center rounded-xl border bg-muted">{team.logoUrl ? <MediaImage src={team.logoUrl} alt={`${team.name} logo`} className="size-14 object-contain" /> : <Shield className="size-7 text-muted-foreground" />}</div><Badge variant={team.status === 'approved' ? 'secondary' : 'outline'} className="capitalize">{team.status}</Badge></div><div><CardTitle className="break-words text-xl">{team.name}</CardTitle><p className="mt-1 text-sm text-muted-foreground">{team.tag}</p></div></CardHeader>
       <CardContent className="flex-1 space-y-2 text-sm"><p className="flex items-center gap-2"><Users className="size-4 text-muted-foreground" />{team.memberCount} players</p><p className="break-words text-muted-foreground">Captain: <span className="text-foreground">{team.ownerUsername}</span></p>
-        {team.viewerInvitation === 'pending' && <div className="mt-4 space-y-3 rounded-lg border bg-muted/50 p-3"><p>You are invited to this team.</p><div className="flex flex-wrap gap-2"><Button size="sm" disabled={responding !== null} onClick={() => { void invitation(team.id, true); }}>Accept</Button><Button variant="outline" size="sm" disabled={responding !== null} onClick={() => { void invitation(team.id, false); }}>Decline</Button></div>{responding === team.id && <p role="status">Saving your response…</p>}</div>}
+        {team.viewerInvitation === 'pending' && !responded.has(team.id) && <div className="mt-4 space-y-3 rounded-lg border bg-muted/50 p-3"><p>You are invited to this team.</p><div className="flex flex-wrap gap-2"><Button size="sm" disabled={responding !== null} onClick={() => { void invitation(team.id, true); }}>Accept</Button><Button variant="outline" size="sm" disabled={responding !== null} onClick={() => { void invitation(team.id, false); }}>Decline</Button></div>{responding === team.id && <p role="status">Saving your response…</p>}</div>}
       </CardContent><CardFooter><Button variant="outline" className="w-full" onClick={() => setSelected(team.id)}>View roster and team</Button></CardFooter>
     </Card>)}</div>}
     {!loading && data?.teamSummaries.totalCount === 0 && <Card><CardContent className="space-y-2 py-12 text-center"><Users className="mx-auto size-8 text-muted-foreground" /><p className="font-medium">No teams match this view.</p><p className="text-sm text-muted-foreground">Try another search or browse the league directory.</p></CardContent></Card>}
     <div className="flex justify-between gap-3"><Button variant="outline" disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous teams</Button><Button variant="outline" disabled={loading || !data?.teamSummaries.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.teamSummaries.pageInfo.endCursor ?? null); }}>Next teams</Button></div>
     {account && <section className="border-t pt-6" aria-label="League standings"><TeamStandings /></section>}
-    {showSubmit && account && <SubmitTeamModal account={account} onClose={() => setShowSubmit(false)} onSave={() => { void refreshed().catch((error: unknown) => { setActionError(error instanceof Error ? error.message : 'Team submitted, but refreshing failed.'); }); }} />}
-    {selected && <TeamDetails key={selected} id={selected} account={account} onClose={() => setSelected(null)} onChanged={refreshed} />}
+    {showSubmit && account && <SubmitTeamModal account={account} onClose={() => setShowSubmit(false)} onSave={() => { void refreshAfterChange('Team submitted for approval.'); }} />}
+    {selected && <TeamDetails key={selected} id={selected} account={account} onClose={() => setSelected(null)} onChanged={refreshAfterChange} />}
   </div>;
 }
 
-function TeamDetails({ id, account, onClose, onChanged }: { id: string; account: Account | null; onClose: () => void; onChanged: () => Promise<void> }) {
+function TeamDetails({ id, account, onClose, onChanged }: { id: string; account: Account | null; onClose: () => void; onChanged: (message: string) => Promise<void> }) {
   const detail = useResource(async () => {
     const team = await request<TeamDetail>(`/api/teams/${segment(id)}`);
     const lineup = z.record(z.string(), z.string()).parse(await readFields(team.lineupUrl));
@@ -90,15 +104,17 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
   const [busy, setBusy] = useState(false);
   const team = detail.data;
   const changeMembership = async () => {
+    if (!confirmation || busy) return;
     setBusy(true); setError('');
     try {
       if (confirmation === 'leave') await teamApi.changeMembership(id, 'leave');
       else await teamApi.deleteTeam(id);
-      await onChanged(); onClose();
-    } catch (error) { setError(error instanceof Error ? error.message : 'Could not update team membership.'); }
-    finally { setBusy(false); }
+    } catch (error) { setError(error instanceof Error ? error.message : 'Could not update team membership.'); setBusy(false); return; }
+    setConfirmation(null);
+    onClose();
+    await onChanged(confirmation === 'leave' ? 'You left the team.' : 'Rejected team submission dismissed.');
   };
-  return <ModalShell title={team?.name ?? 'Team'} onClose={onClose} maxWidth="max-w-4xl">
+  return <ModalShell title={team?.name ?? 'Team'} onClose={busy ? undefined : onClose} maxWidth="max-w-4xl">
     <div className="space-y-5">
       {(detail.loading || roster.loading) && <p role="status" className="text-sm text-muted-foreground">Loading team and roster…</p>}
       {(detail.error || roster.error || error) && <Alert variant="destructive"><AlertDescription>{detail.error || roster.error?.message || error}<Button variant="link" onClick={() => { setError(''); void detail.reload(); void roster.refetch({ after: null }).catch((error: unknown) => { setError(error instanceof Error ? error.message : 'Could not load roster.'); }); }}>Reload team</Button></AlertDescription></Alert>}

@@ -1,6 +1,6 @@
 # NAPL
 
-NAPL is a league application built with React and a Fastify API running on AWS Lambda. Apollo Server executes the API's fixed GraphQL reads; REST routes handle commands and other reads. The API reads and writes Supabase PostgreSQL data and uses Supabase Auth with Discord OAuth for sign-in.
+NAPL is a league application built with React, shadcn/ui and a Fastify API running on AWS Lambda. Apollo Server executes the API's fixed GraphQL reads; REST routes handle commands and other reads. The API reads and writes Supabase PostgreSQL data and uses Supabase Auth with Discord OAuth for sign-in.
 
 ## Table of Contents
 
@@ -66,7 +66,7 @@ Opening the dashboard loads league data through the Lambda API and displays it. 
 
 ![Successful import of a new match sequence](docs/match-import.png)
 
-An administrator imports a new match with every player mapped to an account. The API saves the match records and updated player statistics together. [Implementation](api/routes/matches/index.ts#L147).
+An administrator imports a new match with every player mapped to an account. The API saves the match records and updated player statistics together. [Implementation](api/routes/matches/routes.ts).
 
 ### Match Review
 
@@ -78,19 +78,19 @@ The retained submission API lets an administrator approve an existing pending su
 
 ![Successful team invitation acceptance sequence](docs/roster-membership.png)
 
-An eligible player accepts an invitation to an approved team. The API saves the roster, account assignment, and transfer history together. [Implementation](api/routes/teams/index.ts#L17).
+An eligible player accepts an invitation to an approved team. The API saves the roster, account assignment, and transfer history together. [Implementation](api/routes/teams/routes.ts).
 
 ### Season Schedule
 
 ![Atomic season schedule replacement sequence](docs/season-schedule.png)
 
-An administrator confirms a generated schedule. The API validates it and replaces the season's schedule in one transaction. [Implementation](api/routes/content/index.ts#L157).
+An administrator confirms a generated schedule. The API validates it and replaces the season's schedule in one transaction. [Implementation](api/routes/content/routes.ts).
 
 ### Voting
 
 ![Team of the Week ballot validation and replacement sequence](docs/voting.png)
 
-A member submits a valid ballot during an open voting period. The API checks the selections and saves the complete ballot together. [Implementation](api/routes/voting/index.ts#L57).
+A member submits a valid ballot during an open voting period. The API checks the selections and saves the complete ballot together. [Implementation](api/routes/voting/routes.ts).
 
 ## Components
 
@@ -98,12 +98,17 @@ A member submits a valid ballot during an open voting period. The API checks the
 
 See the [web guide](web/README.md) for package internals and development commands.
 
+The frontend uses checked-in New York components from **shadcn@2.3.0**, compatible with React 18 and Tailwind CSS 3, pinned to source commit `c8c4027b6b192822ea2952b225ee4760cddedf0d`. [Component provenance](web/src/components/ui/README.md) records the upstream license and project adaptations; the [UI architecture guide](web/README.md#ui-architecture) covers the pinned pnpm CLI, responsive behavior and maintenance. Radix supplies dialogs, menus and form interaction. The sidebar changes to a mobile sheet below 1024px, and administration changes from a section rail to a Select below 1280px. Light/dark preferences stay local to the browser. Rajdhani supplies interface text and Anton the ASL display lettering.
+
 | Component | What it does |
 | --- | --- |
 | [web/src/features/](web/src/features/) | League screens, admin tools, domain models, commands, and typed query consumers. |
 | [web/src/api/](web/src/api/) | Sends HTTP and GraphQL requests, caches reads, handles session refresh, and contains generated GraphQL types. |
 | [web/src/auth/](web/src/auth/) | Starts Discord sign-in, loads the current account, and signs out. |
 | [web/src/hooks/](web/src/hooks/) | Tracks loading, data, and errors while ignoring outdated request results. |
+| [web/src/components/ui/](web/src/components/ui/) | shadcn/Radix primitives; feature components retain business state and API calls. |
+
+The [UI overhaul design](docs/ui-overhaul.md) records component choices, per-tab and per-feature behavior, and verification evidence. Player tables and account selectors assemble up to 50 rows per display page while preserving the API's individual response limits and cursor ordering; see [UI architecture](web/README.md#ui-architecture).
 
 ### Lambda API
 
@@ -128,7 +133,7 @@ When the Lambda API starts, it loads its settings and prepares database access a
 
 ### Sign-in and Permissions
 
-When someone opens the app, it checks whether they are signed in. Visitors can browse the public pages; standings require sign-in and appear in the member dashboard. The app checks again when another browser tab reports a session change. The [main screen](web/src/App.tsx#L8) controls this choice.
+When someone opens the app, it checks whether they are signed in. Visitors can browse the public pages; standings require sign-in and appear in the member dashboard. The app checks again when another browser tab reports a session change. The [main screen](web/src/App.tsx) controls this choice.
 
 Choosing “Sign in with Discord” starts Supabase SDK OAuth with PKCE. The frontend handles `/auth/callback`, exchanges the code, and calls `POST /api/accounts/me` with the bearer access token and an available provider token. The API verifies the JWT, checks database roles, and provisions a missing league account from the verified Discord identity. Discord credentials remain in Supabase Dashboard. Guild membership is not an API access condition.
 
@@ -177,24 +182,24 @@ Rankings use stored account statistics and configured position weights; card row
 
 When someone saves a change, the browser sends it to the API. The API checks their permissions and validates the submitted data before writing to the database. Related changes are saved together: they either all succeed or are rolled back. The [database implementation](api/plugins/db/client.ts#L10) also protects these writes from conflicting concurrent changes and gives each transaction a 15-second time limit.
 
-Administrators enter match statistics through the [Import tab](web/src/features/admin/AdminPanel.tsx#L153). A successful import follows four steps:
+Administrators enter match statistics through the [Import tab](web/src/features/admin/AdminPanel.tsx). A successful import follows four steps:
 
-1. The administrator uploads a match export, selects the teams, and connects each exported player to a league account. The [file reader](web/src/features/matches/match-import.tsx#L62) prepares the export for review.
-2. After confirmation, the browser sends the match details, player mappings, team IDs, season, and any tackle corrections to the API. See [import submission](web/src/features/matches/match-import.tsx#L97).
-3. The API validates the import, adds the match to each mapped player's history, and recalculates their statistics. These account updates are saved together by the [import handler](api/routes/matches/index.ts#L147).
-4. The app shows the match ID and import counts, then [reloads league data](web/src/features/admin/AdminPanel.tsx#L38) so the updated results appear on screen.
+1. The administrator uploads a match export, selects the teams, and connects each exported player to a league account. The [file reader](web/src/features/matches/match-import.tsx) prepares the export for review.
+2. After confirmation, the browser sends the match details, player mappings, team IDs, season, and any tackle corrections to the API. See [import submission](web/src/features/matches/match-import.tsx).
+3. The API validates the import, adds the match to each mapped player's history, and recalculates their statistics. These account updates are saved together by the [import handler](api/routes/matches/routes.ts).
+4. The app shows the match ID and import counts, then [reloads league data](web/src/features/admin/AdminPanel.tsx) so the updated results appear on screen.
 
 Other league changes follow the same pattern of checking permissions, validating input, and saving related records together:
 
 | Action and caller | Feature API → endpoint | Server implementation |
 | --- | --- | --- |
-| [TeamsView.respondInvitation](web/src/features/teams/teams-view.tsx#L78) | [teams.respondInvitation](web/src/features/teams/api.ts#L13) → `POST /api/teams/:id/invitation` | [registerTeams](api/routes/teams/index.ts#L205) records acceptance; for an approved team, [moveMember](api/routes/teams/index.ts#L17) updates the roster, account assignment, and transfer history. |
-| [GenerateScheduleModal.handleGenerate](web/src/features/matches/schedule-setup.tsx#L70) | [matches.replaceScheduledSeason](web/src/features/matches/api.ts#L15) → `PUT /api/schedule/season/:season` | [registerContent](api/routes/content/index.ts#L157) validates `scheduleInput` rows and replaces the season's scheduled matches. Schedule generation itself happens in the browser. |
-| [VotingTab.handleSubmit](web/src/features/voting/VotingTab.tsx#L63) | [voting.submitTotwVotes](web/src/features/voting/api.ts#L10) → `PUT /api/voting/periods/:id/votes` | [registerVoting](api/routes/voting/index.ts#L57) validates `voteInput`, checks the voting window and candidates, and replaces the member's ballot. |
+| [TeamsView.respondInvitation](web/src/features/teams/teams-view.tsx) | [teams.respondInvitation](web/src/features/teams/api.ts) → `POST /api/teams/:id/invitation` | [registerTeams](api/routes/teams/routes.ts) records acceptance; for an approved team, [moveMember](api/routes/teams/routes.ts) updates the roster, account assignment, and transfer history. |
+| [GenerateScheduleModal.handleGenerate](web/src/features/matches/schedule-setup.tsx) | [matches.replaceScheduledSeason](web/src/features/matches/api.ts) → `PUT /api/schedule/season/:season` | [registerContent](api/routes/content/routes.ts) validates `scheduleInput` rows and replaces the season's scheduled matches. Schedule generation itself happens in the browser. |
+| [VotingTab](web/src/features/voting/VotingTab.tsx) | [voting.submitTotwVotes](web/src/features/voting/api.ts) → `PUT /api/voting/periods/:id/votes/me` | [registerVoting](api/routes/voting/routes.ts) validates `voteInput`, checks the voting window and candidates, and replaces the member's ballot. The corresponding `GET` reads only the caller's ballot. |
 
 The [shared validation rules](pkgs/contracts/src/index.ts) define the accepted data for these commands. Manual submission and approval endpoints remain implemented and tested in the [API](api/routes/matches/routes.ts), including `POST /api/submissions/:id/approve`. Their unreachable browser forms have been removed. Imported matches are saved directly; they do not pass through manual approval.
 
-After a successful change, the browser [clears cached query results and stops older queries still in progress](web/src/api/client.ts#L20). Apollo refetches active GraphQL queries; REST screens keep their explicit reloads. Late responses cannot refill the cache with old data.
+After a successful change, the browser [clears cached query results and stops older queries still in progress](web/src/api/client.ts). Apollo refetches active GraphQL queries; REST screens keep their explicit reloads. Late responses cannot refill the cache with old data.
 
 ## Browser Cache
 
@@ -208,7 +213,7 @@ Session changes and logout clear the cache without refetching the departing user
 
 The API's reuse of data within a single request ends with that request. It is independent of the browser cache.
 
-Run browser tests for cache reuse, explicit refetch, reactive updates, validation, command invalidation, cancellation, and session isolation:
+Run frontend unit tests for cache reuse, explicit refetch, reactive updates, validation, command invalidation, cancellation, and session isolation:
 
 ```sh
 pnpm --filter @napl/web test
@@ -220,7 +225,7 @@ See the [frontend hook/helper inventory](web/README.md) for the retained REST li
 
 ## Administrator Assignment History
 
-Only a verified super administrator can change the administrator list. The API checks that the selected accounts exist, removes repeated IDs, and compares the selection with the current list. Reordering the IDs or changing their capitalization still counts as the same selection and creates no history entry. This action changes administrator assignments while leaving super-administrator assignments intact. See the [assignment handler](api/routes/admin/index.ts#L11).
+Only a verified super administrator can change the administrator list. The API checks that the selected accounts exist, removes repeated IDs, and compares the selection with the current list. Reordering the IDs or changing their capitalization still counts as the same selection and creates no history entry. This action changes administrator assignments while leaving super-administrator assignments intact. See the [assignment handler](api/routes/admin/routes.ts).
 
 Every changed list records who made the change, when the database saved it, and the complete lists before and after the change. The actor comes from the verified session. The assignments and their history are saved together, so a failure to record the history also prevents the assignment change. Concurrent changes either save complete lists with matching history or return a conflict.
 
@@ -338,13 +343,20 @@ Vite listens on `http://localhost:5173`. Set `VITE_API_URL=http://localhost:3000
 pnpm run generate
 pnpm run gql:check
 pnpm run typecheck
+pnpm run typecheck:browser
+pnpm run check:dependencies
 pnpm run lint
+pnpm test
 pnpm run build
+pnpm --filter @napl/web exec playwright install chromium webkit
+pnpm run test:browser
 pnpm run test:integration
 sam validate --lint --template-file api/template.yaml
 ```
 
 The integration runner creates disposable PostgreSQL containers, applies fixtures and migrations, and runs the workspace tests, including authorization, schedule rollback/concurrency, server commands, GraphQL validation, session isolation, and theme behavior. It also checks the bundled Lambda package outside the repository. It does not modify live data. `pnpm run test:sam` additionally invokes the package through SAM's local container.
+
+`pnpm run check` combines generation checks, application/browser type-checking, dependency boundaries, lint, unit tests, builds and browser tests. Database integration and SAM checks remain separate commands. The browser suite starts its own Vite server with synthetic API/auth data: no hosted credentials or database are needed. Its [eight projects](web/playwright.config.ts) exercise desktop/mobile Chromium and WebKit at 1440px and 390px, plus Chromium destination, administration, navigation and recovery checks at 320px, 768px, 1024px and 1280px. Tests include both themes, keyboard interaction, mutations and exact navigation breakpoint transitions. Reports, screenshots and retained failure traces are written to `web/playwright-report` and `web/test-results`; see the [browser guide](web/test/browser/README.md). Test commands document the workflow; the PR and [UI overhaul evidence](docs/ui-overhaul.md) record the current run results.
 
 ## Production deployment
 
@@ -460,8 +472,8 @@ The [CI/CD workflow](.github/workflows/ci-cd.yml) runs once per push. Its summar
 
 | Stage | What happens |
 | --- | --- |
-| Lint | Run ESLint with zero warnings allowed. Then generate the Prisma client, check GraphQL freshness, type-check every workspace, and validate both SAM templates. Each operation has its own named step and log entry. |
-| Test | Generate the test runner's Prisma client, then run API and web tests against disposable PostgreSQL. The test command prepares the shared contracts it needs. |
+| Lint | Run ESLint with zero warnings allowed, generate Prisma, check GraphQL freshness, type-check workspaces and browser fixtures, check dependency boundaries, and validate both SAM templates. Each operation has its own named step and log entry. |
+| Test | Run API and web tests against disposable PostgreSQL, install Chromium/WebKit, then run the eight-project responsive UI/accessibility suite with synthetic transport. Upload browser reports and traces even when checks fail. |
 | Build | Generate the build's Prisma client, build shared contracts, bundle Lambda, and build the static frontend in separate ordered steps. Verify the finished Lambda ZIP outside the repository against disposable PostgreSQL. On `main`, upload that exact tested ZIP and template for deployment. |
 | Deploy | Download the tested artifact without rebuilding it, validate production configuration, confirm that the commit is still current on `main`, obtain temporary credentials, and update the `napl-api` stack in Ohio. Inspect the live URL configuration and bounded permissions, then check public database reads, protected anonymous rejection, allowed preflight and rejected-origin CORS through that URL. Clean up deployment parameter files even on failure. Deployments run one at a time. |
 

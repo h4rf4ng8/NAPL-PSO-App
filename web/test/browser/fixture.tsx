@@ -1,7 +1,7 @@
-import React, { StrictMode, useState, useRef, useEffect } from 'react';
+import { StrictMode, useState, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../../src/index.css';
-import { Dialog, ModalShell } from '../../src/components/Dialog';
+import { ModalShell } from '../../src/components/Dialog';
 import { Metric, RecordBox, ResultBadge, EmptyState, QuickStat, Section, ResultRow, TeamPill } from '../../src/components/Display';
 import { PlayerCard } from '../../src/components/PlayerCard';
 import { ShareableCardModal } from '../../src/components/ShareableCardModal';
@@ -9,12 +9,10 @@ import { applyTheme, type ThemeMode } from '../../src/theme/theme';
 import { renderCardToBlob } from '../../src/components/player-card-image';
 import type { Account, Team } from '../../src/api/models';
 
-const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: '#000a', zIndex: 50, display: 'grid', placeItems: 'center' };
-const panel: React.CSSProperties = { background: 'white', padding: 24, minWidth: 320, borderRadius: 12, color: '#152238' };
 function Mandatory({ close, empty = false }: { close: () => void; empty?: boolean }) {
-  return <Dialog label={empty ? 'Empty dialog' : 'Mandatory onboarding'}>
-    <div style={panel}>{empty ? 'No focusable controls' : <><p>Required onboarding</p><button onClick={close}>Complete onboarding</button></>}</div>
-  </Dialog>;
+  return <ModalShell title={empty ? 'Empty dialog' : 'Mandatory onboarding'}>
+    <div className="space-y-4">{empty ? 'No focusable controls' : <><p>Required onboarding</p><button onClick={close}>Complete onboarding</button></>}</div>
+  </ModalShell>;
 }
 const stats = { games: 12, wins: 8, draws: 2, losses: 2, goals: 24, assists: 9, passes: 80, tackles: 20, deflects: 0, catches: 0, cleanSheets: 2, motm: 3 };
 const account: Account = { id: 'fixture-player', username: 'Fixture Player', position: 'ST', teamId: null, imageUrl: null, country: null, stats, seasonStats: { all: stats }, ranking: { score: 82, percentile: 0.73, ranked: true, gamesPlayed: 12, tier: 'GOLD' }, cardStats: [{ season: 'all', cells: ['GOALS', 'TKL/G', 'ASSIST', 'W-L', 'PASS/G', 'GP'].map((label, i) => ({ label, value: String(i + 1) })) }], awards: [], championships: [], totwUntil: null, cheater: false, strikersId: null, steamUrl: null, createdAt: 1 };
@@ -87,16 +85,16 @@ function Fixture() {
       <TeamPill fallback="TBD" />
     </div>
     <div id="card-fixtures"><Cards /></div>
-    {open === 'dialog' && <Dialog onClose={close} label="Team details" style={overlay} onClick={e => { if (e.target === e.currentTarget) close(); }}>
-      <div style={panel}><h2>Team details</h2>
+    {open === 'dialog' && <ModalShell onClose={close} title="Team details">
+      <div className="space-y-4"><h2>Team details</h2>
         <button id="open-picker" onClick={() => setNested(true)}>Choose lineup player</button>
         <button onClick={() => setVersion(v => v + 1)}>Change callback version</button>
         <button onClick={close}>Close team details</button>
-        {nested && <Dialog onClose={() => setNested(false)} label="Select lineup player" style={{ ...overlay, zIndex: 60 }} onClick={e => { if (e.target === e.currentTarget) setNested(false); }}>
-          <div style={panel}><h2>Select lineup player</h2><button id="first-choice">First player</button><button id="last-choice" onClick={() => setNested(false)}>Cancel picker</button><button onClick={close}>Close all dialogs</button></div>
-        </Dialog>}
+        {nested && <ModalShell onClose={() => setNested(false)} title="Select lineup player">
+          <div className="space-y-4"><h2>Select lineup player</h2><button id="first-choice">First player</button><button id="last-choice" onClick={() => setNested(false)}>Cancel picker</button><button onClick={close}>Close all dialogs</button></div>
+        </ModalShell>}
       </div>
-    </Dialog>}
+    </ModalShell>}
     {open === 'share' && <ShareableCardModal account={decorated} team={team} onClose={close} />}
     {open === 'modal' && <ModalShell title="EDIT ARTICLE" onClose={close}><input aria-label="Article title" defaultValue="Fixture title" /><button onClick={close}>Save article</button></ModalShell>}
     {open === 'mandatory' && <Mandatory close={close} />}

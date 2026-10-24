@@ -24,6 +24,10 @@ jobs:
         run: pnpm run gql:check
       - name: Type-check workspaces
         run: pnpm run typecheck
+      - name: Type-check browser fixtures
+        run: pnpm run typecheck:browser
+      - name: Check dependency boundaries
+        run: pnpm run check:dependencies
       - name: Install AWS SAM CLI
         uses: aws-actions/setup-sam@v2
         with: {version: '1.165.0', use-installer: true}
@@ -42,8 +46,8 @@ jobs:
 
           | Job | Steps |
           | --- | --- |
-          | Lint | ESLint, Prisma generation, GraphQL freshness, type-checking, and both SAM templates. |
-          | Test | API and web integration tests against disposable PostgreSQL. |
+          | Lint | ESLint, Prisma generation, GraphQL freshness, app/browser type-checking, dependency boundaries, and both SAM templates. |
+          | Test | API and web integration tests against disposable PostgreSQL; isolated Chromium/WebKit UI and accessibility checks. |
           | Build | Shared contracts, Lambda package, static frontend, and verification of the finished Lambda ZIP. |
           | Deploy | On main only: deployment parameters, temporary AWS credentials, deployment, smoke test, and cleanup. |
           SUMMARY
@@ -52,7 +56,7 @@ jobs:
     name: Test
     needs: lint
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -67,6 +71,20 @@ jobs:
         run: pnpm run prisma:generate
       - name: Run API and web integration tests
         run: bash api/test/integration/run.sh --tests
+      - name: Install Chromium and WebKit
+        run: pnpm --filter @napl/web exec playwright install --with-deps chromium webkit
+      - name: Test responsive frontend and browser interactions
+        run: pnpm run test:browser
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-${{ github.sha }}-${{ github.run_attempt }}
+          path: |
+            web/playwright-report
+            web/test-results
+          if-no-files-found: ignore
+          retention-days: 7
 
   build:
     name: Build

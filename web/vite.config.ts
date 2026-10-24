@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   resolve: { alias: { '@': fileURLToPath(new URL('src', import.meta.url)) } },
   envDir: fileURLToPath(new URL('.', import.meta.url)),
+  optimizeDeps: { entries: ['index.html', 'test/browser/index.html', 'test/browser/regression.html'] },
   plugins: [react(), {
     name: 'fixture-fonts',
     transformIndexHtml: {
@@ -18,5 +19,5 @@ export default defineConfig({
       },
     },
   }],
-  server: { port: 5173, strictPort: true },
+  server: { port: 5173, strictPort: true, watch: { ignored: ['**/test-results/**', '**/playwright-report/**'] } },
 });

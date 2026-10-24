@@ -16,3 +16,7 @@ Open `http://localhost:5173/test/browser/index.html`. The fixture runs React Str
 - Browser focus and scroll status reports focus, scroll lock, and active dialog count. The callback version controls check that Escape uses the latest callback.
 
 The temporary original-component comparison and 60-case exact normalized SVG parity script are archived outside the repository in `/private/tmp/napl-component-browser-baseline`, with restoration instructions.
+
+Automated browser checks run with `pnpm --filter @napl/web exec playwright test` after `pnpm --filter @napl/web exec playwright install chromium webkit`. The configuration starts Vite on port 4174 with synthetic public settings. It checks desktop and mobile Chromium and WebKit; artifacts are written to `web/test-results` and `web/playwright-report`.
+
+`transport.ts` intercepts the real application's HTTP requests and seeds synthetic visitor/member/captain/admin sessions. It blocks external requests, serves synthetic league data, and records unexpected requests. Default runs use a small placeholder image and system font fallbacks. Set `BROWSER_ASSET_CACHE` to a local directory of the original content-addressed `<sha256>.bin` assets for visual comparison with production artwork and fonts. No credentials or hosted database are needed.

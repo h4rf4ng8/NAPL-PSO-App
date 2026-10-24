@@ -1,13 +1,22 @@
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../components/ui/collapsible';
 import { useQuery } from '@apollo/client/react';
 import { SeasonsDocument } from '../../api/generated/graphql';
 import { PageButtons } from '../../components/PageButtons';
 import { z } from 'zod';
-import { Calendar, Clock, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { Calendar, Clock } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 import { settings as adminApi } from './api';
 import type { Account } from '../accounts/models';
 import { EmptyState } from '../../components/Display';
-import { C } from '../../theme/theme';
+
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+
 
 
 
@@ -18,7 +27,6 @@ import { C } from '../../theme/theme';
 export const SeasonManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
   const [customName, setCustomName] = useState('');
   const [showCustom, setShowCustom] = useState(false);
-  const [error, setError] = useState('');
 
   const [after,setAfter] = useState<string|null>(null);
   const [previous,setPrevious] = useState<(string|null)[]>([]);
@@ -31,146 +39,58 @@ export const SeasonManager = ({ account: _account, currentSeason, onRefresh }: {
   };
   const nextSeason = suggestNext(currentSeason);
 
-  const startNextSeason = async () => {
-    if (!confirm(
-      `Start ${nextSeason}?\n\nFrom now on, all new matches will be tagged ${nextSeason}.\nPast season stats will still be viewable, but ${currentSeason} is now closed.\n\nMake sure ${currentSeason} awards have been assigned first!`
-    )) return;
-    await adminApi.setSeason(nextSeason);
-    onRefresh();
-  };
-
-  const setCustom = async () => {
-    setError('');
-    const name = customName.trim().toUpperCase();
-    if (!name) { setError('Enter a season name'); return; }
-    if (!/^[A-Z0-9-]+$/.test(name)) { setError('Letters, numbers, and dashes only'); return; }
-    if (!confirm(`Switch active season to ${name}?`)) return;
-    await adminApi.setSeason(name);
-    setCustomName('');
-    setShowCustom(false);
-    onRefresh();
-  };
-
   const summaries = z.array(z.object({games:z.number(),players:z.number()})).safeParse(seasons.data?.seasons.summaries ?? []);
   const seasonSummaries = (seasons.data?.seasons.nodes ?? []).map((season,index)=>({season,...(summaries.success && summaries.data[index])}));
 
-  return (
-    <div className="space-y-5">
-      {/* CURRENT SEASON DISPLAY */}
-      <div className="rounded-xl p-5" style={{
-        background: `linear-gradient(135deg, ${C.gold}22 0%, ${C.navyDeep}cc 100%)`,
-        border: `1px solid ${C.gold}66`,
-        boxShadow: `0 4px 16px ${C.gold}22`,
-      }}>
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: C.greenLight }} />
-          <span className="font-mono text-[10px] tracking-[0.3em]" style={{ color: `${C.cream}99` }}>CURRENTLY ACTIVE</span>
-        </div>
-        <div className="font-display text-5xl tracking-wider mb-1" style={{ color: C.goldLight }}>
-          SEASON {currentSeason.replace(/^S/, '')}
-        </div>
-        <div className="font-mono text-[11px] tracking-wider" style={{ color: `${C.cream}88` }}>
-          ALL NEW MATCHES TAGGED <span style={{ color: C.goldLight }}>{currentSeason}</span>
-        </div>
-      </div>
-
-      {/* START NEXT SEASON */}
-      <div className="rounded-xl p-4" style={{
-        background: `${C.navyDeep}aa`,
-        border: `1px solid ${C.navyLight}66`,
-      }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={14} style={{ color: C.greenLight }} />
-          <span className="font-display text-xl tracking-wider" style={{ color: C.cream }}>START NEXT SEASON</span>
-        </div>
-        <p className="font-body text-sm mb-3" style={{ color: `${C.cream}aa` }}>
-          One click closes <strong>{currentSeason}</strong> and opens <strong>{nextSeason}</strong>. Past season stats and awards are kept forever. Players will see their {currentSeason} stats frozen, while new matches go into {nextSeason}.
-        </p>
-        <button
-          onClick={startNextSeason}
-          className="w-full py-3 font-heading tracking-wider text-base rounded transition-all hover:scale-[1.01]"
-          style={{
-            background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-            color: C.onColor,
-            boxShadow: `0 4px 12px ${C.green}66`,
-          }}
-        >▶ START {nextSeason}</button>
-
-        <button
-          onClick={() => setShowCustom(s => !s)}
-          className="w-full mt-2 py-1.5 font-mono text-[10px] tracking-[0.2em]"
-          style={{ color: `${C.cream}77` }}
-        >{showCustom ? '▲ HIDE CUSTOM NAME' : '▼ USE CUSTOM SEASON NAME'}</button>
-
-        {showCustom && (
-          <div className="mt-2">
-            <div className="flex gap-2">
-              <input
-                type="text" value={customName}
-                onChange={(e) => setCustomName(e.target.value.toUpperCase())}
-                placeholder="e.g. WINTER25"
-                className="flex-1 rounded px-3 py-2 font-mono focus:outline-none"
-                style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              />
-              <button onClick={setCustom} className="px-4 py-2 font-heading tracking-wider text-xs rounded" style={{
-                background: C.gold, color: C.brandNavy,
-              }}>SET</button>
-            </div>
-            {error && <div className="mt-1 font-mono text-xs" style={{ color: C.redLight }}>{error}</div>}
-          </div>
-        )}
-      </div>
-
-      {/* SEASON HISTORY */}
-      <div>
-        <h4 className="font-display text-xl tracking-wider mb-2 flex items-center gap-2" style={{ color: C.cream }}>
-          <Clock size={14} style={{ color: C.goldLight }} /> SEASON HISTORY
-        </h4>
-        {seasons.loading && <p role="status">Loading season history…</p>}
-        {seasons.error && <p role="alert">{seasons.error.message}</p>}
-        <PageButtons loading={seasons.loading} canPrevious={previous.length > 0} hasNextPage={seasons.data?.seasons.pageInfo.hasNextPage ?? false}
-          previous={()=>{setAfter(previous.at(-1) ?? null);setPrevious(previous.slice(0,-1));}}
-          next={()=>{setPrevious([...previous,after]);setAfter(seasons.data?.seasons.pageInfo.endCursor ?? null);}} />
-        {seasonSummaries.length === 0 ? (
-          <EmptyState icon={<Calendar size={36} />} text="No past seasons yet." />
-        ) : (
-          <div className="space-y-1.5">
-            {seasonSummaries.map(s => {
-              const isActive = s.season === currentSeason;
-              return (
-                <div key={s.season} className="rounded p-3 flex items-center gap-3" style={{
-                  background: isActive ? `${C.green}22` : `${C.navyDeep}aa`,
-                  border: `1px solid ${isActive ? C.greenLight : C.navyLight}55`,
-                  borderLeft: `3px solid ${isActive ? C.greenLight : C.navyLight}`,
-                }}>
-                  <div className="flex-1">
-                    <div className="font-display text-2xl tracking-wider" style={{ color: C.cream }}>
-                      {s.season}
-                      {isActive && <span className="ml-2 font-mono text-[10px] px-2 py-0.5 rounded" style={{
-                        background: C.greenLight, color: C.onColor,
-                      }}>ACTIVE</span>}
-                    </div>
-                    <div className="font-mono text-[10px] tracking-wider mt-0.5" style={{ color: `${C.cream}77` }}>
-                      {s.games === undefined ? 'STATISTICS UNAVAILABLE' : `${s.games} PLAYER APPEARANCES • ${s.players} PLAYERS`}
-                    </div>
-                  </div>
-                  {!isActive && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Re-activate ${s.season}? New matches will be tagged with this season again.`)) return;
-                        await adminApi.setSeason(s.season);
-                        onRefresh();
-                      }}
-                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded"
-                      style={{ background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
-                    >RE-ACTIVATE</button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  const customSeason = customName.trim().toUpperCase();
+  const validCustom = /^[A-Z0-9-]+$/.test(customSeason);
+  return <div className="space-y-5">
+    <Card><CardHeader><Badge className="w-fit" variant="secondary">Active season</Badge><CardTitle className="text-3xl">{currentSeason}</CardTitle><CardDescription>All new matches are tagged with {currentSeason}.</CardDescription></CardHeader></Card>
+    <Card><CardHeader><CardTitle>Start next season</CardTitle><CardDescription>Close {currentSeason} and open {nextSeason}. Past statistics and awards stay available.</CardDescription></CardHeader>
+      <CardContent className="space-y-4">
+        <SeasonActivation season={nextSeason} onActivated={onRefresh}><Button className="w-full">Start {nextSeason}</Button></SeasonActivation>
+        <Collapsible open={showCustom} onOpenChange={setShowCustom}>
+          <CollapsibleTrigger asChild><Button variant="ghost" className="w-full">{showCustom ? 'Hide custom season name' : 'Use a custom season name'}</Button></CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-3">
+            <Label htmlFor="custom-season">Custom season name</Label><Input id="custom-season" value={customName} onChange={event => setCustomName(event.target.value.toUpperCase())} placeholder="For example, WINTER26" aria-describedby="custom-season-help" />
+            <p id="custom-season-help" className="text-xs text-muted-foreground">Use letters, numbers, and dashes.</p>
+            <SeasonActivation season={customSeason} onActivated={() => { setCustomName(''); setShowCustom(false); onRefresh(); }}><Button disabled={!validCustom}>Activate custom season</Button></SeasonActivation>
+          </CollapsibleContent>
+        </Collapsible>
+      </CardContent>
+    </Card>
+    <section className="space-y-3"><h3 className="flex items-center gap-2 text-lg font-semibold"><Clock className="size-5" />Season history</h3>
+      {seasons.loading && <p role="status" className="text-sm text-muted-foreground">Loading season history…</p>}
+      {seasons.error && <Alert variant="destructive"><AlertDescription>{seasons.error.message}</AlertDescription><Button variant="outline" className="mt-2" onClick={() => { setAfter(null); setPrevious([]); void seasons.refetch({after:null}).catch(() => { /* Apollo exposes errors above. */ }); }}>Retry season history</Button></Alert>}
+      {!seasons.loading && !seasons.error && seasonSummaries.length === 0 && <EmptyState icon={<Calendar className="size-8" />} text="No past seasons yet." />}
+      {seasonSummaries.map(summary => <Card key={summary.season} className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="space-y-1"><h4 className="flex items-center gap-2 font-semibold">{summary.season}{summary.season === currentSeason && <Badge variant="secondary">Active</Badge>}</h4><p className="text-sm text-muted-foreground">{summary.games === undefined ? 'Statistics unavailable' : `${summary.games} player appearances · ${summary.players} players`}</p></div>
+        {summary.season !== currentSeason && <SeasonActivation season={summary.season} onActivated={onRefresh}><Button variant="outline">Reactivate {summary.season}</Button></SeasonActivation>}
+      </Card>)}
+      <PageButtons loading={seasons.loading} canPrevious={previous.length > 0} hasNextPage={seasons.data?.seasons.pageInfo.hasNextPage ?? false} previous={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0,-1)); }} next={() => { setPrevious([...previous, after]); setAfter(seasons.data?.seasons.pageInfo.endCursor ?? null); }} />
+    </section>
+  </div>;
 };
+
+function SeasonActivation({ season, onActivated, children }: { season: string; onActivated: () => void; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const activate = async () => {
+    setBusy(true); setError('');
+    try { await adminApi.setSeason(season); setOpen(false); onActivated(); }
+    catch (error) { setError(error instanceof Error ? error.message : 'Could not change the active season.'); }
+    finally { setBusy(false); }
+  };
+  return <AlertDialog open={open} onOpenChange={value => { if (busy) {
+    return;
+  }
+
+  setOpen(value); setError(''); }}>
+    <AlertDialogTrigger asChild>{children}</AlertDialogTrigger>
+    <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Activate {season}?</AlertDialogTitle><AlertDialogDescription>All new matches will be tagged {season}. Previous season statistics remain available. Make sure awards for the current season have been assigned first.</AlertDialogDescription></AlertDialogHeader>
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void activate(); }}>{busy ? 'Activating…' : `Activate ${season}`}</AlertDialogAction></AlertDialogFooter>
+    </AlertDialogContent>
+  </AlertDialog>;
+}

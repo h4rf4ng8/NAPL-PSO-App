@@ -1,3 +1,10 @@
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { useQuery } from '@apollo/client/react';
@@ -9,8 +16,11 @@ import { accounts as accountApi } from '../accounts/api';
 import type { PlayerAward, AdminPlayer } from '../accounts/models';
 import { AWARD_BY_ID, AWARD_TYPES, AwardIcon } from '../../components/Icons';
 import { EmptyState } from '../../components/Display';
-import { C } from '../../theme/theme';
+
 import { AWARD } from '@napl/contracts/accounts';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+
 
 
 
@@ -22,7 +32,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const [season, setSeason] = useState(currentSeason);
   const [awardId, setAwardId] = useState<(typeof AWARD)[keyof typeof AWARD]>(AWARD.STRIKER);
   const [search,setSearch] = useState('');
-  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search), 50);
   const [selected,setSelected] = useState<AdminPlayer|null>(null);
   const [after,setAfter] = useState<string|null>(null);
   const [previous,setPrevious] = useState<(string|null)[]>([]);
@@ -32,7 +42,9 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const setWinnerUsername = (name:string) => {setSelected(allPlayers.find(player=>player.username===name) ?? null);setAfter(null);setPrevious([]);};
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [removing, setRemoving] = useState<string | null>(null);
 
   useEffect(() => { setSeason(currentSeason); }, [currentSeason]);
 
@@ -42,8 +54,20 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const idealCandidates = allPlayers.filter(p => p.position === award.pos);
   const otherCandidates = allPlayers.filter(p => p.position !== award.pos);
 
+  // A refresh may fail after the write succeeds. Retrying here only reloads data.
+  const refreshAfterWrite = async () => {
+    setBusy(true); setRefreshError('');
+    setPrevious([]); setAfter(null);
+    try {
+      await awardPage.refetch({ after: null });
+      await onRefresh();
+    } catch (error) {
+      setRefreshError('The award change was saved, but the latest data could not be loaded: ' + (error instanceof Error ? error.message : String(error)));
+    } finally { setBusy(false); }
+  };
+
   const assignAward = async () => {
-    if (busy) return;
+    if (busy || refreshError) return;
     setError(''); setInfo('');
     if (!winnerUsername) { setError('Pick a winner'); return; }
     if (!season.trim()) { setError('Season required'); return; }
@@ -53,9 +77,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
     try {
       await accountApi.assignAward(player.id, awardId, season.trim());
       setInfo(`✓ ${award.name} ${season.trim()} assigned to ${player.username}`);
-      setPrevious([]); setAfter(null);
-      if (!after) await awardPage.refetch();
-      await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Could not assign award: ' + (error_ instanceof Error ? error_.message : String(error_)));
     } finally {
@@ -64,14 +86,13 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   };
 
   const removeAward = async (player: AdminPlayer, targetAward: Pick<PlayerAward,'awardId'|'season'>) => {
-    if (busy || !confirm(`Remove this award from ${player.username}?`)) return;
+    if (busy || refreshError) return;
     setError(''); setInfo(''); setBusy(true);
     try {
       await accountApi.removeAward(player.id, targetAward.awardId, targetAward.season);
+      setRemoving(null);
       setInfo(`✓ ${AWARD_BY_ID[targetAward.awardId]?.name ?? targetAward.awardId} ${targetAward.season} removed from ${player.username}`);
-      setPrevious([]); setAfter(null);
-      if (!after) await awardPage.refetch();
-      await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Could not remove award: ' + (error_ instanceof Error ? error_.message : String(error_)));
     } finally {
@@ -82,138 +103,52 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const awards = z.array(z.object({awardId:z.string(),season:z.string(),assignedBy:z.string().optional()})).safeParse(awardPage.data?.accountAwards.nodes ?? []);
   const allAwards = selected && awards.success && !awardPage.loading ? awards.data.map(award=>({...award,player:selected})) : [];
 
-  return (
-    <div className="space-y-5">
-      {/* ASSIGN NEW AWARD */}
-      <div className="rounded-lg p-4" style={{
-        background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.navyDeep}aa 100%)`,
-        border: `1px solid ${C.gold}44`,
-      }}>
-        <div className="flex items-center gap-2 mb-3">
-          <Trophy size={16} style={{ color: C.goldLight }} />
-          <span className="font-display text-xl tracking-wider" style={{ color: C.cream }}>ASSIGN AWARD</span>
+  return <div className="space-y-5">
+    <Card className="space-y-5 p-4 sm:p-5">
+      <div className="space-y-2"><h3 className="flex items-center gap-2 text-xl font-semibold"><Trophy className="size-5" />Assign an award</h3><p className="text-sm text-muted-foreground">Choose an award, season, and player. Suggested positions help find candidates; any player can win.</p></div>
+      <RadioGroup aria-label="Award type" value={awardId} disabled={busy} onValueChange={value => setAwardId(value as typeof awardId)} className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {AWARD_TYPES.map(type => <Label key={type.id} htmlFor={`award-${type.id}`} className="flex cursor-pointer flex-col gap-2 rounded-lg border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
+          <div className="flex items-center justify-between gap-2"><AwardIcon awardId={type.id} size={28} /><RadioGroupItem id={`award-${type.id}`} value={type.id} /></div><span className="text-sm leading-relaxed">{type.name}</span><span className="text-xs font-normal leading-relaxed text-muted-foreground">{type.desc}</span>
+        </Label>)}
+      </RadioGroup>
+      <div className="grid items-start gap-4 sm:grid-cols-2">
+        <div className="space-y-2"><Label htmlFor="award-season">Season</Label><Input id="award-season" value={season} disabled={busy} onChange={event => setSeason(event.target.value.toUpperCase())} /></div>
+        <div className="space-y-3">
+          <div className="space-y-2"><Label htmlFor="award-player-search">Search candidates</Label><Input id="award-player-search" aria-label="Find award player" placeholder="Find player…" value={search} disabled={busy} onChange={event => setSearch(event.target.value)} /></div>
+          {playerPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading players…</p>}
+          {playerPage.error && <Alert variant="destructive"><AlertDescription>{playerPage.error}</AlertDescription></Alert>}
+          <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
+          <div className="space-y-2"><Label htmlFor="award-winner">Winner</Label><Select value={winnerUsername} onValueChange={setWinnerUsername} disabled={busy}><SelectTrigger id="award-winner"><SelectValue placeholder="Select a winner" /></SelectTrigger><SelectContent>
+            {idealCandidates.length > 0 && <SelectGroup><SelectLabel>{award.pos} players</SelectLabel>{idealCandidates.map(player => <SelectItem key={player.id} value={player.username}>{player.username}</SelectItem>)}</SelectGroup>}
+            {otherCandidates.length > 0 && <SelectGroup><SelectLabel>Other players</SelectLabel>{otherCandidates.map(player => <SelectItem key={player.id} value={player.username}>{player.username} ({player.position})</SelectItem>)}</SelectGroup>}
+          </SelectContent></Select></div>
         </div>
-
-        {/* Award type picker */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
-          {AWARD_TYPES.map(a => {
-            const active = awardId === a.id;
-            return (
-              <button
-                key={a.id}
-                onClick={() => setAwardId(a.id)}
-                className="p-3 rounded transition-all flex flex-col items-center gap-1.5"
-                style={{
-                  background: active ? `${C.gold}22` : `${C.navyLight}33`,
-                  border: `1.5px solid ${active ? C.gold : 'transparent'}`,
-                }}
-              >
-                <AwardIcon awardId={a.id} size={28} />
-                <span className="font-heading text-[10px] tracking-wider" style={{ color: C.cream }}>{a.name.toUpperCase()}</span>
-                <span className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>{a.desc}</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="grid sm:grid-cols-2 gap-3">
-          <div>
-            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}88` }}>SEASON</label>
-            <input
-              type="text" value={season}
-              onChange={(e) => setSeason(e.target.value.toUpperCase())}
-              className="w-full rounded px-3 py-2 font-mono focus:outline-none"
-              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            />
-          </div>
-          <div>
-            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}88` }}>WINNER</label>
-            <input aria-label="Find award player" placeholder="Find player…" value={search} onChange={event=>setSearch(event.target.value)} />
-            <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
-            {playerPage.error && <p role="alert">{playerPage.error}</p>}
-            <select
-              value={winnerUsername}
-              onChange={(e) => setWinnerUsername(e.target.value)}
-              className="w-full rounded px-3 py-2 font-body focus:outline-none"
-              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            >
-              <option value="" style={{ background: C.navyDeep }}>— Select winner —</option>
-              {idealCandidates.length > 0 && (
-                <optgroup label={`${award.pos} players`}>
-                  {idealCandidates.map(p => <option key={p.username} value={p.username} style={{ background: C.navyDeep }}>{p.username}</option>)}
-                </optgroup>
-              )}
-              {otherCandidates.length > 0 && (
-                <optgroup label="Other players">
-                  {otherCandidates.map(p => <option key={p.username} value={p.username} style={{ background: C.navyDeep }}>{p.username} ({p.position})</option>)}
-                </optgroup>
-              )}
-            </select>
-          </div>
-        </div>
-
-        {error && <div className="mt-2 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{error}</div>}
-        {info && <div className="mt-2 font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.green}22`, color: C.greenLight }}>{info}</div>}
-
-        <button
-          onClick={() => void assignAward()}
-          disabled={busy}
-          className="w-full mt-3 py-2.5 font-heading tracking-wider text-sm rounded"
-          style={{
-            background: `linear-gradient(135deg, ${C.gold} 0%, ${C.goldLight} 100%)`,
-            color: C.brandNavy,
-            boxShadow: `0 4px 12px ${C.gold}66`,
-          }}
-        >{busy ? 'SAVING…' : `ASSIGN ${award.name.toUpperCase()}`}</button>
       </div>
-
-      {/* CURRENT AWARDS LIST */}
-      <div>
-        <h4 className="font-display text-xl tracking-wider mb-3" style={{ color: C.cream }}>
-          {selected ? `${selected.username}'s AWARDS (${awardPage.data?.accountAwards.totalCount ?? 0})` : 'SELECT A PLAYER TO REVIEW AWARDS'}
-        </h4>
-        {awardPage.error && <p role="alert">{awardPage.error.message}</p>}
-        {!awards.success && <p role="alert">Invalid award history response. Reload the selected player.</p>}
-        {awardPage.loading && <p role="status">Loading awards…</p>}
-        <PageButtons loading={awardPage.loading} canPrevious={previous.length > 0} hasNextPage={awardPage.data?.accountAwards.pageInfo.hasNextPage ?? false}
-          previous={()=>{setAfter(previous.at(-1) ?? null);setPrevious(previous.slice(0,-1));}}
-          next={()=>{setPrevious([...previous,after]);setAfter(awardPage.data?.accountAwards.pageInfo.endCursor ?? null);}} />
-        {allAwards.length === 0 ? (
-          <EmptyState icon={<Trophy size={40} />} text="No awards assigned yet." />
-        ) : (
-          <div className="space-y-1.5">
-            {allAwards.map(aw => {
-              const a = AWARD_BY_ID[aw.awardId];
-              return (
-                <div key={`${aw.player.id}:${aw.awardId}:${aw.season}`} className="rounded p-2.5 flex items-center gap-3" style={{
-                  background: `${C.navyDeep}aa`, border: `1px solid ${C.gold}33`,
-                }}>
-                  <AwardIcon awardId={aw.awardId} size={28} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-heading tracking-wider text-sm" style={{ color: C.cream }}>
-                      {(a?.name ?? aw.awardId).toUpperCase()} <span style={{ color: C.goldLight }}>{aw.season}</span>
-                    </div>
-                    <div className="font-mono text-[10px]" style={{ color: `${C.cream}77` }}>
-                      {aw.player.username}{aw.assignedBy ? ` • assigned by ${aw.assignedBy}` : ''}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => void removeAward(aw.player, aw)}
-                    disabled={busy}
-                    className="px-2 py-1 font-heading tracking-wider text-[10px] rounded"
-                    style={{ background: `${C.red}22`, color: C.redLight, border: `1px solid ${C.red}44` }}
-                  >REMOVE</button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+      {refreshError && <Alert><AlertDescription>{refreshError}</AlertDescription><Button variant="outline" className="mt-2" disabled={busy} onClick={() => void refreshAfterWrite()}>Retry refresh</Button></Alert>}
+      <Button className="w-full sm:w-auto" onClick={() => void assignAward()} disabled={busy || !!refreshError || !selected || !season.trim()}>{busy ? 'Saving…' : `Assign ${award.name}`}</Button>
+    </Card>
+    <section className="space-y-3"><h3 className="text-lg font-semibold">{selected ? `${selected.username}’s awards (${awardPage.data?.accountAwards.totalCount ?? 0})` : 'Award history'}</h3>
+      {!selected && <p className="text-sm text-muted-foreground">Select a player to review their awards.</p>}
+      {awardPage.error && <Alert variant="destructive"><AlertDescription>{awardPage.error.message}</AlertDescription></Alert>}
+      {!awards.success && <Alert variant="destructive"><AlertDescription>Invalid award history response. Reload the selected player.</AlertDescription></Alert>}
+      {awardPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading awards…</p>}
+      {selected && !awardPage.loading && !awardPage.error && allAwards.length === 0 && <EmptyState icon={<Trophy className="size-8" />} text="No awards assigned yet." />}
+      {allAwards.map(item => {
+        const key = `${item.player.id}:${item.awardId}:${item.season}`;
+        const name = AWARD_BY_ID[item.awardId]?.name ?? item.awardId;
+        return <Card key={key} className="flex flex-wrap items-center gap-3 p-4"><AwardIcon awardId={item.awardId} size={28} /><div className="min-w-0 flex-1 space-y-1"><h4 className="flex flex-wrap items-center gap-2 font-medium">{name}<Badge variant="secondary">{item.season}</Badge></h4><p className="text-xs text-muted-foreground">{item.player.username}{item.assignedBy ? ` · Assigned by ${item.assignedBy}` : ''}</p></div>
+          <AlertDialog open={removing === key} onOpenChange={open => { if (!busy) setRemoving(open ? key : null); }}>
+            <AlertDialogTrigger asChild><Button variant="outline" className="text-destructive" disabled={busy || !!refreshError}>Remove award</Button></AlertDialogTrigger>
+            <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Remove {name}?</AlertDialogTitle><AlertDialogDescription>This removes the {item.season} award from {item.player.username}’s record and player card.</AlertDialogDescription></AlertDialogHeader>
+              {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+              <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void removeAward(item.player, item); }}>{busy ? 'Removing…' : 'Remove award'}</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Card>;
+      })}
+      {selected && <PageButtons loading={awardPage.loading} canPrevious={previous.length > 0} hasNextPage={awardPage.data?.accountAwards.pageInfo.hasNextPage ?? false} previous={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0,-1)); }} next={() => { setPrevious([...previous,after]); setAfter(awardPage.data?.accountAwards.pageInfo.endCursor ?? null); }} />}
+    </section>
+  </div>;
 };
-
-// Picks a winner team and a runner-up team for a given season. On save, the current
-// rosters of those teams get a `championship` entry stamped onto each player's account
-// (so transferring later doesn't strip the trophy). Editing a past season wipes any
-// previous championship entries for that season first.

@@ -1,14 +1,22 @@
-import { Sparkles } from 'lucide-react';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { Slider } from '../../components/ui/slider';
 import { useEffect, useState } from 'react';
 import { settings as adminApi } from './api';
 import type { Weightings } from './models';
-import { C } from '../../theme/theme';
+
 
 import { STAT_KEY_LABELS } from '../../utils/rankings';
 import { mapDefaultPositionWeights } from '../accounts/api';
 import { useLazyQuery } from '@apollo/client/react';
 import { DefaultPositionWeightsDocument } from '../../api/generated/graphql';
 import { POS, POS_LABELS } from '@napl/contracts/league';
+import { Input } from '../../components/ui/input';
+import { Button } from '../../components/ui/button';
+
 
 
 
@@ -25,6 +33,8 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
   const [weights, setWeights] = useState<Weightings>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [info, setInfo] = useState('');
   const [error, setError] = useState('');
   const [loadDefaults] = useLazyQuery(DefaultPositionWeightsDocument);
@@ -92,7 +102,7 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
   };
 
   const resetToDefault = async () => {
-    if (!confirm('Reset all weightings back to the original defaults?')) return;
+    setResetting(true);
     setError(''); setInfo('');
     try {
       const defaults = await getDefaults();
@@ -105,88 +115,38 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
       }
       setWeights(asPct);
       setInfo('Defaults loaded — click Save to apply.');
+      setResetOpen(false);
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Could not load default weightings.');
-    }
+    } finally { setResetting(false); }
   };
 
-  if (loading || !weights) {
-    return <div className="font-mono text-sm tracking-wider" style={{ color: `${C.cream}77` }}>Loading weightings…</div>;
-  }
-
-  return (
-    <div className="space-y-5">
-      {/* Header */}
-      <div className="rounded-xl p-4" style={{
-        background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
-        border: `1px solid ${C.gold}55`,
-      }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Sparkles size={14} style={{ color: C.goldLight }} />
-          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>STAT WEIGHTINGS</span>
-        </div>
-        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          These control how each stat counts toward a player's ranking and tier. Each position must total exactly 100%. Changes apply to all rankings immediately after saving.
-        </p>
-      </div>
-
-      {/* One card per position */}
-      {Object.entries(weights).map(([pos, positionStats]) => {
-        const total = posTotal(pos);
-        const valid = total === 100;
-        return (
-          <div key={pos} className="rounded-xl p-4" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>{POSITION_NAMES[pos]}</span>
-              <span className="font-heading tracking-wider text-sm px-3 py-1 rounded" style={{
-                background: valid ? `${C.green}22` : `${C.red}22`,
-                color: valid ? C.green : C.red,
-              }}>{total}% {valid ? '✓' : (total > 100 ? '— too high' : '— too low')}</span>
-            </div>
-            <div className="space-y-2">
-              {Object.keys(positionStats).map(stat => (
-                <div key={stat} className="flex items-center gap-3">
-                  <span className="font-body text-sm flex-1" style={{ color: C.brandNavy }}>
-                    {STAT_KEY_LABELS[stat] || stat}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number"
-                      min="0" max="100"
-                      value={weights[pos][stat]}
-                      onChange={(e) => setStat(pos, stat, e.target.value)}
-                      className="w-20 rounded text-center font-display text-lg py-1.5"
-                      style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
-                    />
-                    <span className="font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>%</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {error && <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>}
-      {info && <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>}
-
-      <div className="flex gap-3">
-        <button
-          onClick={resetToDefault}
-          className="px-4 py-2.5 font-heading tracking-wider text-sm rounded"
-          style={{ background: `${C.navyLight}66`, color: C.brandNavy, border: `1px solid ${C.navyLight}` }}
-        >RESET TO DEFAULTS</button>
-        <button
-          onClick={save}
-          disabled={saving || !allValid()}
-          className="flex-1 py-2.5 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-          style={{
-            background: allValid() ? `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)` : C.navyLight,
-            color: C.onColor,
-            boxShadow: allValid() ? `0 2px 8px ${C.green}66` : 'none',
-          }}
-        >{saving ? 'SAVING…' : (allValid() ? 'SAVE WEIGHTINGS' : 'FIX TOTALS TO SAVE')}</button>
-      </div>
+  if (loading) return <p role="status" className="text-sm text-muted-foreground">Loading weightings…</p>;
+  return <section className="space-y-5">
+    <div className="space-y-2"><h3 className="text-xl font-semibold">Stat weightings</h3><p className="max-w-3xl text-sm text-muted-foreground">Control how each statistic contributes to ranking and card tier. Every position must total exactly 100%. Saved changes apply to all rankings.</p></div>
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+    <div className="grid items-start gap-4 xl:grid-cols-2">{Object.entries(weights).map(([position, positionStats]) => {
+      const total = posTotal(position);
+      const valid = total === 100;
+      return <Card key={position} className="space-y-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-semibold">{POSITION_NAMES[position]}</h4><Badge variant={valid ? 'secondary' : 'destructive'}>{total}%{valid ? ' · Ready' : (total > 100 ? ' · Too high' : ' · Too low')}</Badge></div>
+        {Object.entries(positionStats).map(([stat, value]) => <div key={stat} className="space-y-1">
+          <div className="flex items-center justify-between gap-3"><Label htmlFor={`weight-${position}-${stat}`} className="leading-relaxed">{STAT_KEY_LABELS[stat] || stat}</Label><div className="flex shrink-0 items-center gap-1"><Input id={`weight-${position}-${stat}`} type="number" min={0} max={100} disabled={saving || resetting} value={value} onChange={event => setStat(position, stat, event.target.value)} className="w-20 text-center tabular-nums" /><span className="text-sm text-muted-foreground">%</span></div></div>
+          <Slider aria-label={`${position} ${STAT_KEY_LABELS[stat] || stat} percent`} className="min-h-11" min={0} max={100} step={1} value={[value]} disabled={saving || resetting} onValueChange={values => setStat(position, stat, String(values[0] ?? 0))} />
+        </div>)}
+      </Card>;
+    })}</div>
+    <div className="flex flex-col gap-3 sm:flex-row">
+      <AlertDialog open={resetOpen} onOpenChange={open => { if (!resetting) setResetOpen(open); }}>
+        <AlertDialogTrigger asChild><Button variant="outline" disabled={saving}>Reset draft to defaults</Button></AlertDialogTrigger>
+        <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Reset this draft?</AlertDialogTitle><AlertDialogDescription>Your unsaved edits will be replaced with the original defaults. Rankings stay unchanged until you save the weightings.</AlertDialogDescription></AlertDialogHeader>
+          {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+          <AlertDialogFooter><AlertDialogCancel disabled={resetting}>Cancel</AlertDialogCancel><AlertDialogAction disabled={resetting} onClick={event => { event.preventDefault(); void resetToDefault(); }}>{resetting ? 'Loading defaults…' : 'Load defaults'}</AlertDialogAction></AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <Button disabled={saving || resetting || !allValid()} onClick={save}>{saving ? 'Saving…' : 'Save weightings'}</Button>
     </div>
-  );
+    {!allValid() && <p className="text-sm text-muted-foreground">Every position must total exactly 100% before you can save.</p>}
+  </section>;
 };

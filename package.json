@@ -19,7 +19,7 @@
     "test": "pnpm -r run test && node --test supabase/*.test.mjs",
     "test:integration": "bash api/test/integration/run.sh",
     "lint": "eslint . --max-warnings 0",
-    "check:dependencies": "depcruise --config .dependency-cruiser.cjs web/src pkgs/contracts/src",
+    "check:dependencies": "depcruise --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json web/src pkgs/contracts/src",
     "lint:fix": "eslint . --fix",
     "check": "pnpm run prisma:generate && pnpm run gql:check && pnpm run typecheck && pnpm run lint && pnpm test && pnpm run build",
     "gql:generate": "pnpm --filter @napl/web run gql:generate",

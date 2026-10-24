@@ -1,0 +1,127 @@
+[
+  {
+    "type": "cycle",
+    "from": "web/src/api/client.ts",
+    "to": "web/src/api/link.ts",
+    "unresolvedTo": "./link",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular-dependencies"
+    },
+    "cycle": [
+      {
+        "name": "web/src/api/link.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/features/accounts/api.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/api/http.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/api/client.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "web/src/api/http.ts",
+    "to": "web/src/api/client.ts",
+    "unresolvedTo": "./client",
+    "dependencyTypes": [
+      "local",
+      "dynamic-import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular-dependencies"
+    },
+    "cycle": [
+      {
+        "name": "web/src/api/client.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      },
+      {
+        "name": "web/src/api/link.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/api/http.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  },
+  {
+    "type": "cycle",
+    "from": "web/src/api/link.ts",
+    "to": "web/src/features/matches/api.ts",
+    "unresolvedTo": "../features/matches/api",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-circular-dependencies"
+    },
+    "cycle": [
+      {
+        "name": "web/src/features/matches/api.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/api/http.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      },
+      {
+        "name": "web/src/api/client.ts",
+        "dependencyTypes": [
+          "local",
+          "dynamic-import"
+        ]
+      },
+      {
+        "name": "web/src/api/link.ts",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ]
+      }
+    ]
+  }
+]

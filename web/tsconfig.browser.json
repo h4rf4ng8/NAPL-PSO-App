@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": { "lib": ["ES2024", "DOM", "DOM.Iterable"], "types": ["node", "vite/client"] },
+  "include": ["test/browser", "playwright.config.ts"]
+}

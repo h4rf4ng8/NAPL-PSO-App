@@ -38,7 +38,7 @@ NAPL is a league application built with React and a Fastify API running on AWS L
 
 ![Browser, CloudFront, Lambda and Supabase architecture](docs/system-architecture.png)
 
-Vercel serves the static app; browser API requests pass through CloudFront and AWS WAF to Lambda using origin access control (OAC). Lambda verifies Supabase access tokens and enforces authorization and league operations, while Supabase Auth manages browser sessions and refresh. Public assets and signed file transfers connect directly to Supabase Storage; [runtime](api/plugins/runtime.ts), [request checks](api/app.ts), and [browser auth](web/src/auth/session.ts) implement these boundaries.
+League rules live in the API so every screen uses the same rankings and validation.
 
 ## Sequence Diagrams
 
@@ -529,6 +529,20 @@ For the reviewed replacement project, `node supabase/rollout.mjs <protected-mani
 The transaction applies gateway, RBAC, role audit, auth state, then normalized `asl`; it deliberately skips `202610130002_cutover.sql`, which deletes legacy settings. History records only the five migrations actually applied. It preserves every existing public row, retains excluded test records only in the recovery copy, resolves the legacy administrator list to the reviewed IDs with the `admin` role, verifies scalar and UUID parity, and revokes legacy public table/function access from browser and runtime roles. The source tables are locked against concurrent writes during the copy; a conflict or parity failure aborts the transaction. Never run a later blanket `supabase db push` that would apply the intentionally skipped legacy cutover; reconcile that historical gap explicitly during a future migration cleanup.
 
 Before deploying the API, configure a restricted database login inheriting `app_runtime` and `gateway_runtime` as described above. Schema installation does not create login credentials or change the API environment. The administrator connection used for migration retains administrative privileges. Rollback before application writes can switch the application back to the preserved public snapshot after restoring reviewed legacy runtime grants; a code revert alone does not restore those revoked privileges; after writes begin in `asl`, reconcile those changes before switching back.
+
+### Audited legacy refresh
+
+`supabase/merge-source.mjs` is a one-time merge for the reviewed source and replacement projects. It compares source `public`, destination recovery `public`, and live `asl`. Audit mode only reads databases; it writes protected snapshots, findings, and an exact plan outside the repository. It preserves destination edits, roles, Storage, recovery rows, and excluded test records. Suspicious changes remain withheld. Historical totals and match histories are preserved independently and conflicting changes to either are held together.
+
+Run from `api/`, using administrator connections in `SOURCE_DATABASE_URL` and `DATABASE_URL`, with a PostgreSQL 17 `pg_dump` available:
+
+```sh
+node --env-file=.env ../supabase/merge-source.mjs audit /protected/new-audit-directory ../secrets/asl-migration/replacement-rollout-manifest.json
+MERGE_TEST_DATABASE_URL=postgresql://postgres:local-only@127.0.0.1:5432/empty_rehearsal node ../supabase/merge-rehearse.mjs /protected/new-audit-directory
+node --env-file=.env ../supabase/merge-source.mjs apply /protected/new-audit-directory
+```
+
+Review `plan.json` and the security inventories before apply. Rehearsal requires an empty localhost database and rolls back all changes. Apply creates full backups, blocks concurrent league writes with table locks, checks snapshot/security fingerprints, and commits only after parity checks. It then revokes legacy browser and service-role table, sequence, and function access. Imported Discord identities keep their UUIDs and require fresh sign-in; passwords, sessions, tokens, and source privileges are not copied. Keep the receipts and backups protected. An attempted apply reserves its directory so retries cannot overwrite backups; use a new audit directory after resolving a failed attempt. If `destination-committed.json` exists without `applied.json`, inspect the destination and source retirement state before retrying. Reopening writes ends the simple backup-restore rollback window.
 
 After rollout, check public pages, anonymous standings rejection, signed-in standings, sign-in, session renewal, sign-out, and an authorized change through the frontend's public address. Watch Lambda errors, throttling, request duration, and database connections. A direct anonymous public read should succeed, and protected routes must reject absent or invalid bearer credentials.
 

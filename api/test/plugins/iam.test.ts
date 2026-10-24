@@ -19,7 +19,7 @@ const bootstrap = parseDocument(await readFile(path.join(root, 'deploy-bootstrap
 
 test('Function URL uses direct anonymous ingress and leaves CORS to Fastify', () => {
   const resources = template.Resources;
-  assert.deepEqual(resources.ApiFunction.Properties.FunctionUrlConfig, { AuthType: 'NONE', InvokeMode: 'BUFFERED' });
+  assert.deepEqual(resources.ApiFunction.Properties.FunctionUrlConfig, { AuthType: ['HasCloudFront', 'AWS_IAM', 'NONE'], InvokeMode: 'BUFFERED' });
   assert.equal(resources.ApiFunction.Properties.AutoPublishAlias, 'live');
   assert.equal(template.Outputs.FunctionUrl.Value['Fn::GetAtt'], 'ApiFunctionUrl.FunctionUrl');
   assert.equal(resources.VercelInvokeRole, undefined);
@@ -90,6 +90,18 @@ test('deployment grants cannot update the bootstrap or create unbounded applicat
   assert.equal(boundary[2].Condition.Bool['lambda:InvokedViaFunctionUrl'], true);
 });
 
+test('both deployment identities can process exactly the application transforms', () => {
+  const resources = template.Transform.map((transform: string) =>
+    'arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/' + transform.replace('AWS::', ''));
+  for (const role of ['GitHubDeployRole', 'CloudFormationExecutionRole']) {
+    const statements = bootstrap.Resources[role].Properties.Policies[0].PolicyDocument.Statement;
+    const transforms = statements.find(statement => statement.Sid === 'UseApplicationTransforms');
+    assert.equal(transforms.Effect, 'Allow');
+    assert.equal(transforms.Action, 'cloudformation:CreateChangeSet');
+    assert.deepEqual(new Set(transforms.Resource.map(resource => resource['Fn::Sub'])), new Set(resources));
+  }
+});
+
 test('deployment artifacts stay private, encrypted, and require TLS', () => {
   const bucket = bootstrap.Resources.DeploymentBucket;
   assert.equal(bucket.DeletionPolicy, 'Retain');
@@ -102,4 +114,21 @@ test('deployment artifacts stay private, encrypted, and require TLS', () => {
   assert.equal(deny.Principal, '*');
   assert.equal(deny.Action, 's3:*');
   assert.equal(deny.Condition.Bool['aws:SecureTransport'], false);
+});
+
+
+test('CloudFront mode grants only its exact distribution and removes conditional public grants', () => {
+  const resources = template.Resources;
+  assert.deepEqual(resources.ApiFunction.Properties.Environment.Variables.TRUST_CLOUDFRONT, ['HasCloudFront', 'true', 'false']);
+  for (const name of ['DirectUrlPermission', 'DirectInvokePermission']) {
+    assert.equal(resources[name].Condition, 'DirectIngress');
+    assert.equal(resources[name].Properties.Principal, '*');
+  }
+  for (const name of ['CloudFrontUrlPermission', 'CloudFrontInvokePermission']) {
+    assert.equal(resources[name].Condition, 'HasCloudFront');
+    assert.equal(resources[name].Properties.Principal, 'cloudfront.amazonaws.com');
+    assert.equal(resources[name].Properties.SourceArn['Fn::Sub'], 'arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistributionId}');
+  }
+  assert.equal(resources.CloudFrontUrlPermission.Properties.FunctionUrlAuthType, 'AWS_IAM');
+  assert.equal(resources.CloudFrontInvokePermission.Properties.InvokedViaFunctionUrl, true);
 });

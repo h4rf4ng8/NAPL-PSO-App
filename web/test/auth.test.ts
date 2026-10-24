@@ -152,7 +152,7 @@ test('account switches guard old modal callbacks, token refreshes retain account
  await login(async url=>apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{}));await mount();const old=renderer!.root.findByType(Dashboard).props;
  client.cache.writeQuery({query:(await import('../src/api/generated/graphql')).TeamRecordsDocument,data:{teamRecords:[]}});
  let profileReads=0;
- await act(async()=>{await login(async url=>{if(url.includes('grant_type=refresh_token'))return json(session('user-a',2));profileReads++;return json(account());});await supabase.auth.refreshSession();await tick();});
+ await act(async()=>{await login(async url=>{if(url.includes('grant_type=refresh_token'))return json(session('user-a',2));if(apiPath(url)==='/api/accounts/me')profileReads++;return json(account());});await supabase.auth.refreshSession();await tick();});
  assert.equal(profileReads,0);assert.ok(Object.keys(client.cache.extract()).length);assert.equal(renderer!.root.findByType(Dashboard).props.account,old.account);
  await act(async()=>{await login(async url=>apiPath(url)==='/api/accounts/me'?json(account('user-b')):new Promise<Response>(()=>{}),session('user-b'));await tick();});
  assert.equal(renderer!.root.findByType(Dashboard).props.account.id,'user-b');

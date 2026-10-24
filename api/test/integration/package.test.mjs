@@ -33,7 +33,7 @@ test('SAM template describes the bounded Lambda and direct browser Function URL'
   assert.equal(resources.VercelOidcProvider, undefined);
   assert.equal(fn.AutoPublishAlias, 'live');
   assert.equal(fn.AutoPublishAliasAllProperties, true);
-  assert.equal(fn.FunctionUrlConfig.AuthType, 'NONE');
+  assert.deepEqual(fn.FunctionUrlConfig.AuthType, ['HasCloudFront', 'AWS_IAM', 'NONE']);
   assert.equal(fn.FunctionUrlConfig.InvokeMode, 'BUFFERED');
   assert.equal(resources.ApiLogGroup.Properties.RetentionInDays, 14);
   assert.deepEqual(resources.ApiRole.Properties.Policies[0].PolicyDocument.Statement[0].Action, ['logs:CreateLogStream', 'logs:PutLogEvents']);

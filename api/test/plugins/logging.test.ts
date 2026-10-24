@@ -324,3 +324,12 @@ test('only validated trusted names enter request logs, including denied protecte
   assert.equal(logs[1].status, 401);
   assert.ok(!output.includes('attacker-name-canary'));
 });
+
+test('copied edge credentials never enter logs on a rejected direct request', () => {
+  const { logs, output } = capture(`
+    const response = await app.inject({ url: '/api/accounts/me', headers: { 'x-napl-authorization': 'Bearer ' + canaries.bearer } });
+    console.error(JSON.stringify({status: response.statusCode}));
+  `);
+  assert.equal(logs[0].status, 401);
+  assert.ok(!output.includes('synthetic-bearer-credential-canary'));
+});

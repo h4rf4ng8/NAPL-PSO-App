@@ -2,6 +2,7 @@ import { apiTarget } from './auth-fixture';
 import { page } from './page-fixture';
 import {test,afterEach,mock} from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import {request,ApiError} from '../src/api/http';
 import {client,resetClient} from '../src/api/client';
 import {TeamRecordsDocument} from '../src/api/generated/graphql';
@@ -15,7 +16,7 @@ test('direct bearer writes retry expiry with stable method, URL, serialized body
  const body={matchId:'original'};const pending=request('/api/match-imports','POST',body);await started.promise;body.matchId='changed';renewal.resolve(json(session('user-a',2)));
  assert.deepEqual(await pending,{saved:true});assert.equal(attempts.length,2);
  assert.deepEqual(attempts.map(({url,init})=>({url,method:init.method,body:init.body,credentials:init.credentials})),Array.from({length:2},()=>({url:'http://api.example.test/api/match-imports',method:'POST',body:'{"matchId":"original"}',credentials:'omit'})));
- const headers=attempts.map(({init})=>new Headers(init.headers));assert.equal(headers[0]!.get('Authorization'),`Bearer ${original.access_token}`);assert.equal(headers[1]!.get('Authorization'),`Bearer ${session('user-a',2).access_token}`);assert.ok(headers[0]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('Idempotency-Key'),headers[1]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('X-CSRF-Token'),null);
+ const headers=attempts.map(({init})=>new Headers(init.headers));assert.equal(headers[0]!.get('Authorization'),`Bearer ${original.access_token}`);assert.equal(headers[1]!.get('Authorization'),`Bearer ${session('user-a',2).access_token}`);assert.ok(headers[0]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('Idempotency-Key'),headers[1]!.get('Idempotency-Key'));assert.equal(headers[0]!.get('X-CSRF-Token'),null);assert.equal(headers[0]!.get('X-Napl-Authorization'),null);assert.equal(headers[0]!.get('X-Amz-Content-Sha256'),createHash('sha256').update(String(attempts[0]!.init.body)).digest('hex'));assert.equal(headers[0]!.get('X-Amz-Content-Sha256'),headers[1]!.get('X-Amz-Content-Sha256'));
 });
 test('real SDK shares one refresh between concurrent Apollo and REST expiry and persists rotated tokens',async()=>{
  const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();let renewals=0;const attempts=new Map<string,number>();
@@ -30,8 +31,8 @@ for(const [code,status] of [['access_expired',503],['session_expired',401],['mem
 test('does not replay ambiguous network failures',async()=>{const failure=new TypeError('offline');let calls=0;await login(async()=>{calls++;throw failure;});await assert.rejects(request('/api/match-imports','POST',{}),error=>error===failure);assert.equal(calls,1);});
 test('renewed commands get at most two application attempts',async()=>{let writes=0,refreshes=0;await login(async url=>{if(url.includes('grant_type=refresh_token')){refreshes++;return json(session('user-a',2));}writes++;return json({error:'access_expired'},401);});await assert.rejects(request('/api/match-imports','POST',{}),error=>error instanceof ApiError&&error.code==='access_expired');assert.equal(writes,2);assert.equal(refreshes,1);});
 test('cancelling Apollo during shared SDK refresh prevents its retry while REST completes',async()=>{
- const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>();const calls:string[]=[];await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){assert.equal(init?.signal,undefined);started.resolve();return renewal.promise;}const path=apiTarget(url,init);calls.push(path);return calls.filter(value=>value===path).length===1?json({error:'access_expired'},401):json([]);});
- const graph=Promise.allSettled([client.query({query:TeamRecordsDocument})]),rest=request('/api/accounts');await started.promise;await tick();await resetClient();renewal.resolve(json(session('user-a',2)));await graph;assert.deepEqual(await rest,[]);assert.equal(calls.filter(path=>path==='TeamRecords').length,1);assert.deepEqual(client.cache.extract(),{});
+ const renewal=Promise.withResolvers<Response>(),started=Promise.withResolvers<void>(),graphStarted=Promise.withResolvers<void>();const calls:string[]=[];await login(async(url,init)=>{if(url.includes('grant_type=refresh_token')){assert.equal(init?.signal,undefined);started.resolve();return renewal.promise;}const path=apiTarget(url,init);calls.push(path);if(path==='TeamRecords')graphStarted.resolve();return calls.filter(value=>value===path).length===1?json({error:'access_expired'},401):json([]);});
+ const graph=Promise.allSettled([client.query({query:TeamRecordsDocument})]),rest=request('/api/accounts');await started.promise;await graphStarted.promise;await tick();await resetClient();renewal.resolve(json(session('user-a',2)));await graph;assert.deepEqual(await rest,[]);assert.equal(calls.filter(path=>path==='TeamRecords').length,1);assert.deepEqual(client.cache.extract(),{});
 });
 test('cancellation stops before auth and after response decoding',async()=>{
  const before=new AbortController();before.abort();const fetch=mock.method(globalThis,'fetch');await assert.rejects(request('/api/accounts','GET',undefined,before.signal),{name:'AbortError'});assert.equal(fetch.mock.callCount(),0);mock.restoreAll();
@@ -69,4 +70,25 @@ test('binary media shares bearer renewal and returns image bytes without JSON de
  });
  const image=await request<Blob>('/api/media/accounts/a/pending-image');
  assert.deepEqual(new Uint8Array(await image.arrayBuffer()),bytes);assert.equal(attempts,2);
+});
+
+for (const method of ['POST', 'PUT', 'PATCH']) test(`${method} hashes exactly the transmitted UTF-8 body`, async () => {
+ await login(async (_url, init) => {
+  assert.equal(new Headers(init?.headers).get('X-Amz-Content-Sha256'), createHash('sha256').update(String(init?.body)).digest('hex'));
+  assert.equal(init?.body, JSON.stringify({ text: 'é😀' }));
+  return json({ ok: true });
+ });
+ assert.deepEqual(await request('/api/teams', method, { text: 'é😀' }), { ok: true });
+});
+test('cancellation during payload hashing prevents transmission', async () => {
+ let calls = 0;
+ await login(async () => { calls++; return json({ ok: true }); });
+ const controller = new AbortController();
+ const digest = crypto.subtle.digest.bind(crypto.subtle);
+ const started = Promise.withResolvers<void>(), resume = Promise.withResolvers<void>();
+ mock.method(crypto.subtle, 'digest', async (...args: Parameters<typeof digest>) => { started.resolve(); await resume.promise; return digest(...args); });
+ const pending = request('/api/teams', 'POST', {}, controller.signal);
+ await started.promise; controller.abort(); resume.resolve();
+ await assert.rejects(pending, { name: 'AbortError' }); assert.equal(calls, 0);
+ mock.restoreAll();
 });

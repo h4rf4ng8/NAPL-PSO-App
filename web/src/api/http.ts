@@ -44,6 +44,7 @@ export async function request<T>(path:string, method='GET', body?:unknown, signa
   if((session?.user.id??null)!==userId)throw new ApiError(401,'login_required','Please sign in again.');
   let token = session?.access_token;
   const idempotencyKey=mutates?crypto.randomUUID():undefined;
+  const bodyHash = payload === undefined ? undefined : [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload)))].map(byte => byte.toString(16).padStart(2, '0')).join('');
   for(let attempt=0;attempt<2;attempt++) {
     check();
     const headers:Record<string,string>={'Accept':'application/json'};
@@ -51,6 +52,7 @@ export async function request<T>(path:string, method='GET', body?:unknown, signa
     if(token)headers.Authorization=`Bearer ${token}`;
     if(mutates)headers['Idempotency-Key']=idempotencyKey!;
     if(body!==undefined)headers['Content-Type']='application/json';
+    if(bodyHash)headers['X-Amz-Content-Sha256']=bodyHash;
     check();
     const response=await fetch(`${apiOrigin}${path}`,{method,headers,signal,credentials:'omit',...(body!==undefined&&{body:payload})});
     check();

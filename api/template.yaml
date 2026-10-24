@@ -27,6 +27,14 @@ Parameters:
   PublicOrigin:
     Type: String
     Description: Exact public Vercel site origin, including https scheme.
+  CloudFrontDistributionId:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[A-Z0-9]+$'
+  CloudFrontDomainName:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^[a-z0-9]+\.cloudfront\.net$'
   RolePermissionsBoundaryArn:
     Type: String
     AllowedPattern: '^arn:(aws|aws-us-gov|aws-cn):iam::[0-9]{12}:policy/[A-Za-z0-9+=,.@_/-]+$'
@@ -54,6 +62,8 @@ Parameters:
     MaxValue: 900
 
 Conditions:
+  HasCloudFront: !Not [!Equals [!Ref CloudFrontDistributionId, '']]
+  DirectIngress: !Equals [!Ref CloudFrontDistributionId, '']
   HasDiscordTransferWebhook: !Not [!Equals [!Ref DiscordTransferWebhook, '']]
   HasReservedConcurrency: !Not [!Equals [!Ref ReservedConcurrency, -1]]
 
@@ -103,7 +113,7 @@ Resources:
       AutoPublishAlias: live
       AutoPublishAliasAllProperties: true
       FunctionUrlConfig:
-        AuthType: NONE
+        AuthType: !If [HasCloudFront, AWS_IAM, NONE]
         InvokeMode: BUFFERED
       MemorySize: !Ref FunctionMemorySize
       Timeout: !Ref FunctionTimeout
@@ -112,6 +122,7 @@ Resources:
       Environment:
         Variables:
           NODE_ENV: production
+          TRUST_CLOUDFRONT: !If [HasCloudFront, 'true', 'false']
           DATABASE_URL: !Ref DatabaseUrl
           SUPABASE_URL: !Ref SupabaseUrl
           SUPABASE_PUBLISHABLE_KEY: !Ref SupabasePublishableKey
@@ -120,7 +131,48 @@ Resources:
           PUBLIC_ORIGIN: !Ref PublicOrigin
           DISCORD_TRANSFER_WEBHOOK: !If [HasDiscordTransferWebhook, !Ref DiscordTransferWebhook, !Ref AWS::NoValue]
 
+  DirectUrlPermission:
+    Type: AWS::Lambda::Permission
+    Condition: DirectIngress
+    Properties:
+      FunctionName: !Ref ApiFunction.Alias
+      Principal: '*'
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: NONE
+
+  DirectInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: DirectIngress
+    Properties:
+      FunctionName: !Ref ApiFunction.Alias
+      Principal: '*'
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+
+  CloudFrontUrlPermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasCloudFront
+    Properties:
+      FunctionName: !Ref ApiFunction.Alias
+      Principal: cloudfront.amazonaws.com
+      Action: lambda:InvokeFunctionUrl
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistributionId}
+
+  CloudFrontInvokePermission:
+    Type: AWS::Lambda::Permission
+    Condition: HasCloudFront
+    Properties:
+      FunctionName: !Ref ApiFunction.Alias
+      Principal: cloudfront.amazonaws.com
+      Action: lambda:InvokeFunction
+      InvokedViaFunctionUrl: true
+      SourceArn: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistributionId}
+
 Outputs:
+  ApiUrl:
+    Description: Public API URL for the matching frontend build.
+    Value: !If [HasCloudFront, !Sub 'https://${CloudFrontDomainName}', !GetAtt ApiFunctionUrl.FunctionUrl]
   FunctionUrl:
-    Description: Set this as the Vercel build-time VITE_API_URL.
+    Description: Underlying Lambda origin URL; use ApiUrl for the frontend.
     Value: !GetAtt ApiFunctionUrl.FunctionUrl

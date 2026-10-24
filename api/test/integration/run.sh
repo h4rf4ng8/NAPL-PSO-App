@@ -28,6 +28,8 @@ db_port="$(docker port "$db_container" 5432/tcp | sed 's/.*://')"
 api_test_db="postgresql://api_test:napl_test_only@127.0.0.1:${db_port}/napl_test"
 export API_TEST_DATABASE_URL="$api_test_db"
 export API_TEST_ADMIN_DATABASE_URL="postgresql://postgres:napl_test_only@127.0.0.1:${db_port}/napl_test"
+docker exec "$db_container" createdb -U postgres napl_merge_test
+export MERGE_TEST_DATABASE_URL="postgresql://postgres:napl_test_only@127.0.0.1:${db_port}/napl_merge_test"
 if [[ "${1:-}" == "--api" ]]; then
   pnpm --filter @napl/api test
 elif [[ "${1:-}" == "--package" ]]; then

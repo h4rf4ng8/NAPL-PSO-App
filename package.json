@@ -16,7 +16,7 @@
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
     "pretest": "pnpm --filter @napl/contracts run build",
-    "test": "pnpm -r run test",
+    "test": "pnpm -r run test && node --test supabase/*.test.mjs",
     "test:integration": "bash api/test/integration/run.sh",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",

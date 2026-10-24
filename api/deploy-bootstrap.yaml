@@ -96,6 +96,12 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - Sid: UseApplicationTransforms
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                Resource:
+                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+                  - !Sub arn:${AWS::Partition}:cloudformation:${AWS::Region}:aws:transform/LanguageExtensions
               - Sid: ReadDeploymentArtifacts
                 Effect: Allow
                 Action: s3:GetObject
@@ -266,6 +272,18 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PassedToService: cloudformation.amazonaws.com
+              - Sid: InspectCloudFrontIngress
+                Effect: Allow
+                Action: cloudfront:GetDistribution
+                Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/*
+              - Sid: InspectCloudFrontOriginAccess
+                Effect: Allow
+                Action: cloudfront:GetOriginAccessControl
+                Resource: !Sub arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:origin-access-control/*
+              - Sid: InspectCloudFrontRateLimit
+                Effect: Allow
+                Action: wafv2:GetWebACL
+                Resource: !Sub arn:${AWS::Partition}:wafv2:us-east-1:${AWS::AccountId}:global/webacl/napl-api-edge/*
               - Sid: CheckLiveAlias
                 Effect: Allow
                 Action: [lambda:GetFunctionUrlConfig, lambda:GetPolicy]

@@ -12,7 +12,7 @@ import { ApolloServer } from '@apollo/server';
 import { config, sessionId, userId } from '../plugins/fixtures.js';
 
 const superId = '14fb22c6-a09a-4657-9213-ef95c99c46e6';
-function harness(roleByUser: Record<string, string[]> = {}) {
+function harness(roleByUser: Record<string, string[]> = {}, trustCloudFront = false) {
   let databaseReads = 0, authStateCalls = 0, verifications = 0;
   let domainReads = 0;
   let currentUsername = 'Before';
@@ -48,7 +48,7 @@ function harness(roleByUser: Record<string, string[]> = {}) {
     },
     discord: { identity: async () => { throw new Error('unexpected Discord lookup'); } },
   };
-  const app = createApp({ db: database, config, auth });
+  const app = createApp({ db: database, config: { ...config, TRUST_CLOUDFRONT: trustCloudFront }, auth });
   app.register(async scope => {
     scope.post('/api/test/transport', { config: { public: true } }, async request => ({
       query: request.query, body: request.body, identity: request.identity, userRoles: request.userRoles,
@@ -81,7 +81,7 @@ test('CORS preflight and rejected origins run before JWT or database access', as
     assert.equal(response.statusCode, 204, response.body);
     assert.equal(response.headers['access-control-allow-origin'], config.PUBLIC_ORIGIN);
     assert.equal(response.headers['access-control-allow-credentials'], undefined);
-    assert.match(String(response.headers['access-control-allow-headers']), /Authorization/);
+    assert.match(String(response.headers['access-control-allow-headers']), /X-Amz-Content-Sha256/);
     for (const origin of ['https://attacker.example', `${config.PUBLIC_ORIGIN}/`, 'null']) {
       const denied = await h.app.inject({ method: 'POST', url: '/api/graphql', headers: { origin, authorization: 'Bearer good' }, payload: { operationName: 'DefaultPositionWeights', variables: {} } });
       assert.equal(denied.statusCode, 403);
@@ -237,4 +237,35 @@ test('actual HTTP preserves Apollo context, CSRF, envelope and start/stop lifecy
     assert.equal(malformed.status, 400); assert.equal((await malformed.json()).errors[0].extensions.code, 'invalid_request');
   } finally { await h.app.close(); }
   assert.equal(stops, 1);
+});
+
+test('CloudFront credentials and generated viewer IP are isolated from direct caller headers', async () => {
+  const h = harness({}, true);
+  const handler = createHandler(h.app);
+  try {
+    const headers = { 'content-type': 'application/json', authorization: 'AWS4-HMAC-SHA256 signature', 'x-napl-client-ip': '2001:db8::1', 'x-napl-authorization': 'Bearer good' };
+    const event = (extra: Record<string, string>) => urlEvent('/api/test/transport', { headers: { ...headers, ...extra }, body: '{}', requestContext: { ...urlEvent('').requestContext, http: { ...urlEvent('').requestContext.http, method: 'POST' } } });
+    const accepted = await handler(event({}), lambdaContext());
+    assert.equal(accepted.statusCode, 200);
+    const result = JSON.parse(accepted.body!);
+    assert.equal(result.identity.id, userId);
+    assert.equal(result.ip, '2001:db8::1');
+    assert.equal((await handler(event({ authorization: 'Bearer good' }), lambdaContext())).statusCode, 401);
+    assert.equal((await handler(event({ 'x-napl-authorization': 'Bearer good,forged' }), lambdaContext())).statusCode, 401);
+    assert.equal((await handler(event({ 'x-napl-client-ip': 'forged' }), lambdaContext())).statusCode, 400);
+    const missing = event({}); delete missing.headers['x-napl-client-ip'];
+    assert.equal((await handler(missing, lambdaContext())).statusCode, 400);
+    assert.equal((await h.app.inject('/api/settings/current_season')).statusCode, 400);
+    const anonymous = await handler(urlEvent('/api/settings/current_season', { headers: { authorization: headers.authorization, 'x-napl-client-ip': '192.0.2.1' } }), lambdaContext());
+    assert.equal(anonymous.statusCode, 200);
+  } finally { await h.app.close(); }
+  const direct = harness();
+  try {
+    const response = await direct.app.inject({ method: 'POST', url: '/api/test/transport', payload: {}, headers: { authorization: 'Bearer good', 'x-napl-client-ip': '192.0.2.99' } });
+    assert.equal(response.statusCode, 200);
+    assert.notEqual(response.json().ip, '192.0.2.99');
+    assert.equal((await direct.app.inject({ url: '/api/accounts/me', headers: { 'x-napl-authorization': 'Bearer good' } })).statusCode, 401);
+    const ambiguous = await direct.app.inject({ url: '/api/accounts/me', headers: { authorization: 'Bearer good', 'x-napl-authorization': 'Bearer good' } });
+    assert.equal(ambiguous.statusCode, 401);
+  } finally { await direct.app.close(); }
 });

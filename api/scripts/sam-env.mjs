@@ -18,6 +18,8 @@ const parameterEnv = {
 };
 const deploymentParameters = {
   RolePermissionsBoundaryArn: 'APPLICATION_ROLE_BOUNDARY_ARN',
+  CloudFrontDistributionId: 'CLOUDFRONT_DISTRIBUTION_ID',
+  CloudFrontDomainName: 'CLOUDFRONT_DOMAIN_NAME',
 };
 
 async function readLocalEnv(envPath) {
@@ -56,9 +58,16 @@ export async function prepareSamParams({ environment = process.env, envPath = de
     throw new Error('RolePermissionsBoundaryArn must be the ApplicationRoleBoundaryArn from the bootstrap stack');
   }
 
+  const { CloudFrontDistributionId, CloudFrontDomainName } = deploymentInputs;
+  if (Boolean(CloudFrontDistributionId) !== Boolean(CloudFrontDomainName)
+    || (CloudFrontDistributionId && !/^[A-Z0-9]+$/.test(CloudFrontDistributionId))
+    || (CloudFrontDomainName && !/^[a-z0-9]+\.cloudfront\.net$/.test(CloudFrontDomainName))) {
+    throw new Error('CloudFrontDistributionId and CloudFrontDomainName must be supplied together with a valid distribution ID and cloudfront.net hostname');
+  }
+
   const placeholders = Object.values(parameterEnv).filter(name => /REPLACE_|CHANGEME|placeholder/i.test(config[name] ?? ''));
   if (placeholders.length > 0) throw new Error(`Replace deployment placeholders: ${placeholders.join(', ')}`);
-  const runtimeEnv = { NODE_ENV: 'production', ...Object.fromEntries(Object.values(parameterEnv).map(name => [name, config[name]])) };
+  const runtimeEnv = { NODE_ENV: 'production', TRUST_CLOUDFRONT: CloudFrontDistributionId ? 'true' : 'false', ...Object.fromEntries(Object.values(parameterEnv).map(name => [name, config[name]])) };
   const bytes = Object.entries(runtimeEnv).filter(([, value]) => value !== undefined)
     .reduce((sum, [key, value]) => sum + Buffer.byteLength(key) + Buffer.byteLength(value), 0);
   if (bytes > 4096) throw new Error(`Lambda environment exceeds 4096 bytes (${bytes} bytes)`);

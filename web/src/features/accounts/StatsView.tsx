@@ -142,7 +142,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
       <TooltipProvider><Table aria-label="Player statistics" aria-describedby="stats-sort-help">
         <TableHeader><TableRow>
           <TableHead className="w-12 text-center">#</TableHead>
-          <TableHead className="min-w-40">Player</TableHead>
+          <TableHead className="sticky left-0 z-10 min-w-40 bg-background">Player</TableHead>
           <TableHead>Team</TableHead><TableHead>Position</TableHead>
           {cols.map(column => <TableHead key={column.field} className="p-0 text-center" aria-sort={sortBy === column.field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
             <Tooltip><TooltipTrigger asChild><Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`${column.label}: sort by ${column.help}`} onClick={() => toggleSort(column.field)}>{column.label}{sortBy === column.field ? (sortDir === 'asc' ? <ArrowUp className="size-4" aria-hidden="true" /> : <ArrowDown className="size-4" aria-hidden="true" />) : <ArrowUpDown className="size-4" aria-hidden="true" />}</Button></TooltipTrigger><TooltipContent>{column.help}</TooltipContent></Tooltip>
@@ -151,7 +151,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
         <TableBody>
           {sorted.map((row, index) => <TableRow key={row.player.id}>
             <TableCell className="text-center tabular-nums text-muted-foreground">{offset + index + 1}</TableCell>
-            <TableCell className="p-0">
+            <TableCell className="sticky left-0 z-10 bg-background p-0">
               <Button variant="ghost" className="w-full justify-start rounded-none px-4 text-left" disabled={!onPlayerClick} onClick={() => onPlayerClick?.({ id: row.player.id, season: seasonFilter })}>
                 {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <span title="Team captain"><Crown className="size-4 shrink-0" role="img" aria-label="Team captain" /></span>}{row.player.username}
               </Button>

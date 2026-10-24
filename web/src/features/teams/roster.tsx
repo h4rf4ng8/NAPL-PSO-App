@@ -5,13 +5,18 @@ import { teams as teamApi } from './api';
 import type { Account } from '../accounts/models';
 import type { Team, TeamSummary } from './models';
 import { CaptainStar } from '../../components/Icons';
-import { PlayerCard } from '../../components/PlayerCard';
-import { Dialog } from '../../components/Dialog';
-import { C } from '../../theme/theme';
+import { ModalShell } from '../../components/Dialog';
+
 
 import { DEFAULT_FORMATION, FORMATION_IDS, getFormation, isTeamCaptain, resolveLineup } from '../../utils/league';
 import { POS } from '@napl/contracts/league';
 import { cardTier } from '../../utils/rankings';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '../../components/ui/command';
+
 
 export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCaptain = false, onLineupSaved }: { team: TeamSummary & Pick<Team, 'formation' | 'lineup'> & { members?: string[] }; allPlayers?: Account[]; onCardClick: (account:Account) => void; isCaptain?: boolean; onLineupSaved?: () => void }) => {
   // Fetch full account records for each roster member
@@ -27,6 +32,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
   const [draftLineup, setDraftLineup] = useState<Record<string,string>>({});
   const [editingSlot, setEditingSlot] = useState<string | null>(null);
   const [savingLineup, setSavingLineup] = useState(false);
+  const [lineupError, setLineupError] = useState('');
 
   // The formation to render — draft while editing, saved otherwise
   const activeFormation = useMemo(
@@ -51,6 +57,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
   }, [members, starters]);
 
   const beginEdit = () => {
+    setLineupError('');
     // Snapshot current resolved lineup (so if nothing was saved, draft starts
     // with the auto-assignment the captain is looking at — easier to tweak).
     // Uses the current formation's slot ids.
@@ -90,14 +97,14 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
     setEditingSlot(null);
   };
   const saveEdit = async () => {
-    setSavingLineup(true);
+    setSavingLineup(true); setLineupError('');
     try {
       await teamApi.saveLineup(team.id,draftFormation,draftLineup);
       setEditingLineup(false);
       setEditingSlot(null);
       onLineupSaved?.();
     } catch (error) {
-      alert('Could not save lineup: ' + (error instanceof Error ? error.message : String(error)));
+      setLineupError('Could not save lineup: ' + (error instanceof Error ? error.message : String(error)));
     }
     setSavingLineup(false);
   };
@@ -129,10 +136,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
     setEditingSlot(null);
   };
 
-  // A single slot in the formation — small avatar icon by default. On hover
-  // the FULL-size PlayerCard pops up as a floating overlay above the avatar
-  // (or below, for the top row so it doesn't get cut off). Click opens the
-  // PlayerCardModal for front + back view.
+  // Each slot is a keyboard and touch trigger for the player card or lineup picker.
 
   return (
     <div className="space-y-6">
@@ -140,17 +144,15 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
           keep it from dominating the viewport (used to be 2:3 = too tall to
           fit without scrolling on mobile). */}
       <div
-        className="rounded-xl relative mx-auto"
+        className="rounded-xl relative mx-auto [&_[data-player-name]]:text-white [&_[data-player-name]]:[text-shadow:0_1px_3px_#000]"
         style={{
           background: '#1e6a30',
-          border: `2px solid ${C.brandNavyDeep}`,
+          border: '2px solid hsl(var(--primary))',
           boxShadow: `inset 0 0 40px rgba(0,0,0,0.35), 0 4px 20px rgba(0,0,0,0.4)`,
           maxWidth: 440,
         }}
       >
-        {/* Grass + markings + vignette clipped to the rounded pitch shape.
-            Hover-scaled cards live in the row layer above (unclipped) so they
-            can overflow the pitch bounds when hovered without being cut off. */}
+        {/* Domain-specific pitch markings stay clipped inside the field. */}
         <div className="absolute inset-0 rounded-xl overflow-hidden pointer-events-none">
           {/* Grass stripes — alternating horizontal bands like a mown pitch */}
           <div className="absolute inset-0" style={{
@@ -202,18 +204,13 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
             how the lineup is stored. In edit mode slots become clickable to
             swap/empty them via a picker. */}
         <div className="relative w-full" style={{ aspectRatio: '4 / 5' }}>
-          {/* Each slot renders at its formation-defined x/y %. We center the
-              slot on its anchor point via translate(-50%, -50%). popDown is
-              set for slots in the attacking third (y < 20%) so hover preview
-              drops downward instead of up off the top edge. */}
+          {/* Slots retain their saved formation coordinates. */}
           {activeFormation.slots.map(slot => {
             const player = starters[slot.id];
-            const popDown = slot.y < 20;
             return (
               <div
                 key={slot.id}
                 className="asl-slot-wrapper"
-                onClick={() => handleSlotEdit(slot.id)}
                 style={{
                   position: 'absolute',
                   left: `${slot.x}%`,
@@ -222,7 +219,7 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
                   cursor: editingLineup ? 'pointer' : undefined,
                 }}
               >
-                <FormationSlot player={player} positionLabel={slot.label} popDown={popDown} team={team} onCardClick={onCardClick} />
+                {editingLineup && !player ? <Button type="button" variant="ghost" aria-label={`Assign ${slot.label}`} onClick={() => handleSlotEdit(slot.id)} className="size-14 rounded-full border-2 border-dashed border-white/70 bg-black/20 text-xs text-white hover:bg-black/40 hover:text-white">{slot.label}</Button> : <FormationSlot player={player} positionLabel={slot.label} actionLabel={editingLineup ? `Assign ${slot.label}, currently ${player?.username}` : undefined} team={team} onCardClick={editingLineup ? () => handleSlotEdit(slot.id) : onCardClick} />}
               </div>
             );
           })}
@@ -231,270 +228,43 @@ export const TeamRosterFormation = ({ team, allPlayers = [], onCardClick, isCapt
               signal that slots are tappable */}
           {editingLineup && (
             <div className="absolute inset-0 pointer-events-none" style={{
-              border: `2px dashed ${C.gold}99`,
+              border: '2px dashed hsl(var(--warning) / 0.6)',
               borderRadius: 12,
-              animation: 'pulse 2s ease-in-out infinite',
             }} />
           )}
         </div>
       </div>
 
-      {/* FORMATION LABEL — shown to everyone above the pitch area */}
-      <div className="mb-3 flex items-center justify-between gap-2 flex-wrap">
-        <div className="font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99` }}>
-          FORMATION: <span style={{ color: C.goldLight, fontWeight: 700 }}>{activeFormation.name}</span>
-          <span style={{ color: `${C.cream}66`, marginLeft: 8 }}>— {activeFormation.label}</span>
-        </div>
-      </div>
-
-      {/* CAPTAIN'S EDIT LINEUP CONTROLS — only visible to the captain of this team */}
-      {isCaptain && (
-        <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-          {editingLineup ? (
-            <>
-              <div className="font-mono text-[10px] tracking-wider" style={{ color: C.goldLight }}>
-                ◆ EDITING LINEUP — tap any slot above to assign a player
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={cancelEdit}
-                  disabled={savingLineup}
-                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-                  style={{ background: `${C.navyLight}66`, color: C.cream }}
-                >CANCEL</button>
-                <button
-                  onClick={saveEdit}
-                  disabled={savingLineup}
-                  className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-                  style={{ background: C.green, color: C.onColor }}
-                >{savingLineup ? 'SAVING...' : 'SAVE LINEUP'}</button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}99` }}>
-                As captain, you can pick a formation and arrange your starting XI.
-              </div>
-              <button
-                onClick={beginEdit}
-                className="px-3 py-1.5 font-heading tracking-wider text-xs flex items-center gap-1.5 rounded"
-                style={{ background: C.gold, color: C.brandNavyDeep }}
-              ><Edit3 size={11} /> EDIT LINEUP</button>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* FORMATION PICKER — only in edit mode. Horizontal chip row showing
-          every preset. Changing formation remaps players by position so
-          most of the lineup is preserved automatically. */}
-      {isCaptain && editingLineup && (
-        <div className="mb-4 rounded-lg p-3" style={{
-          background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33`,
-        }}>
-          <div className="font-mono text-[10px] tracking-widest mb-2" style={{ color: `${C.cream}99` }}>
-            FORMATION
-          </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {FORMATION_IDS.map(id => {
-              const f = getFormation(id);
-              const active = draftFormation === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => changeDraftFormation(id)}
-                  className="px-3 py-1.5 rounded text-left transition-all"
-                  style={active
-                    ? { background: C.gold, color: C.brandNavyDeep, border: `1px solid ${C.goldLight}` }
-                    : { background: `${C.navyLight}44`, color: C.cream, border: `1px solid ${C.navyLight}66` }
-                  }
-                  title={f.description}
-                >
-                  <div className="font-display tracking-wider text-sm leading-none">{f.name}</div>
-                  <div className="font-mono text-[9px] mt-0.5 opacity-80">{f.label.toUpperCase()}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* SLOT PICKER MODAL — appears when captain taps a slot in edit mode */}
-      {editingLineup && editingSlot && (
-        <Dialog onClose={() => setEditingSlot(null)} label="Select lineup player" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-          style={{ background: `${C.black}cc`, backdropFilter: 'blur(8px)' }}
-          onClick={() => setEditingSlot(null)}
-        >
-          <div className="w-full max-w-md rounded-xl p-5" style={{
-            background: C.white,
-            border: `1px solid ${C.navyLight}`,
-          }} onClick={(e) => e.stopPropagation()}>
-            <div className="font-display tracking-[0.15em] text-lg mb-1" style={{ color: C.cream }}>
-              SELECT PLAYER
-            </div>
-            <div className="font-mono text-[10px] tracking-wider mb-3" style={{ color: `${C.cream}99` }}>
-              FOR SLOT: {editingSlot.replace('_', ' ')}
-            </div>
-            <div className="max-h-80 overflow-y-auto rounded" style={{ border: `1px solid ${C.navyLight}33` }}>
-              {/* Empty slot option */}
-              <button
-                onClick={() => assignToSlot(null)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                style={{ borderBottom: `1px solid ${C.navyLight}22`, background: 'transparent' }}
-              >
-                <X size={14} style={{ color: `${C.cream}66` }} />
-                <span className="font-mono text-xs tracking-widest" style={{ color: `${C.cream}99` }}>
-                  LEAVE EMPTY (benches player)
-                </span>
-              </button>
-              {members.map(p => {
-                const currentlyInSlot = activeFormation.slots.map(s=>s.id).find(k => (draftLineup[k] || '').toLowerCase() === p.username.toLowerCase());
-                const isSelectedForThisSlot = currentlyInSlot === editingSlot;
-                return (
-                  <button
-                    key={p.username}
-                    onClick={() => assignToSlot(p.username)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 text-left"
-                    style={{
-                      borderBottom: `1px solid ${C.navyLight}22`,
-                      background: isSelectedForThisSlot ? `${C.green}22` : 'transparent',
-                    }}
-                  >
-                    <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
-                      border: `1.5px solid ${isSelectedForThisSlot ? C.green : `${C.cream}55`}`,
-                      background: isSelectedForThisSlot ? C.green : 'transparent',
-                    }}>
-                      {isSelectedForThisSlot && <Check size={11} style={{ color: C.onColor }} />}
-                    </div>
-                    <span className="font-heading tracking-wider text-sm flex-1" style={{ color: C.cream }}>
-                      {p.username}
-                    </span>
-                    <span className="font-mono text-[9px] tracking-widest" style={{ color: `${C.cream}66` }}>
-                      {p.position}
-                    </span>
-                    {currentlyInSlot && currentlyInSlot !== editingSlot && (
-                      <span className="font-mono text-[9px] tracking-widest px-1.5 py-0.5 rounded" style={{
-                        background: `${C.gold}22`, color: C.goldLight,
-                      }}>WILL SWAP</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              onClick={() => setEditingSlot(null)}
-              className="w-full mt-3 py-2 font-heading tracking-wider text-xs rounded"
-              style={{ background: `${C.navyLight}66`, color: C.cream }}
-            >CLOSE</button>
-          </div>
-        </Dialog>
-      )}
-
-      {/* BENCH — compact avatar tiles (same treatment as the pitch), denser grid */}
-      {bench.length > 0 && (
-        <div>
-          <h4 className="font-display text-lg tracking-wider mb-3 flex items-center gap-2" style={{ color: C.cream }}>
-            <Users size={14} /> BENCH ({bench.length})
-          </h4>
-          <div className="flex flex-wrap gap-x-3 gap-y-8 sm:gap-x-4 justify-center sm:justify-start" style={{ paddingTop: 20 }}>
-            {bench.map(p => (
-              <FormationSlot key={p.username} player={p} positionLabel={p.position} team={team} onCardClick={onCardClick} />
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2 text-sm"><Badge variant="secondary">{activeFormation.name}</Badge><span className="text-muted-foreground">{activeFormation.label}</span></div>
+      {isCaptain && <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-muted-foreground">{editingLineup ? 'Choose a slot on the pitch to assign, swap, or bench a player.' : 'As captain, you can choose a formation and arrange your starting lineup.'}</p>{editingLineup ? <div className="flex gap-2"><Button variant="outline" onClick={cancelEdit} disabled={savingLineup}>Cancel</Button><Button onClick={() => { void saveEdit(); }} disabled={savingLineup}>{savingLineup ? 'Saving…' : 'Save lineup'}</Button></div> : <Button variant="outline" onClick={beginEdit}><Edit3 className="mr-2 size-4" />Edit lineup</Button>}</div>
+        {editingLineup && <div className="space-y-2"><p className="text-sm font-medium">Formation</p><Select value={draftFormation} onValueChange={changeDraftFormation} disabled={savingLineup}><SelectTrigger aria-label="Formation"><SelectValue /></SelectTrigger><SelectContent>{FORMATION_IDS.map(id => <SelectItem key={id} value={id}>{getFormation(id).name} · {getFormation(id).label}</SelectItem>)}</SelectContent></Select></div>}
+        {lineupError && <Alert variant="destructive"><AlertDescription>{lineupError}</AlertDescription></Alert>}
+      </div>}
+      {editingLineup && editingSlot && <ModalShell onClose={() => setEditingSlot(null)} title="Select lineup player" maxWidth="max-w-md">
+        <p className="mb-3 text-sm text-muted-foreground">Assign a player to {editingSlot.replace('_', ' ')}. Players already starting will swap slots.</p>
+        <Command className="rounded-lg border"><CommandInput placeholder="Search roster…" aria-label="Search roster players" /><CommandList><CommandEmpty>No players found.</CommandEmpty><CommandGroup>
+          <CommandItem value="Leave empty bench player" onSelect={() => assignToSlot(null)}><X className="mr-2 size-4" />Leave empty (benches player)</CommandItem>
+          {members.map(player => {
+            const currentSlot = activeFormation.slots.map(slot => slot.id).find(key => (draftLineup[key] || '').toLowerCase() === player.username.toLowerCase());
+            return <CommandItem key={player.username} value={`${player.username} ${player.position}`} onSelect={() => assignToSlot(player.username)}><span className="min-w-0 flex-1 truncate">{player.username}</span><Badge variant="outline">{player.position}</Badge>{currentSlot === editingSlot ? <Check className="ml-2 size-4" /> : currentSlot && <Badge variant="secondary" className="ml-2">Will swap</Badge>}</CommandItem>;
+          })}
+        </CommandGroup></CommandList></Command>
+      </ModalShell>}
+      {bench.length > 0 && <section className="space-y-3"><h4 className="flex items-center gap-2 text-lg font-semibold"><Users className="size-4" />Bench <Badge variant="secondary">{bench.length}</Badge></h4><div className="flex flex-wrap gap-3 rounded-xl border bg-muted/30 p-4">{bench.map(player => <FormationSlot key={player.username} player={player} positionLabel={player.position} team={team} onCardClick={onCardClick} />)}</div></section>}
     </div>
   );
 };
 
-// Stable component identity preserves the roster button while a nested card opens.
-const SLOT_W = 76;
-const SLOT_H = 100;
-const FormationSlot = ({ player, positionLabel, popDown = false, team, onCardClick }: { player: Account | null; positionLabel: string; popDown?: boolean; team: TeamSummary; onCardClick: (account: Account) => void }) => {
-  if (!player) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center rounded-full"
-        style={{
-          width: 60, height: 60,
-          background: `${C.navyDeep}88`,
-          border: `2px dashed ${C.navyLight}66`,
-        }}
-      >
-        <div className="font-mono text-[9px] tracking-widest" style={{
-          color: 'rgba(255,255,255,0.6)',
-          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-        }}>{positionLabel}</div>
-      </div>
-    );
-  }
+// Stable component identity keeps focus on the roster trigger when its player dialog closes.
+const FormationSlot = ({ player, positionLabel, actionLabel, team, onCardClick }: { player: Account | null; positionLabel: string; actionLabel?: string; team: TeamSummary; onCardClick: (account: Account) => void }) => {
+  if (!player) return <div className="flex size-14 items-center justify-center rounded-full border-2 border-dashed border-white/60 bg-black/20 text-xs text-white">{positionLabel}</div>;
   const ranking = player.ranking;
-  const isRanked = ranking.ranked;
-  const ovr = isRanked ? ranking.score : 'NR';
-  const tierName = isRanked ? ranking.tier : 'BRONZE';
-  const tier = cardTier(tierName);
-  const ringColor = tier.from || C.goldLight;
-  const ovrTextColor = tier.accent || C.navyDeep;
-  const captain = isTeamCaptain(player, team);
-  return (
-    <button
-      type="button"
-      onClick={() => onCardClick?.(player)}
-      className={`asl-formation-slot focus:outline-none ${popDown ? 'pop-down' : ''}`}
-      style={{
-        width: SLOT_W, height: SLOT_H,
-        background: 'transparent', border: 'none', padding: 0,
-        cursor: 'pointer', position: 'relative',
-      }}
-    >
-      {/* Default view: compact avatar icon */}
-      <div className="asl-formation-icon flex flex-col items-center">
-        <div style={{ position: 'relative' }}>
-          <div
-            className="rounded-full overflow-hidden flex items-center justify-center"
-            style={{
-              width: 56, height: 56,
-              background: C.navyDeep,
-              border: `2.5px solid ${ringColor}`,
-              boxShadow: `0 3px 8px rgba(0,0,0,0.5)`,
-            }}
-          >
-            {player.imageUrl ? (
-              <MediaImage src={mediaUrl(player.imageUrl)} alt={player.username} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            ) : (
-              <div className="font-display text-xl" style={{ color: ringColor }}>
-                {(player.username || '?').slice(0, 1).toUpperCase()}
-              </div>
-            )}
-          </div>
-          <div
-            className="absolute rounded-full flex items-center justify-center"
-            style={{
-              top: -3, right: -4,
-              width: 22, height: 22,
-              background: ringColor,
-              color: ovrTextColor,
-              border: `1.5px solid ${C.navyDeep}`,
-              fontFamily: 'Anton, sans-serif',
-              fontSize: ovr === 'NR' ? 9 : 11,
-              lineHeight: 1,
-            }}
-          >{ovr}</div>
-        </div>
-        <div className="mt-1 font-heading text-[10px] tracking-wider flex items-center gap-0.5 truncate" style={{
-          color: '#ffffff',
-          textShadow: '0 1px 2px rgba(0,0,0,0.9)',
-          maxWidth: SLOT_W,
-        }}>
-          {captain && <CaptainStar size={9} />}
-          <span className="truncate">{(player.username || '').toUpperCase()}</span>
-        </div>
-      </div>
-
-      {/* Hover preview: full-size PlayerCard as floating overlay */}
-      <div className="asl-formation-preview" aria-hidden="true">
-        <PlayerCard account={player} size="sm" team={team} hideTeam={true} />
-      </div>
-    </button>
-  );
+  const tier = cardTier(ranking.ranked ? ranking.tier : 'BRONZE');
+  const ringColor = tier.from || '#d8b858';
+  return <div className="relative flex w-16 flex-col items-center gap-1 rounded-lg p-1">
+    <span className="relative" aria-hidden="true"><span className="flex size-10 items-center justify-center overflow-hidden rounded-full border-2 bg-slate-900 sm:size-14" style={{ borderColor: ringColor }}>{player.imageUrl ? <MediaImage src={mediaUrl(player.imageUrl)} alt="" className="size-full object-cover" /> : <span className="text-lg font-semibold" style={{ color: ringColor }}>{player.username.slice(0, 1).toUpperCase()}</span>}</span><span className="absolute -right-1 -top-1 rounded-full border bg-background px-1 text-xs font-semibold text-foreground">{ranking.ranked ? ranking.score : 'NR'}</span></span>
+    <span aria-hidden="true" data-player-name className="flex w-full items-center justify-center gap-0.5 text-xs text-foreground">{isTeamCaptain(player, team) && <CaptainStar size={10} />}<span className="truncate">{player.username}</span></span>
+    <Button type="button" variant="ghost" onClick={() => onCardClick(player)} aria-label={`${actionLabel ?? `View ${player.username}, ${positionLabel}`}, ${ranking.ranked ? `overall rating ${ranking.score}` : 'unranked'}`} className="absolute inset-0 h-full w-full rounded-lg p-0 hover:bg-black/20" />
+  </div>;
 };

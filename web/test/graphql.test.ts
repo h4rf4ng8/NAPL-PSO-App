@@ -2,7 +2,7 @@ import { afterEach, mock, test } from 'node:test';
 import { gql } from '@apollo/client';
 import assert from 'node:assert/strict';
 import { client, resetClient } from '../src/api/client';
-import { PlayerCardDocument, AccountOpponentsDocument, AccountCardPreviewsDocument } from '../src/api/generated/graphql';
+import { PlayerCardDocument, AccountOpponentsDocument, AccountCardPreviewsDocument, LeagueOverviewDocument, LeaderboardDocument, VotingCandidatesDocument } from '../src/api/generated/graphql';
 import { mapAccountCardPreviews, mapAccountOpponents, mapAccount, mapCardAccount } from '../src/features/accounts/api';
 import { matchSchema } from '@napl/contracts/accounts';
 const json = (body: unknown) => Response.json(body);
@@ -92,6 +92,46 @@ test('selected season card loads one detail and keeps complete histories absent'
 test('malformed selected card JSON fails before cache writes',async()=>{
  const wire=wireAccount();mock.method(globalThis,'fetch',async()=>json({data:{accountCard:{...wire,__typename:'AccountCard',team:null,season:'all',cardStats:wire.cardStats[0]!.cells,awardPreview:[{}],championshipPreview:[],awardCount:1,championshipCount:0,previewHasMore:false}}}));
  await assert.rejects(client.query({query:PlayerCardDocument,variables:{id:'p1',season:'all'}}));assert.deepEqual(client.cache.extract(),{});
+});
+
+test('season and voting snapshots cannot overwrite cached leaderboard or career stats', async () => {
+  const gamesBySeason: Record<string, number> = { all: 20, S1: 3, S2: 0 };
+  let requests = 0;
+  mock.method(globalThis, 'fetch', async (_url, init) => {
+    requests++;
+    const { operationName, variables } = JSON.parse(String(init?.body));
+    const games = operationName === 'VotingCandidates' ? 1 : gamesBySeason[variables.season]!;
+    const wire = wireAccount();
+    const card = { ...wire, team: null, season: variables.season, stats: { ...wire.stats, games },
+      ranking: { ...wire.ranking, score: games, gamesPlayed: games }, cardStats: wire.cardStats[0]!.cells,
+      awardCount: 0, championshipCount: 0, awardPreview: [], championshipPreview: [], previewHasMore: false };
+    if (operationName === 'PlayerCard') return json({ data: { accountCard: { ...card, __typename: 'AccountCard' } } });
+    if (operationName === 'LeagueOverview') return json({ data: { leagueOverview: { __typename: 'LeagueOverview', season: 'S2',
+      playerCount: 1, activeTeamCount: 0, tickerHasMore: false, tickerNews: [], activeVotingPeriod: null,
+      me: { ...card, __typename: 'CurrentAccountSummary', email: null, pendingImageUrl: null, roles: [] } } } });
+    const page = { __typename: 'AccountSummaryPage', nodes: [{ ...card, __typename: 'AccountSummary' }], totalCount: 1,
+      pageInfo: { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false } };
+    return json({ data: { [operationName === 'Leaderboard' ? 'leaderboard' : 'votingCandidates']: page } });
+  });
+  for (const season of Object.keys(gamesBySeason)) {
+    await client.query({ query: PlayerCardDocument, variables: { id: 'p1', season } });
+    await client.query({ query: LeagueOverviewDocument, variables: { season } });
+    await client.query({ query: LeaderboardDocument, variables: { season } });
+  }
+  await client.query({ query: VotingCandidatesDocument, variables: { periodId: 'weekly' } });
+  for (const [season, games] of Object.entries(gamesBySeason)) {
+    const card = (await client.query({ query: PlayerCardDocument, variables: { id: 'p1', season } })).data!.accountCard!;
+    const me = (await client.query({ query: LeagueOverviewDocument, variables: { season } })).data!.leagueOverview.me!;
+    const player = (await client.query({ query: LeaderboardDocument, variables: { season } })).data!.leaderboard.nodes[0]!;
+    assert.equal(mapCardAccount(card).stats.games, games);
+    assert.equal(card.season, season);
+    assert.equal(mapCardAccount(me).stats.games, games);
+    assert.equal(me.season, season);
+    assert.equal(player.ranking.gamesPlayed, games);
+    assert.equal(player.ranking.score, games);
+    assert.deepEqual(player.stats, { ...account.stats, games });
+  }
+  assert.equal(requests, 10, 'season revisits must read their own cached snapshots');
 });
 
 test('raw account boundary retains arbitrary finite stats and rejects invalid history records',()=>{

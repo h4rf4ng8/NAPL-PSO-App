@@ -30,7 +30,12 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
-  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season } });
+  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season }, fetchPolicy: 'cache-and-network' });
+  const previousView = useRef(view);
+  useEffect(() => {
+    if (view === 'me' && previousView.current !== view) void refetch().catch(() => { /* Apollo renders refetch errors below. */ });
+    previousView.current = view;
+  }, [view, refetch]);
   const data = useMemo(() => result?.leagueOverview.me ? { me: mapCurrentCard(result.leagueOverview.me), currentSeason: result.leagueOverview.season, tickerNews: result.leagueOverview.tickerNews, period: result.leagueOverview.activeVotingPeriod } : undefined, [result]);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const updateRef = useRef(onUpdate);

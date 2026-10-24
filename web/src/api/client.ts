@@ -6,6 +6,10 @@ export const client = new ApolloClient({
   cache: new InMemoryCache({ typePolicies: {
     // Public and private account types intentionally remain separate entities.
     CurrentAccount: { keyFields: ['id'] },
+    // These projections contain stats for their parent query's season or voting period.
+    AccountSummary: { keyFields: false },
+    AccountCard: { keyFields: false },
+    CurrentAccountSummary: { keyFields: false },
   } }),
 });
 

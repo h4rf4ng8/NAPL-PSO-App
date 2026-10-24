@@ -28,7 +28,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   const [offset, setOffset] = useState(0);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const seasons = seasonData?.seasons.nodes ?? [];
-  const { data, loading, error, refetch } = useQuery(LeaderboardDocument, { variables: {
+  const { data, loading, error, refetch } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
     sortBy, sortDir, after,
   } });

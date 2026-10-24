@@ -1,6 +1,6 @@
 # Frontend visual review
 
-These captures use synthetic accounts and league data with the real production components and cached ASL artwork. They contain no member data. The before captures use the pre-migration implementation; after captures show the integrated redesign. Browser checks also retain screenshots/traces as CI artifacts. Human inspection covered every destination and admin section, including mobile, dark themes and representative overlays.
+These captures use synthetic accounts and league data with the real production components and cached ASL artwork. They contain no member data. The before captures use the pre-migration implementation; after captures show the integrated redesign. Browser checks also retain screenshots/traces as CI artifacts. Visual inspection covered every destination and admin section, including mobile, dark themes and representative overlays.
 
 | Surface | Before | After |
 | --- | --- | --- |

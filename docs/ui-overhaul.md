@@ -64,4 +64,27 @@ The pre-migration frontend baseline passed 152 tests, typecheck and production b
 
 The pinned [Brooks review skill](https://github.com/hyhmrright/brooks-lint/blob/c85f65eada5c56721275ef89e2dd41ac453dcba2/skills/brooks-review/SKILL.md) complements ESLint and executable checks. Review findings included expired Stats cursors, completed-write/failed-refresh handling, mobile header crowding and lineup accessibility; fixes belong to their feature layers.
 
+### Executed checks
+
+The integrated application was checked with Node 24 and pnpm 10.15.1 on October 23, 2026:
+
+| Check | Result |
+| --- | --- |
+| GraphQL freshness, workspace types and browser-fixture types | Passed |
+| ESLint | Passed with zero warnings |
+| Dependency boundaries | Passed: 184 modules, 981 dependencies; three pre-existing cycles baselined |
+| Disposable integration | Passed: 135 frontend, 199 API, 21 migration and 4 packaged-Lambda tests; zero skipped |
+| Browser matrix | All 329 cases passed across eight Chromium/WebKit projects; zero skipped |
+| Portable browser fixtures | 14/14 Chromium checks passed at 320px without cached artwork or fonts |
+| SAM templates | Both passed lint |
+| Production workspace builds | Passed with documented public environment placeholders |
+
+Each intermediate PR also passed its frontend Node suite: foundation 161, shared interactions 146, navigation 138, players/teams/matches 137 each, content/voting/league settings 136 each, and access/validation/cleanup 135 each. Counts decrease as portal-dependent renderer cases move into the browser suite; the mapping above preserves their business assertions.
+
+The full browser run passed 328 cases; one mobile admin traversal was interrupted by a simultaneous contracts rebuild triggering Vite's full reload. That unchanged case passed separately after the build finished, completing all 329 cases without retries or test changes. The matrix covers 320, 390, 768, 1024, 1280 and 1440px plus both sides of the navigation breakpoints. Visual inspection covered each destination and admin section, including mobile and dark layouts, alongside keyboard, overflow and axe checks.
+
+The final frontend build contains 1,291.78 kB of JavaScript (362.81 kB gzip) and 58.49 kB of CSS (10.94 kB gzip). The pre-existing annotation, mixed-import and large-chunk warnings remain. The local disposable PostgreSQL run used a 1 GiB tmpfs because the Docker VM's persistent disk was full; it passed without changing repository test scripts or existing containers.
+
+Fixtures isolate external requests and do not verify the hosted OAuth provider. Automated accessibility checks cover the exercised states and complement visual/keyboard review; they do not establish complete accessibility compliance.
+
 Delivery uses a `gh stack` chain rooted on `staging`, grouped by domain. Each PR compares against its direct parent. The existing staging-to-main stack remains separate. Merging and deployment are separate actions.

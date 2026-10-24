@@ -35,12 +35,18 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
   const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season }, fetchPolicy: 'cache-and-network' });
+  // Mutation-driven cache resets must not unmount an editor or discard its receipt.
+  // Retain only this account/season's last completed overview while it refreshes.
+  const [overview, setOverview] = useState({ accountId: account.id, season, result });
+  const sameScope = overview.accountId === account.id && overview.season === season;
+  if (!sameScope || (result && result !== overview.result)) setOverview({ accountId: account.id, season, result });
+  const currentResult = result ?? (sameScope ? overview.result : undefined);
   const previousView = useRef(view);
   useEffect(() => {
     if (view === 'me' && previousView.current !== view) void refetch().catch(() => { /* Apollo renders refetch errors below. */ });
     previousView.current = view;
   }, [view, refetch]);
-  const data = useMemo(() => result?.leagueOverview.me ? { me: mapCurrentCard(result.leagueOverview.me), currentSeason: result.leagueOverview.season, tickerNews: result.leagueOverview.tickerNews, period: result.leagueOverview.activeVotingPeriod } : undefined, [result]);
+  const data = useMemo(() => currentResult?.leagueOverview.me?.id === account.id ? { me: mapCurrentCard(currentResult.leagueOverview.me), currentSeason: currentResult.leagueOverview.season, tickerNews: currentResult.leagueOverview.tickerNews, period: currentResult.leagueOverview.activeVotingPeriod } : undefined, [currentResult, account.id]);
   const { data: seasonData, loading: seasonsLoading, error: seasonsError, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const updateRef = useRef(onUpdate);
   updateRef.current = onUpdate;

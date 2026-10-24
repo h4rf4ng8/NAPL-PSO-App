@@ -2,7 +2,6 @@ import { usePageCursor } from '../../hooks/use-page-cursor';
 import type { TeamSummary as Team } from '../teams/models';
 import { useQuery } from '@apollo/client/react';
 import { TeamSummariesDocument } from '../../api/generated/graphql';
-import { Check } from 'lucide-react';
 import { useState } from 'react';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { PageButtons } from '../../components/PageButtons';
@@ -11,8 +10,18 @@ import { matches as matchApi } from './api';
 
 import type { ScheduledMatch } from './models';
 import { ModalShell } from '../../components/Dialog';
-import { C } from '../../theme/theme';
+
 import { generateRoundRobinSchedule } from '../../utils/league';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { Textarea } from '../../components/ui/textarea';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Badge } from '../../components/ui/badge';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog';
+import { Button } from '../../components/ui/button';
+
 
 // ============ SCHEDULE: GENERATE MODAL ============
 // Admin picks the season name + the teams to include, then this generates
@@ -38,6 +47,7 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
   const [rounds, setRounds] = useState(2); // how many times each pairing is played
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [replaceOpen, setReplaceOpen] = useState(false);
   const [preview, setPreview] = useState<ReturnType<typeof generateRoundRobinSchedule> | null>(null); // array of weeks of {homeTeamId, awayTeamId}
   const season = seasonName.trim();
   let seasonError = '';
@@ -86,8 +96,6 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
     setErr('');
     if (seasonError) { setErr(seasonError); return; }
     if (!preview) { setErr('Preview the schedule first.'); return; }
-    // Confirm wipe if the season already exists
-    if (existingSeasons.includes(season) && !confirm(`Season "${season}" already has matches. REPLACE all of them with a new generated schedule?`)) return;
     setBusy(true);
     try {
       const rows = preview.flatMap((wk, idx) => wk.map(m => ({
@@ -112,156 +120,41 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
   const teamById = (id: string | null | undefined) => id ? { name: selectedNames[id] ?? id, tag: selectedNames[id] ?? id } : undefined;
 
   return (
-    <ModalShell title="GENERATE SEASON SCHEDULE" onClose={onClose} maxWidth="max-w-2xl">
-      <div className="space-y-4">
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>SEASON NAME</label>
-          <input
-            type="text"
-            value={seasonName}
-            onChange={(e) => setSeasonName(e.target.value)}
-            className="w-full px-3 py-2 font-heading tracking-wider rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-            TEAMS IN THIS SEASON ({selectedTeamIds.length} selected)
-          </label>
-          <input aria-label="Search generation teams" placeholder="Search teams" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} />
-          {teamPage.error && <p role="alert">{teamPage.error}<button onClick={teamPage.restart}>Restart teams</button></p>}
+    <ModalShell title="Generate season schedule" onClose={busy ? undefined : onClose} maxWidth="max-w-2xl">
+      <div className="space-y-5">
+        <div className="space-y-2"><Label htmlFor="generation-season">Season name</Label><Input id="generation-season" value={seasonName} onChange={e => setSeasonName(e.target.value)} maxLength={160} /></div>
+        <fieldset className="space-y-3">
+          <legend className="mb-2 text-sm font-medium">Teams in this season · {selectedTeamIds.length} selected</legend>
+          <Input aria-label="Search generation teams" placeholder="Search approved teams" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} />
+          {teamPage.error && <Alert variant="destructive"><AlertDescription>{teamPage.error}<Button variant="outline" onClick={teamPage.restart}>Restart teams</Button></AlertDescription></Alert>}
+          {teamPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading teams…</p>}
+          <div className="flex flex-wrap gap-2">{selectedTeamIds.map(id => <Button size="sm" variant="secondary" key={id} onClick={() => toggleTeam(id)}>Remove {selectedNames[id] ?? id}</Button>)}</div>
+          <div className="max-h-56 overflow-y-auto rounded-lg border divide-y">
+            {approvedTeams.map(t => <label key={t.id} className="flex min-h-11 cursor-pointer items-center gap-3 px-3 py-2 hover:bg-accent"><Checkbox checked={selectedTeamIds.includes(t.id)} onCheckedChange={() => toggleTeam(t.id)} /><span className="text-sm">{t.tag} — {t.name}</span></label>)}
+            {!teamPage.loading && approvedTeams.length === 0 && <p className="p-4 text-sm text-muted-foreground">No approved teams found. Try another search or approve teams first.</p>}
+          </div>
           <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
-          <div>{selectedTeamIds.map(id => <button key={id} onClick={() => toggleTeam(id)}>Remove {selectedNames[id] ?? id}</button>)}</div>
-          {approvedTeams.length === 0 ? (
-            <div className="font-mono text-xs p-3 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>
-              No approved teams yet. Approve teams first before generating a schedule.
-            </div>
-          ) : (
-            <div className="max-h-56 overflow-y-auto rounded" style={{ border: `1px solid ${C.navyLight}33` }}>
-              {approvedTeams.map(t => {
-                const checked = selectedTeamIds.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggleTeam(t.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-left"
-                    style={{
-                      borderBottom: `1px solid ${C.navyLight}22`,
-                      background: checked ? `${C.green}22` : 'transparent',
-                    }}
-                  >
-                    <div className="w-4 h-4 rounded flex items-center justify-center shrink-0" style={{
-                      border: `1.5px solid ${checked ? C.green : `${C.cream}55`}`,
-                      background: checked ? C.green : 'transparent',
-                    }}>
-                      {checked && <Check size={11} style={{ color: C.onColor }} />}
-                    </div>
-                    <span className="font-heading tracking-wider text-sm" style={{ color: C.cream }}>
-                      {t.tag} — {t.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
+        </fieldset>
+        <div className="space-y-2"><Label htmlFor="generation-rounds">Rounds per pairing</Label><Input id="generation-rounds" className="max-w-24" type="number" min="1" max="10" value={rounds} onChange={e => { setRounds(Math.max(1, Math.min(10, Number(e.target.value) || 1))); setPreview(null); }} /></div>
+        <div className="rounded-lg bg-muted p-4 text-sm space-y-1">
+          <p className="font-medium">{selectedTeamIds.length} teams · {Math.floor(selectedTeamIds.length * (selectedTeamIds.length - 1) / 2) * rounds} matches · {Math.max(0, (selectedTeamIds.length % 2 === 0 ? selectedTeamIds.length - 1 : selectedTeamIds.length) * rounds)} weeks</p>
+          <p className="text-muted-foreground">Each team plays {Math.max(0, selectedTeamIds.length - 1) * rounds} games.{rounds >= 2 && ' Home and away flip between rounds.'} Set dates and times after generation.</p>
         </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-            ROUNDS (HOW MANY TIMES EACH PAIRING PLAYS)
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="1" max="10"
-              value={rounds}
-              onChange={(e) => { setRounds(Math.max(1, Math.min(10, Number(e.target.value) || 1))); setPreview(null); }}
-              className="w-20 px-3 py-2 font-mono text-sm rounded text-center"
-              style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            />
-            <span className="font-mono text-[10px]" style={{ color: `${C.cream}99` }}>
-              {rounds === 1 ? 'SINGLE round-robin' : (rounds === 2 ? 'DOUBLE round-robin' : `${rounds}× round-robin`)}
-            </span>
-          </div>
-        </div>
-
-        <div className="font-mono text-[10px] p-3 rounded" style={{ background: `${C.navyLight}22`, color: `${C.cream}cc` }}>
-          <div className="mb-1" style={{ color: C.goldLight }}>FORMAT PREVIEW</div>
-          With {selectedTeamIds.length} teams and {rounds} round{rounds > 1 ? 's' : ''}: each team plays {Math.max(0, (selectedTeamIds.length - 1)) * rounds} games.
-          Total: <b>{Math.floor(selectedTeamIds.length * (selectedTeamIds.length - 1) / 2) * rounds}</b> matches
-          over <b>{Math.max(0, ((selectedTeamIds.length % 2 === 0 ? (selectedTeamIds.length - 1) : selectedTeamIds.length)) * rounds)}</b> weeks.
-          {rounds >= 2 && ' Home/away flipped between rounds for balance.'}
-          <br />
-          Matches start with no date/time — you set those individually as teams agree on times.
-        </div>
-
-        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
-
-        {preview && (
-          <div className="max-h-64 overflow-y-auto rounded p-2" style={{ background: `${C.brandNavyDeep}66`, border: `1px solid ${C.navyLight}33` }}>
-            <div className="font-mono text-[10px] mb-2" style={{ color: C.goldLight }}>
-              PREVIEW — {preview.length} WEEKS, {totalMatches} MATCHES
-            </div>
-            {preview.map((wk, i) => (
-              <div key={i} className="mb-2">
-                <div className="font-heading text-[10px] tracking-widest" style={{ color: `${C.cream}99` }}>WEEK {i + 1}</div>
-                {wk.map((m, mi) => (
-                  <div key={mi} className="font-mono text-[10px] pl-2" style={{ color: C.cream }}>
-                    {teamById(m.homeTeamId)?.tag || '?'} vs {teamById(m.awayTeamId)?.tag || '?'}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-2 flex-wrap">
-          {preview ? (
-            <>
-              <button
-                onClick={() => setPreview(null)}
-                className="px-4 py-2 font-heading tracking-wider text-sm rounded"
-                style={{ background: `${C.navyLight}66`, color: C.cream }}
-              >RE-SHUFFLE</button>
-              <button
-                onClick={handleGenerate}
-                disabled={busy}
-                className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-                style={{ background: C.green, color: C.onColor }}
-              >{busy ? 'GENERATING...' : 'GENERATE & SAVE'}</button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={handlePreview}
-                className="flex-1 py-2 font-heading tracking-wider text-sm rounded"
-                style={{ background: `${C.navyLight}66`, color: C.cream }}
-              >PREVIEW SCHEDULE</button>
-              {/* Alternative: skip generation entirely and build matches manually */}
-              <button
-                onClick={handleSkipGeneration}
-                className="px-3 py-2 font-heading tracking-wider text-xs rounded"
-                style={{ background: `${C.gold}44`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
-                title="Create the season with no auto-generated matches — add them individually afterward"
-              >SKIP GEN. & BUILD MANUALLY</button>
-            </>
-          )}
-          <button
-            onClick={onClose}
-            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
-            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
-          >CANCEL</button>
+        {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+        {preview && <section aria-label="Schedule preview" className="rounded-lg border p-4 space-y-3"><h3 className="font-medium">Preview <Badge variant="secondary">{preview.length} weeks · {totalMatches} matches</Badge></h3><div className="max-h-64 overflow-y-auto grid gap-4 sm:grid-cols-2">{preview.map((wk, i) => <div key={i}><h4 className="mb-1 text-sm font-medium">Week {i + 1}</h4>{wk.map((m, mi) => <p key={mi} className="text-sm text-muted-foreground">{teamById(m.homeTeamId)?.name || '?'} vs {teamById(m.awayTeamId)?.name || '?'}</p>)}</div>)}</div></section>}
+        <div className="flex flex-wrap gap-2">
+          {preview ? <><Button variant="outline" disabled={busy} onClick={() => setPreview(null)}>Change schedule</Button><Button disabled={busy} onClick={() => { if (existingSeasons.includes(season)) setReplaceOpen(true); else void handleGenerate(); }}>{busy ? 'Generating…' : 'Generate & save'}</Button></> : <><Button onClick={handlePreview}>Preview schedule</Button><Button variant="outline" onClick={handleSkipGeneration}>Build manually</Button></>}
+          <Button variant="ghost" disabled={busy} onClick={onClose}>Cancel</Button>
         </div>
       </div>
+      <AlertDialog open={replaceOpen} onOpenChange={setReplaceOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Replace this season’s schedule?</AlertDialogTitle><AlertDialogDescription>All matches in {season} will be replaced with the {totalMatches} matches in this preview. This cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Keep existing schedule</AlertDialogCancel><AlertDialogAction onClick={() => { void handleGenerate(); }}>Replace schedule</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </ModalShell>
   );
 };
 
 // ============ SCHEDULE: EDIT MATCH MODAL ============
 // Admin opens this on any individual match to set the date/time, enter a
-// score, mark postponed/forfeit, add a stream link, etc.
+// score, mark postponed/cancelled, add a stream link, etc.
 export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { match: ScheduledMatch; allTeams?: Pick<Team, 'id' | 'name' | 'tag'>[]; onClose: () => void; onSaved: () => void }) => {
   const home = allTeams.find(t => t.id === match.homeTeamId);
   const away = allTeams.find(t => t.id === match.awayTeamId);
@@ -280,6 +173,7 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
   const [notes, setNotes] = useState(match.notes || '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const handleSave = async () => {
     setErr('');
@@ -304,7 +198,6 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this match from the schedule?')) return;
     setBusy(true);
     try {
       await matchApi.deleteScheduledMatch(match.id);
@@ -317,121 +210,18 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
   };
 
   return (
-    <ModalShell title={`EDIT MATCH — WEEK ${match.week}`} onClose={onClose} maxWidth="max-w-xl">
-      <div className="space-y-3">
-        <div className="font-heading tracking-wider text-center text-base p-2 rounded" style={{
-          background: `${C.navyLight}22`, color: C.cream
-        }}>
-          {home?.tag || '?'} <span style={{ color: `${C.cream}66` }}>vs</span> {away?.tag || '?'}
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>DATE & TIME</label>
-          <input
-            type="datetime-local"
-            value={dateInput}
-            onChange={(e) => setDateInput(e.target.value)}
-            className="w-full px-3 py-2 font-mono text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
-            Leave empty if time not yet decided.
-          </div>
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>STATUS</label>
-          <div className="grid grid-cols-4 gap-1">
-            {['scheduled', 'completed', 'postponed', 'forfeit'].map(s => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStatus(s)}
-                className="py-1.5 font-mono text-[10px] tracking-widest rounded uppercase"
-                style={status === s
-                  ? { background: C.green, color: C.onColor }
-                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
-                }
-              >{s}</button>
-            ))}
-          </div>
-        </div>
-
-        {status === 'completed' && (
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-                {home?.tag || 'HOME'} SCORE
-              </label>
-              <input
-                type="number" min="0"
-                value={homeScore}
-                onChange={(e) => setHomeScore(Number(e.target.value))}
-                className="w-full px-3 py-2 font-mono text-sm rounded"
-                style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              />
-            </div>
-            <div>
-              <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-                {away?.tag || 'AWAY'} SCORE
-              </label>
-              <input
-                type="number" min="0"
-                value={awayScore}
-                onChange={(e) => setAwayScore(Number(e.target.value))}
-                className="w-full px-3 py-2 font-mono text-sm rounded"
-                style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              />
-            </div>
-          </div>
-        )}
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>STREAM URL (OPTIONAL)</label>
-          <input
-            type="url"
-            value={streamUrl}
-            onChange={(e) => setStreamUrl(e.target.value)}
-            placeholder="https://twitch.tv/..."
-            className="w-full px-3 py-2 font-mono text-xs rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>NOTES (OPTIONAL)</label>
-          <input
-            type="text"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="e.g. rescheduled from last week"
-            className="w-full px-3 py-2 font-body text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-        </div>
-
-        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={busy}
-            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-            style={{ background: C.green, color: C.onColor }}
-          >{busy ? 'SAVING...' : 'SAVE'}</button>
-          <button
-            onClick={handleDelete}
-            disabled={busy}
-            className="px-3 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-            style={{ background: `${C.red}44`, color: C.redLight }}
-          >DELETE</button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
-            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
-          >CANCEL</button>
-        </div>
+    <ModalShell title={`Edit match · Week ${match.week}`} onClose={busy ? undefined : onClose} maxWidth="max-w-xl">
+      <div className="space-y-4">
+        <p className="rounded-lg bg-muted p-3 text-center font-medium">{home?.name || '?'} vs {away?.name || '?'}</p>
+        <div className="space-y-2"><Label htmlFor="match-date">Date & time</Label><Input id="match-date" type="datetime-local" value={dateInput} onChange={e => setDateInput(e.target.value)} /><p className="text-xs text-muted-foreground">Your local time. Leave empty if undecided.</p></div>
+        <div className="space-y-2"><Label htmlFor="match-status">Status</Label><Select value={status} onValueChange={setStatus}><SelectTrigger id="match-status"><SelectValue /></SelectTrigger><SelectContent>{['scheduled', 'completed', 'postponed', 'cancelled'].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent></Select></div>
+        {status === 'completed' && <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label htmlFor="home-score">{home?.tag || 'Home'} score</Label><Input id="home-score" type="number" min="0" value={homeScore} onChange={e => setHomeScore(e.target.value === '' ? '' : Number(e.target.value))} /></div><div className="space-y-2"><Label htmlFor="away-score">{away?.tag || 'Away'} score</Label><Input id="away-score" type="number" min="0" value={awayScore} onChange={e => setAwayScore(e.target.value === '' ? '' : Number(e.target.value))} /></div></div>}
+        <div className="space-y-2"><Label htmlFor="match-stream">Stream URL (optional)</Label><Input id="match-stream" type="url" value={streamUrl} onChange={e => setStreamUrl(e.target.value)} placeholder="https://twitch.tv/…" /></div>
+        <div className="space-y-2"><Label htmlFor="match-notes">Notes (optional)</Label><Textarea id="match-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Rescheduled from last week…" /></div>
+        {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+        <div className="flex flex-wrap gap-2"><Button onClick={handleSave} disabled={busy}>{busy ? 'Saving…' : 'Save match'}</Button><Button variant="destructive" onClick={() => setDeleteOpen(true)} disabled={busy}>Delete match</Button><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button></div>
       </div>
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this scheduled match?</AlertDialogTitle><AlertDialogDescription>{home?.name || 'Home'} vs {away?.name || 'Away'} will be removed from week {match.week}. Imported player records are unaffected.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { void handleDelete(); }}>Delete match</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </ModalShell>
   );
 };
@@ -482,79 +272,14 @@ export const AddMatchModal = ({ existingSeasons = [], onClose, onSaved, defaultS
   };
 
   return (
-    <ModalShell title="ADD MATCH" onClose={onClose} maxWidth="max-w-md">
-      <div className="space-y-3">
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>SEASON</label>
-          <input
-            type="text"
-            value={season}
-            onChange={(e) => setSeason(e.target.value)}
-            list="existing-seasons"
-            placeholder="e.g. Season 1"
-            className="w-full px-3 py-2 font-heading tracking-wider rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-          <datalist id="existing-seasons">
-            {existingSeasons.map(s => <option key={s} value={s} />)}
-          </datalist>
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}77` }}>
-            Type an existing season name or create a new one.
-          </div>
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>WEEK</label>
-          <input
-            type="number"
-            min="1" max="52"
-            value={week}
-            onChange={(e) => setWeek(Math.max(1, Number(e.target.value) || 1))}
-            className="w-24 px-3 py-2 font-mono text-sm rounded text-center"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>HOME</label>
-            <TeamSelect value={homeTeamId} onChange={setHomeTeamId} label="Home team" />
-          </div>
-          <div>
-            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>AWAY</label>
-            <TeamSelect value={awayTeamId} onChange={setAwayTeamId} label="Away team" />
-          </div>
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>DATE & TIME (OPTIONAL)</label>
-          <input
-            type="datetime-local"
-            value={dateInput}
-            onChange={(e) => setDateInput(e.target.value)}
-            className="w-full px-3 py-2 font-mono text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}77` }}>
-            Leave empty to set later via EDIT.
-          </div>
-        </div>
-
-        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={busy}
-            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-            style={{ background: C.green, color: C.onColor }}
-          >{busy ? 'SAVING...' : 'ADD MATCH'}</button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
-            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
-          >CANCEL</button>
-        </div>
+    <ModalShell title="Add match" onClose={busy ? undefined : onClose} maxWidth="max-w-xl">
+      <div className="space-y-4">
+        <div className="space-y-2"><Label htmlFor="add-season">Season</Label><Input id="add-season" value={season} onChange={e => setSeason(e.target.value)} list="existing-seasons" placeholder="Season 1" /><datalist id="existing-seasons">{existingSeasons.map(s => <option key={s} value={s} />)}</datalist><p className="text-xs text-muted-foreground">Choose an existing season or enter a new name.</p></div>
+        <div className="space-y-2"><Label htmlFor="add-week">Week</Label><Input id="add-week" className="max-w-24" type="number" min="1" max="52" value={week} onChange={e => setWeek(Math.max(1, Number(e.target.value) || 1))} /></div>
+        <div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Home</Label><TeamSelect value={homeTeamId} onChange={setHomeTeamId} label="Home team" /></div><div className="space-y-2"><Label>Away</Label><TeamSelect value={awayTeamId} onChange={setAwayTeamId} label="Away team" /></div></div>
+        <div className="space-y-2"><Label htmlFor="add-date">Date & time (optional)</Label><Input id="add-date" type="datetime-local" value={dateInput} onChange={e => setDateInput(e.target.value)} /><p className="text-xs text-muted-foreground">Your local time. You can set this later.</p></div>
+        {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+        <div className="flex gap-2"><Button onClick={handleSave} disabled={busy}>{busy ? 'Saving…' : 'Add match'}</Button><Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button></div>
       </div>
     </ModalShell>
   );

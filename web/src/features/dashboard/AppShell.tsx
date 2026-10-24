@@ -80,10 +80,10 @@ export function AppShell({ title, navigation, toolbar, children }: { title: stri
     <a href="#main-content" onClick={event => { event.preventDefault(); heading.current?.focus(); }} className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3">Skip to content</a>
     {navigation}
     <SidebarInset className="asl-workspace min-w-0 bg-background">
-      <header className="sticky top-0 z-20 flex min-h-20 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
+      <header className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
         <SidebarTrigger aria-label="Open navigation" className="size-11 lg:hidden" />
-        <div className="flex min-w-0 flex-1 items-center gap-3"><span aria-label="Alliance Strikers League" className="font-display text-3xl text-primary">ASL</span><span className="h-6 border-l" aria-hidden="true" /><h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 text-2xl font-semibold tracking-tight outline-none">{title}</h1></div>
-        <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
+        <div className="flex min-w-0 flex-1 basis-32 items-center gap-3">{title !== 'Home' && <><span aria-label="Alliance Strikers League" className="font-display text-3xl text-primary">ASL</span><span className="h-6 border-l" aria-hidden="true" /></>}<h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 truncate text-2xl font-semibold tracking-tight outline-none">{title}</h1></div>
+        <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
       </header>
       <section id="main-content" aria-labelledby="page-heading" className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 lg:p-6">{children}</section>
     </SidebarInset>

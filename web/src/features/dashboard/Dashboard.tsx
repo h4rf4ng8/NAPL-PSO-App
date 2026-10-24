@@ -58,6 +58,7 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const myTeam = teams.find(team => team.id === account.teamId && team.status === 'approved');
   const period = data?.period ?? null;
   const cardAccount = { ...(data?.me ?? account), stats: getStatsForSeason(data?.me ?? account, season), _cardSeason: season };
+  const seasonScoped = view === 'me' || view === 'matches';
   const closeModal = () => setModal(null);
   const savedAccount = (updated: Account) => {
     onUpdate({
@@ -71,11 +72,11 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
     <>
       {!account.strikersId && <OnboardingModal account={account} onComplete={savedAccount} />}
       <AppShell title={titleForView(view)} navigation={<LeagueNavigation account={account} view={view} onNavigate={setView} votingOpen={!!period} />} toolbar={<>
-        <Select value={season} onValueChange={setSeason}><SelectTrigger className="w-32" aria-label="Dashboard season"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All time</SelectItem>{allSeasons.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select>
+        {view === 'matches' && <Select value={season} onValueChange={setSeason}><SelectTrigger className="w-32" aria-label="Dashboard season"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All time</SelectItem>{allSeasons.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select>}
         <ThemeButton theme={theme} onToggle={toggleTheme} /><AccountMenu account={account} onLogout={onLogout} />
       </>}>
-        {(seasonPageError || seasonsError) && <Alert variant="destructive"><AlertDescription>{seasonPageError || seasonsError?.message}<Button variant="outline" onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</Button></AlertDescription></Alert>}
-        {seasonData?.seasons.pageInfo.hasNextPage && <Button variant="outline" disabled={seasonsLoading} onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</Button>}
+        {seasonScoped && (seasonPageError || seasonsError) && <Alert variant="destructive"><AlertDescription>{seasonPageError || seasonsError?.message}<Button variant="outline" onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</Button></AlertDescription></Alert>}
+        {seasonScoped && seasonData?.seasons.pageInfo.hasNextPage && <Button variant="outline" disabled={seasonsLoading} onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</Button>}
         {data?.tickerNews[0] && <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-card px-4 py-2 text-sm"><span className="min-w-0 break-words">{data.tickerNews[0].title}</span><Button variant="link" onClick={() => setView('news')}>Latest news</Button></div>}
         {loading && !data && <div role="status" className="space-y-3"><span className="sr-only">Loading league…</span><Skeleton className="h-6 w-48" /><Skeleton className="h-20 w-full" /></div>}
         {error && <Alert variant="destructive"><AlertDescription>{error.message} <Button variant="outline" onClick={() => { void refetch().catch(() => {}); }}>Try again</Button></AlertDescription></Alert>}

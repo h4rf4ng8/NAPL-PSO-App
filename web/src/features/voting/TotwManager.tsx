@@ -35,7 +35,7 @@ export const TotwManager = ({ onRefresh }: { onRefresh: () => void }) => {
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [selectedPositions, setSelectedPositions] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState('');
-  const playerPage = useRestPage<AdminPlayer>(creating ? '/api/accounts?search=' + encodeURIComponent(filter) : null);
+  const playerPage = useRestPage<AdminPlayer>(creating ? '/api/accounts?search=' + encodeURIComponent(filter) : null, 50);
   const allPlayers = playerPage.data?.nodes ?? [];
   const minimumEligible = VOTE_FIELDS.reduce((total, field) => total + field.needed, 0);
   const minimumEligibleSummary = VOTE_FIELDS.map(({ needed, pos }) => `${needed} ${pos}`).join(' + ');

@@ -1,18 +1,21 @@
 import { auth } from '../../auth/session';
-import { XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from './api';
 import type { Account } from './models';
-import { ASLCrest } from '../../components/Branding';
-import { useDialog } from '../../components/Dialog';
-import { C } from '../../theme/theme';
+import { ModalShell } from '../../components/Dialog';
+
 
 import { POSITIONS } from '../../utils/league';
 import { POS } from '@napl/contracts/league';
+import { Input } from '../../components/ui/input';
+import { Label } from '../../components/ui/label';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Button } from '../../components/ui/button';
+
 
 // Onboarding Modal
 export const OnboardingModal = ({ account, onComplete }: { account: Account; onComplete: (account:Account) => void }) => {
-  const dialogRef = useDialog();
   const [strikersId, setStrikersId] = useState('');
   const [position, setPosition] = useState(account.position || POS.CM);
   const [busy, setBusy] = useState(false);
@@ -35,92 +38,27 @@ export const OnboardingModal = ({ account, onComplete }: { account: Account; onC
     }
   };
 
-  return (
-    // No close button — this modal MUST be completed. User can sign out from
-    // the top-right if they really need to escape.
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Welcome to ASL" tabIndex={-1} className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{
-      background: `${C.black}dd`, backdropFilter: 'blur(10px)',
-    }}>
-      <div className="w-full max-w-md rounded-xl p-7 fade-in" style={{
-        background: C.white,
-        border: `1px solid ${C.navyLight}`,
-        boxShadow: `0 20px 60px ${C.brandNavy}44`,
-      }}>
-        <div className="text-center mb-5">
-          <div className="flex justify-center mb-3">
-            <ASLCrest size={70} />
-          </div>
-          <h2 className="font-display text-2xl tracking-[0.15em]" style={{ color: C.cream }}>WELCOME TO ASL</h2>
-          <p className="font-mono text-[11px] tracking-wider mt-2 leading-relaxed" style={{ color: `${C.cream}99` }}>
-            TWO QUICK THINGS BEFORE YOU GET STARTED —
-            <br />
-            REQUIRED TO JOIN ANY TEAM.
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}99` }}>
-              STRIKERS CLUB PLAYER ID *
-            </label>
-            <input
-              type="text"
-              value={strikersId}
-              onChange={(e) => setStrikersId(e.target.value.replaceAll(/\D/g, ''))}
-              placeholder="e.g. 365702"
-              className="w-full px-3 py-2 font-mono text-sm focus:outline-none rounded"
-              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-              autoFocus
-            />
-            <div className="font-mono text-[9px] mt-1 leading-relaxed" style={{ color: `${C.cream}77` }}>
-              Numbers only. Find it in-game on your profile. Once set, only an admin can change it.
-            </div>
-          </div>
-
-          <div>
-            <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}99` }}>
-              PRIMARY POSITION *
-            </label>
-            <div className="grid grid-cols-5 gap-1">
-              {POSITIONS.map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setPosition(p)}
-                  className="py-2 font-heading tracking-wider text-xs rounded"
-                  style={position === p
-                    ? { background: C.green, color: C.onColor }
-                    : { background: C.navyDeep, color: `${C.cream}99`, border: `1px solid ${C.navyLight}66` }
-                  }
-                >{p}</button>
-              ))}
-            </div>
-            {/* FLEX hint — explains why someone might pick FLEX over a specific role */}
-            <div className="font-body text-sm mt-2 leading-relaxed" style={{ color: `${C.cream}cc` }}>
-              Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
-            </div>
-          </div>
-
-          {err && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded font-mono text-xs" style={{
-              background: `${C.red}22`, border: `1px solid ${C.red}66`, color: C.redLight,
-            }}>
-              <XCircle size={12} /> {err}
-            </div>
-          )}
-
-          <button
-            onClick={handleSave}
-            disabled={busy}
-            className="w-full py-3 font-display tracking-[0.15em] text-lg transition-all disabled:opacity-50 rounded"
-            style={{
-              background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-              color: C.onColor,
-              boxShadow: `0 4px 16px ${C.green}66`,
-            }}
-          >{busy ? 'SAVING...' : 'COMPLETE PROFILE'}</button>
-        </div>
+  return <ModalShell title="Welcome to ASL" maxWidth="max-w-md">
+    <p className="text-sm text-muted-foreground">Complete your profile before joining a team.</p>
+    <form className="space-y-5" onSubmit={event => { event.preventDefault(); if (!busy) void handleSave(); }}>
+      <div className="space-y-2">
+        <Label htmlFor="onboarding-strikers-id">Strikers Club player ID</Label>
+        <Input id="onboarding-strikers-id" type="text" inputMode="numeric" autoComplete="off" value={strikersId}
+          onChange={event => setStrikersId(event.target.value.replaceAll(/\D/g, ''))}
+          placeholder="e.g. 365702" aria-describedby="strikers-id-help" required autoFocus disabled={busy} />
+        <p id="strikers-id-help" className="text-xs leading-relaxed text-muted-foreground">Find this numeric ID on your in-game profile. Once set, only an administrator can change it.</p>
       </div>
-    </div>
-  );
+      <fieldset className="space-y-2">
+        <legend className="mb-2 text-sm font-medium">Primary position</legend>
+        <RadioGroup value={position} onValueChange={setPosition} disabled={busy} className="grid grid-cols-2 gap-2 sm:grid-cols-3" aria-label="Primary position" aria-describedby="position-help">
+          {POSITIONS.map(pos => <Label key={pos} htmlFor={`position-${pos}`} className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5">
+            <RadioGroupItem id={`position-${pos}`} value={pos} />{pos}
+          </Label>)}
+        </RadioGroup>
+        <p id="position-help" className="text-xs leading-relaxed text-muted-foreground">Choose FLEX if you regularly play both forward and defense.</p>
+      </fieldset>
+      {err && <Alert variant="destructive"><AlertDescription>{err}</AlertDescription></Alert>}
+      <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Saving…' : 'Complete profile'}</Button>
+    </form>
+  </ModalShell>;
 };

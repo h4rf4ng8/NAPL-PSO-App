@@ -78,7 +78,7 @@ test('visitors can browse every public page without standings navigation or priv
   await act(async () => {
     renderer = create(createElement(ApolloProvider, { client }, createElement(PublicLeague, { onLogin() {} })));
   });
-  const navigation = () => renderer!.root.findByType('nav').findAllByType('button');
+  const navigation = () => renderer!.root.findAllByType('nav').find(nav => nav.props['aria-label'] !== 'Results pages')!.findAllByType('button');
   assert.deepEqual(navigation().map(button => button.children.join('')), ['teams', 'stats', 'schedule', 'news', 'transfers', 'rules']);
   assert.match(navigation()[0]!.props.className, /active/);
   assert.match(renderedText(), /Public Team/);

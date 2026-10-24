@@ -66,7 +66,7 @@ test('export preserves source images and revokes the SVG URL after canvas failur
 test('native share fallback rasterizes once, downloads the same PNG at 960 by 1530', async () => {
   const React = await import('react');
   const {act,create} = await import('react-test-renderer');
-  const {ShareableCardModal} = await import('../src/components/ShareableCardModal');
+  const {ShareableCardContent} = await import('../src/components/ShareableCardModal');
   const descriptors = Object.getOwnPropertyDescriptors(globalThis);
   const oldCreate = URL.createObjectURL;
   const oldRevoke = URL.revokeObjectURL;
@@ -104,7 +104,7 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
     URL.createObjectURL = ()=>'blob:card';
     URL.revokeObjectURL = ()=>{};
     const account = {username:'Player',position:'ST',ranking:{tier:'GOLD',ranked:true,score:82},awards:[],championships:[],cardStats:[]} as never;
-    act(()=>{view=create(React.createElement(ShareableCardModal,{account,onClose(){}}),{
+    act(()=>{view=create(React.createElement(ShareableCardContent,{account,onClose(){}}),{
       createNodeMock:element=>element.props.className?.includes('flip-card') ? {querySelector:()=>new Svg()} : null,
     });});
     const share = view!.root.findAllByType('button')[0]!;
@@ -144,7 +144,7 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
     });
     await act(async()=>{await view!.root.findAllByType('button')[2]!.props.onClick();});
     assert.ok(copiedTimer);
-    assert.match(JSON.stringify(view!.toJSON()), /COPIED/);
+    assert.match(JSON.stringify(view!.toJSON()), /Copied/);
     const drawsBeforeClose = rasterizations;
     suspendImage = true;
     let pending: Promise<void>;

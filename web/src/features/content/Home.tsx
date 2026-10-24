@@ -1,4 +1,5 @@
 import { auth } from '../../auth/session';
+import { ASL_LOGO_DIAMOND } from '../../assets/asl-logos';
 import { Flag, User } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -78,7 +79,10 @@ export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }:
   const results = (resultQuery.data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
   const teamById = (id: string | null | undefined) => allTeams.find(team => team.id === id);
   return <div className="space-y-6">
-    <Card><CardHeader><CardDescription>{currentSeason ? `Season ${currentSeason} · ` : ''}Alliance Strikers League</CardDescription><CardTitle className="break-words text-2xl sm:text-3xl">Welcome back, {account.username}</CardTitle><p className="max-w-2xl text-muted-foreground">Track your career, follow the league, and see what’s coming up.</p></CardHeader><CardContent className="flex flex-wrap gap-3"><Button onClick={() => onJump('me')}><User className="mr-2 size-4" />My player card</Button><Button variant="outline" onClick={() => onJump('news')}><Flag className="mr-2 size-4" />Latest news</Button></CardContent></Card>
+    <header className="flex flex-wrap items-center justify-between gap-6 border-b border-primary/20 pb-8 pt-2">
+      <div className="min-w-0 flex-1"><div className="flex items-end gap-4"><p className="font-display text-7xl leading-none text-primary sm:text-8xl">ASL</p><p className="max-w-36 pb-1 text-lg font-semibold uppercase leading-tight">Alliance<br />Strikers League</p></div><h2 className="mt-5 break-words text-2xl font-semibold">Welcome back, {account.username}</h2><p className="mt-1 max-w-2xl text-muted-foreground">{currentSeason ? `Season ${currentSeason}. ` : ''}Your player, your team, your league.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => onJump('me')}><User className="mr-2 size-4" />My player card</Button><Button variant="outline" onClick={() => onJump('news')}><Flag className="mr-2 size-4" />Latest news</Button></div></div>
+      <img src={ASL_LOGO_DIAMOND} alt="" className="hidden w-32 shrink-0 object-contain sm:block xl:w-40" />
+    </header>
     {summary.error && <Alert variant="destructive"><AlertDescription>League metrics are unavailable: {summary.error.message} <Button variant="outline" onClick={() => { void summary.refetch().catch(() => {}); }}>Try again</Button></AlertDescription></Alert>}
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4"><QuickStat label="Your tier" value={account.ranking.ranked ? account.ranking.tier : 'Unranked'} /><QuickStat label="Games played" value={account.stats.games} /><QuickStat label="League players" value={summary.error ? 'Unavailable' : overview?.playerCount ?? '…'} /><QuickStat label="Active teams" value={summary.error ? 'Unavailable' : overview?.activeTeamCount ?? '…'} /></div>
     <Card><CardHeader><CardTitle>My profile</CardTitle><CardDescription>Your email is private. Discord manages your username and email.</CardDescription></CardHeader><CardContent className="space-y-4">

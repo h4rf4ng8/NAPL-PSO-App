@@ -47,6 +47,7 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [confirming, setConfirming] = useState<'save' | 'clear' | null>(null);          // 'save' | 'clear' | null
 
   const approvedTeams = useMemo(
@@ -103,6 +104,12 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
     setConfirming('save');
   };
 
+  const refreshAfterWrite = async () => {
+    setRefreshError('');
+    try { await onRefresh(); }
+    catch (error) { setRefreshError('The championship change was saved, but the league view could not refresh: ' + (error instanceof Error ? error.message : String(error))); }
+  };
+
   const doSave = async () => {
     if(!loaded)return;
     setBusy(true);
@@ -131,7 +138,7 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
       if (rTeam) parts.push(`${rTeam.name} (runner-up) — ${rCount} player${rCount === 1 ? '' : 's'}`);
       setInfo(`Saved ${editingSeason}: ${parts.join(' · ')}`);
       setConfirming(null);
-      if (onRefresh) await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Save failed: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
@@ -155,7 +162,7 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
       setWinnerTeamId(''); setRunnerUpTeamId('');
       setInfo(`Cleared ${editingSeason} championships.`);
       setConfirming(null);
-      if (onRefresh) await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Clear failed: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
@@ -176,6 +183,7 @@ export const SeasonChampionsManager = ({ account: _account, currentSeason, onRef
     {teamPage.error && <Alert variant="destructive"><AlertDescription>{teamPage.error}</AlertDescription></Alert>}
     {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
     {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+    {refreshError && <Alert><AlertDescription>{refreshError}</AlertDescription><Button variant="outline" className="mt-2" disabled={busy} onClick={() => void refreshAfterWrite()}>Retry refresh</Button></Alert>}
     <Card className="space-y-5 p-4 sm:p-5">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2"><Label htmlFor="championship-season">Season</Label><Select value={editingSeason} onValueChange={setEditingSeason} disabled={busy || !loaded}><SelectTrigger id="championship-season"><SelectValue /></SelectTrigger><SelectContent>{knownSeasons.map(season => <SelectItem key={season} value={season}>{season}</SelectItem>)}{!knownSeasons.includes(editingSeason) && <SelectItem value={editingSeason}>{editingSeason}</SelectItem>}</SelectContent></Select></div>

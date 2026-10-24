@@ -42,6 +42,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const setWinnerUsername = (name:string) => {setSelected(allPlayers.find(player=>player.username===name) ?? null);setAfter(null);setPrevious([]);};
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [refreshError, setRefreshError] = useState('');
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<string | null>(null);
 
@@ -52,6 +53,18 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   // Filter candidate winners: by ideal position for the award (but allow any)
   const idealCandidates = allPlayers.filter(p => p.position === award.pos);
   const otherCandidates = allPlayers.filter(p => p.position !== award.pos);
+
+  // A refresh may fail after the write succeeds. Retrying here only reloads data.
+  const refreshAfterWrite = async () => {
+    setBusy(true); setRefreshError('');
+    setPrevious([]); setAfter(null);
+    try {
+      await awardPage.refetch({ after: null });
+      await onRefresh();
+    } catch (error) {
+      setRefreshError('The award change was saved, but the latest data could not be loaded: ' + (error instanceof Error ? error.message : String(error)));
+    } finally { setBusy(false); }
+  };
 
   const assignAward = async () => {
     if (busy) return;
@@ -64,9 +77,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
     try {
       await accountApi.assignAward(player.id, awardId, season.trim());
       setInfo(`✓ ${award.name} ${season.trim()} assigned to ${player.username}`);
-      setPrevious([]); setAfter(null);
-      if (!after) await awardPage.refetch();
-      await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Could not assign award: ' + (error_ instanceof Error ? error_.message : String(error_)));
     } finally {
@@ -81,9 +92,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
       await accountApi.removeAward(player.id, targetAward.awardId, targetAward.season);
       setRemoving(null);
       setInfo(`✓ ${AWARD_BY_ID[targetAward.awardId]?.name ?? targetAward.awardId} ${targetAward.season} removed from ${player.username}`);
-      setPrevious([]); setAfter(null);
-      if (!after) await awardPage.refetch();
-      await onRefresh();
+      await refreshAfterWrite();
     } catch (error_) {
       setError('Could not remove award: ' + (error_ instanceof Error ? error_.message : String(error_)));
     } finally {
@@ -117,6 +126,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
       </div>
       {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
       {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+      {refreshError && <Alert><AlertDescription>{refreshError}</AlertDescription><Button variant="outline" className="mt-2" disabled={busy} onClick={() => void refreshAfterWrite()}>Retry refresh</Button></Alert>}
       <Button className="w-full sm:w-auto" onClick={() => void assignAward()} disabled={busy || !selected || !season.trim()}>{busy ? 'Saving…' : `Assign ${award.name}`}</Button>
     </Card>
     <section className="space-y-3"><h3 className="text-lg font-semibold">{selected ? `${selected.username}’s awards (${awardPage.data?.accountAwards.totalCount ?? 0})` : 'Award history'}</h3>

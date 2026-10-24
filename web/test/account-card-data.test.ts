@@ -66,14 +66,16 @@ test('account decoding rejects malformed card cells with a valid server ranking'
   assert.throws(() => mapAccount(accountRow({ ranking, cardStats: [{ season: 'S1', cells }] })), /Invalid GraphQL account JSON data/);
 });
 
-test('large cards flip by click, Enter and Space while smaller cards stay display-only', () => {
+test('large cards use a native button beside the artwork while smaller cards stay display-only', () => {
   const account = mapAccount(accountRow({ ranking: {score:82, percentile:0.7,ranked:true,gamesPlayed:12,tier:'GOLD'}, cardStats: [] }));
   let card: ReturnType<typeof create>;
   const ref = React.createRef<HTMLDivElement>();
   const host = {} as HTMLDivElement;
   act(() => { card = create(React.createElement(PlayerCard, {account,size:'lg', ref}), {createNodeMock:()=>host}); });
   assert.equal(ref.current, host);
-  const shell = () => card!.root.findByProps({role:'button'});
+  const shell = () => card!.root.findByType('button');
+  assert.equal(shell().props.type, 'button');
+  assert.equal(shell().findAllByType('svg').length, 0);
   assert.equal(shell().props['aria-pressed'], false);
   const faces = () => card!.root.findAll(node => typeof node.props['aria-hidden'] === 'boolean');
   assert.deepEqual(faces().map(node => node.props['aria-hidden']), [true, true]);
@@ -85,17 +87,9 @@ test('large cards flip by click, Enter and Space while smaller cards stay displa
   assert.match(shell().props['aria-label'], /show front$/);
   assert.equal(card!.root.findAllByType('svg')[0], firstSvg);
   assert.ok(firstSvg!.findAllByType('text').some(node => node.children.includes('G')));
-  for (const key of ['Enter', ' ']) {
-    let prevented = false;
-    act(() => shell().props.onKeyDown({key,preventDefault:()=>{prevented=true;}}));
-    assert.equal(prevented,true);
-  }
-  assert.equal(shell().props['aria-pressed'],true);
-  act(() => shell().props.onKeyDown({key:'Escape'}));
-  assert.equal(shell().props['aria-pressed'],true);
   const ids = card!.root.findAll(node => typeof node.props.id === 'string').map(node => node.props.id);
   assert.equal(new Set(ids).size,ids.length);
   act(() => card!.update(React.createElement(PlayerCard,{account,size:'md'})));
-  assert.equal(card!.root.findAllByProps({role:'button'}).length,0);
+  assert.equal(card!.root.findAllByType('button').length,0);
   act(() => card!.unmount());
 });

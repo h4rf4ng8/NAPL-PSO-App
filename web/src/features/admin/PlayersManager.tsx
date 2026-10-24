@@ -30,7 +30,7 @@ import { Input } from '../../components/ui/input';
 // Players Manager
 export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh }: { currentSeason?: string; onRefresh: () => void }) => {
   const [search, setSearch] = useState('');
-  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search), 50);
   const allPlayers = playerPage.data?.nodes ?? [];
   const [teamSearch,setTeamSearch] = useState('');
   const cursor = usePageCursor(teamSearch);

@@ -21,7 +21,7 @@ import { Button } from '../../components/ui/button';
 
 // Pictures Manager
 export const PicturesManager = ({ onRefresh }: { onRefresh: () => void }) => {
-  const page = useRestPage<AdminPlayer>('/api/accounts?pendingImage=1');
+  const page = useRestPage<AdminPlayer>('/api/accounts?pendingImage=1', 50);
   const allPlayers = page.data?.nodes ?? [];
   const refresh = () => { page.restart(); onRefresh(); };
   const [busy, setBusy] = useState('');

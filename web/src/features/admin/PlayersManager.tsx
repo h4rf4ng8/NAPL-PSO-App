@@ -1,16 +1,26 @@
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '../../components/ui/alert-dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { EmptyState, TeamPill } from '../../components/Display';
 import { usePageCursor } from '../../hooks/use-page-cursor';
 import { useQuery } from '@apollo/client/react';
 import { TeamSummariesDocument } from '../../api/generated/graphql';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { readText } from '../../api/page';
-import { User, Users } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { useState } from 'react';
 import { accounts as accountApi } from '../accounts/api';
 import { teams as teamApi } from '../teams/api';
 import type { PositionRequest, AdminPlayer } from '../accounts/models';
-import { C } from '../../theme/theme';
+
 import { ALL_POSITIONS, POSITIONS } from '@napl/contracts/league';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+
 
 
 
@@ -41,6 +51,7 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+  const [flagging, setFlagging] = useState<string | null>(null);
 
   // Local date formatter — fmtDate is defined inside other components (not
   // global), so we need our own here.
@@ -87,11 +98,10 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
   // CHEATER stamp on their card appears wherever PlayerCard renders.
   const toggleCheater = async (player: AdminPlayer) => {
     const wasCheater = !!player.cheater;
-    const label = wasCheater ? `Remove CHEATER flag from ${player.username}?` : `Flag ${player.username} as CHEATER? Their card will show a red diagonal CHEATER stamp.`;
-    if (!confirm(label)) return;
     setError(''); setBusy(true);
     try {
       await accountApi.patchAccount(player.id,{cheater:!wasCheater});
+      setFlagging(null);
       refresh();
     } catch (error_) {
       setError('Could not toggle cheater: ' + (error_ instanceof Error ? error_.message : String(error_)));
@@ -171,228 +181,68 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
     setBusy(false);
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="rounded-xl p-4" style={{
-        background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
-        border: `1px solid ${C.gold}55`,
-      }}>
-        <div className="flex items-center gap-2 mb-1">
-          <User size={14} style={{ color: C.goldLight }} />
-          <span className="font-display text-xl tracking-wider" style={{ color: C.brandNavy }}>MANAGE PLAYERS</span>
-        </div>
-        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          Manage player teams, positions, and Strikers Club IDs. Usernames are synchronized from Discord at sign-in.
-        </p>
-      </div>
+  return <div className="space-y-5">
+    <div className="space-y-2"><h3 className="text-xl font-semibold">Manage players</h3><p className="text-sm text-muted-foreground">Manage teams, positions, and Strikers Club IDs. Player names synchronize from Discord at sign-in.</p></div>
+    {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {(playerPage.error || pendingPage.error || teamPage.error) && <Alert variant="destructive"><AlertDescription>{playerPage.error || pendingPage.error || teamPage.error}</AlertDescription></Alert>}
+    <Card>
+      <CardHeader><CardTitle className="text-lg">Position change requests <Badge variant="secondary">{pendingPage.data?.totalCount ?? 0}</Badge></CardTitle><CardDescription>Review each player’s requested position and reason.</CardDescription></CardHeader>
+      <CardContent className="space-y-3">
+        {pendingPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading position requests…</p>}
+        {!pendingPage.loading && pendingPosRequests.length === 0 && <p className="text-sm text-muted-foreground">No pending position requests.</p>}
+        {pendingPosRequests.map(req => <div key={req.id} className="space-y-3 rounded-md border p-3">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-medium">{req.username}</p><p className="text-sm text-muted-foreground">{req.fromPos} → {req.toPos} · {fmtDate(req.createdAt)}</p></div><div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => approvePosRequest(req)}>Approve</Button><Button variant="outline" disabled={busy} onClick={() => denyPosRequest(req)}>Deny</Button></div></div>
+          <Button variant="ghost" onClick={() => { void readText(req.reasonUrl).then(value => setReasons(previous => ({...previous, [req.id]:value}))).catch(() => setError('Could not load request reason.')); }}>Read reason</Button>
+          {reasons[req.id] && <blockquote className="border-l-2 pl-3 text-sm text-muted-foreground">{reasons[req.id]}</blockquote>}
+        </div>)}
+        <PageButtons {...pendingPage} hasNextPage={pendingPage.data?.pageInfo.hasNextPage ?? false} />
+      </CardContent>
+    </Card>
+    <div className="space-y-2"><Label htmlFor="player-search">Search players</Label><Input id="player-search" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Player name…" /></div>
+    {playerPage.loading && <p role="status" className="text-sm text-muted-foreground">Loading players…</p>}
+    <div className="space-y-3">
+      {!playerPage.loading && filtered.length === 0 && <EmptyState text="No players found." />}
+      {filtered.map(player => {
+        const playerTeam = player.team ?? (player.teamId ? teamById(player.teamId) : null);
+        return <Card key={player.id} className="space-y-4 p-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0 space-y-2"><h4 className="break-words font-semibold">{player.username}</h4><div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><Badge variant="outline">{player.position}</Badge><span>{player.stats?.games || 0} games</span><TeamPill team={playerTeam} fallback={player.teamId ? 'Assigned team' : 'Free agent'} /><span>{player.strikersId ? `SC: ${player.strikersId}` : 'No Strikers Club ID'}</span>{player.cheater && <Badge variant="destructive">Cheater flag</Badge>}</div></div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => { setPosEditing(player); setTeamEditing(null); setSidEditing(null); setError(''); }}>Position</Button>
+              <Button variant="outline" disabled={busy} onClick={() => { setTeamEditing(player); setSidEditing(null); setPosEditing(null); setError(''); }}><Users />Team</Button>
+              <Button variant="outline" disabled={busy} onClick={() => { startSidEdit(player); setTeamEditing(null); setPosEditing(null); }}>SC ID</Button>
+              <AlertDialog open={flagging === player.id} onOpenChange={open => { if (busy) {
+                return;
+              }
 
-      {info && (
-        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
-      )}
-      {error && !teamEditing && (
-        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
-      )}
-
-      {playerPage.loading && <p role="status">Loading players…</p>}
-      {(playerPage.error || pendingPage.error || teamPage.error) && <p role="alert">{playerPage.error || pendingPage.error || teamPage.error}</p>}
-      <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
-      <PageButtons {...pendingPage} hasNextPage={pendingPage.data?.pageInfo.hasNextPage ?? false} />
-      {/* POSITION CHANGE REQUESTS — pending queue for admin review */}
-      {pendingPosRequests.length > 0 && (
-        <div className="rounded-xl p-4" style={{
-          background: `${C.gold}11`, border: `1px solid ${C.gold}66`,
-        }}>
-          <div className="font-display tracking-wider text-sm mb-3 flex items-center gap-2" style={{ color: C.brandNavy }}>
-            <span style={{ color: C.goldLight }}>◆</span>
-            POSITION CHANGE REQUESTS ({pendingPage.data?.totalCount ?? 0})
+              setFlagging(open ? player.id : null); if (open) setError(''); }}>
+                <AlertDialogTrigger asChild><Button variant="outline" className="text-destructive" disabled={busy}>{player.cheater ? 'Remove flag' : 'Flag player'}</Button></AlertDialogTrigger>
+                <AlertDialogContent><AlertDialogHeader><AlertDialogTitle>{player.cheater ? 'Remove cheater flag?' : 'Flag player as a cheater?'}</AlertDialogTitle><AlertDialogDescription>{player.cheater ? `Remove the cheater stamp from ${player.username}’s card.` : `${player.username}’s player card will display a cheater stamp throughout the league.`}</AlertDialogDescription></AlertDialogHeader>
+                  {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+                  <AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void toggleCheater(player); }}>{busy ? 'Saving…' : 'Confirm'}</AlertDialogAction></AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </div>
-          <div className="space-y-2">
-            {pendingPosRequests.map(req => (
-              <div key={req.id} className="rounded-lg p-3" style={{
-                background: C.white, border: `1px solid ${C.navyLight}66`,
-              }}>
-                <div className="flex items-start justify-between gap-3 flex-wrap mb-2">
-                  <div>
-                    <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
-                      {req.username.toUpperCase()}
-                    </div>
-                    <div className="font-mono text-[10px] tracking-widest mt-1" style={{ color: `${C.brandNavy}88` }}>
-                      <b>{req.fromPos}</b> → <b style={{ color: C.goldLight }}>{req.toPos}</b>
-                      <span style={{ marginLeft: 10 }}>{fmtDate(req.createdAt)}</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={() => approvePosRequest(req)} disabled={busy}
-                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
-                      style={{ background: C.green, color: C.onColor }}
-                    >APPROVE</button>
-                    <button
-                      onClick={() => denyPosRequest(req)} disabled={busy}
-                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
-                      style={{ background: `${C.red}cc`, color: C.cream }}
-                    >DENY</button>
-                  </div>
-                </div>
-                <button onClick={() => { void readText((req as PositionRequest & {reasonUrl:string}).reasonUrl).then(value=>{setReasons(previous=>({...previous,[req.id]:value}));}).catch(()=>{setError('Could not load request reason.');}); }}>Read reason</button>
-                {reasons[req.id] && (
-                  <div className="font-body text-xs italic px-2 py-1.5 rounded" style={{ background: `${C.navyLight}22`, color: `${C.brandNavy}cc` }}>
-                    "{reasons[req.id]}"
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <input
-        type="text"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        placeholder="Search players…"
-        className="w-full rounded px-3 py-2 text-sm"
-        style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
-      />
-
-      <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <div className="font-mono text-xs tracking-wider text-center py-4" style={{ color: `${C.cream}66` }}>
-            NO PLAYERS FOUND
-          </div>
-        ) : filtered.map(p => {
-          const playerTeam = p.team ?? (p.teamId ? teamById(p.teamId) : null);
-          return (
-          <div key={p.id || p.username} className="rounded-lg p-3" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
-            {(() => { if (teamEditing && (teamEditing.id === p.id)) return (
-              <div className="space-y-2">
-                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
-                  CHANGE TEAM — {p.username.toUpperCase()}
-                </div>
-                <input aria-label="Find team" placeholder="Find team…" value={teamSearch} onChange={event=>setTeamSearch(event.target.value)} />
-                <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
-                <select
-                  autoFocus
-                  defaultValue={p.teamId || ''}
-                  onChange={(e) => changeTeam(p, e.target.value)}
-                  disabled={busy}
-                  className="w-full rounded px-3 py-2 font-body text-sm"
-                  style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
-                >
-                  <option value="">— Free Agent (no team) —</option>
-                  {p.teamId && approvedTeams.every(team=>team.id!==p.teamId) && <option value={p.teamId}>Current team</option>}
-                  {approvedTeams.map(t => (
-                    <option key={t.id} value={t.id}>{t.name} ({t.tag})</option>
-                  ))}
-                </select>
-                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
-                <button
-                  onClick={() => { setTeamEditing(null); setError(''); }}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                >CANCEL</button>
-              </div>
-            ); if (posEditing && (posEditing.id === p.id)) return (
-              <div className="space-y-2">
-                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
-                  POSITION — {p.username.toUpperCase()}
-                </div>
-                <div className="flex gap-1.5 flex-wrap">
-                  {POSITIONS.map(pos => (
-                    <button
-                      key={pos}
-                      disabled={busy}
-                      onClick={() => changePosition(p, pos)}
-                      className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-                      style={pos === p.position
-                        ? { background: C.gold, color: C.brandNavyDeep, border: `1px solid ${C.goldLight}` }
-                        : { background: `${C.navyLight}44`, color: C.brandNavy, border: `1px solid ${C.navyLight}66` }
-                      }
-                    >{pos}{pos === p.position ? ' ✓' : ''}</button>
-                  ))}
-                </div>
-                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
-                <button
-                  onClick={() => { setPosEditing(null); setError(''); }}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                >CANCEL</button>
-              </div>
-            ); if (sidEditing && (sidEditing.id === p.id)) return (
-              <div className="space-y-2">
-                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
-                  STRIKERS CLUB ID — {p.username.toUpperCase()}
-                </div>
-                <input
-                  autoFocus
-                  type="text"
-                  value={newSid}
-                  onChange={(e) => setNewSid(e.target.value.replaceAll(/\D/g, ''))}
-                  placeholder="e.g. 365702 (empty to clear)"
-                  className="w-full px-3 py-2 font-mono text-sm rounded"
-                  style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
-                />
-                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
-                <div className="flex gap-2">
-                  <button
-                    onClick={saveSid}
-                    disabled={busy}
-                    className="flex-1 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
-                    style={{ background: C.green, color: C.onColor }}
-                  >{busy ? 'SAVING…' : 'SAVE'}</button>
-                  <button
-                    onClick={() => { setSidEditing(null); setError(''); }}
-                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
-                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                  >CANCEL</button>
-                </div>
-              </div>
-            ); return (
-              <div className="flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
-                    {p.username.toUpperCase()}
-                  </div>
-                  <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
-                    {p.position} • {p.stats?.games || 0} GAMES
-                    {playerTeam
-                      ? <span style={{ color: playerTeam.color || C.green }}> • {playerTeam.tag}</span>
-                      : <span style={{ color: `${C.brandNavy}44` }}>{p.teamId ? ' • ASSIGNED TEAM' : ' • FREE AGENT'}</span>}
-                    {p.strikersId
-                      ? <span style={{ color: `${C.brandNavy}77` }}> • SC:{p.strikersId}</span>
-                      : <span style={{ color: C.red }}> • NO SC ID</span>}
-                  </div>
-                </div>
-                <button
-                  onClick={() => { setPosEditing(p); setTeamEditing(null); setSidEditing(null); setError(''); }}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                >POS</button>
-                <button
-                  onClick={() => { setTeamEditing(p); setSidEditing(null); setPosEditing(null); setError(''); }}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                ><Users size={11} /> TEAM</button>
-
-                <button
-                  onClick={() => { startSidEdit(p); setTeamEditing(null); }}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
-                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-                >SC ID</button>
-                <button
-                  onClick={() => toggleCheater(p)}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
-                  style={p.cheater
-                    ? { background: '#cc0000', color: '#fff', border: '1px solid #800000' }
-                    : { background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}55` }
-                  }
-                >{p.cheater ? 'UNFLAG' : 'CHEATER'}</button>
-              </div>
-            ); })()}
-          </div>
-          );
-        })}
-      </div>
+          {teamEditing?.id === player.id && <div className="space-y-3 border-t pt-4">
+            <Label htmlFor={`team-search-${player.id}`}>Change team for {player.username}</Label>
+            <Input id={`team-search-${player.id}`} aria-label="Find team" placeholder="Find team…" value={teamSearch} onChange={event => setTeamSearch(event.target.value)} />
+            <PageButtons {...teamPage} hasNextPage={teamPage.data?.pageInfo.hasNextPage ?? false} />
+            <Select value={player.teamId || 'free-agent'} onValueChange={value => { void changeTeam(player, value === 'free-agent' ? '' : value); }} disabled={busy}>
+              <SelectTrigger aria-label={`Team for ${player.username}`}><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="free-agent">Free agent (no team)</SelectItem>{player.teamId && approvedTeams.every(team => team.id !== player.teamId) && <SelectItem value={player.teamId}>{playerTeam?.name || 'Current team'}</SelectItem>}{approvedTeams.map(team => <SelectItem key={team.id} value={team.id}>{team.name} ({team.tag})</SelectItem>)}</SelectContent>
+            </Select>
+            {!player.strikersId && <p className="text-sm text-muted-foreground">Set a Strikers Club ID before assigning a team.</p>}
+            <Button variant="ghost" disabled={busy} onClick={() => { setTeamEditing(null); setError(''); }}>Cancel</Button>
+          </div>}
+          {posEditing?.id === player.id && <div className="space-y-3 border-t pt-4"><p className="text-sm font-medium">Change position for {player.username}</p><div className="flex flex-wrap gap-2">{POSITIONS.map(position => <Button key={position} variant={position === player.position ? 'default' : 'outline'} aria-pressed={position === player.position} disabled={busy} onClick={() => changePosition(player, position)}>{position}</Button>)}</div><Button variant="ghost" disabled={busy} onClick={() => { setPosEditing(null); setError(''); }}>Cancel</Button></div>}
+          {sidEditing?.id === player.id && <form className="space-y-3 border-t pt-4" onSubmit={event => { event.preventDefault(); void saveSid(); }}>
+            <Label htmlFor={`player-sid-${player.id}`}>Strikers Club ID for {player.username}</Label><Input id={`player-sid-${player.id}`} inputMode="numeric" value={newSid} disabled={busy} onChange={event => setNewSid(event.target.value.replaceAll(/\D/g, ''))} placeholder="2–15 digits" /><p className="text-xs text-muted-foreground">Leave empty to clear the linked ID.</p><div className="flex gap-2"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save ID'}</Button><Button variant="ghost" disabled={busy} onClick={() => { setSidEditing(null); setError(''); }}>Cancel</Button></div>
+          </form>}
+        </Card>;
+      })}
     </div>
-  );
+    <PageButtons {...playerPage} hasNextPage={playerPage.data?.pageInfo.hasNextPage ?? false} />
+  </div>;
 };

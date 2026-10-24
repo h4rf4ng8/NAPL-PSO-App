@@ -1,3 +1,8 @@
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Label } from '../../components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { mergeSeasonPages } from '../dashboard/season-pages';
 import { BarChart3 } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -9,9 +14,12 @@ export interface PlayerSelection { id: string; season?: string; }
 import type { TeamSummary as Team } from '../teams/models';
 import { CaptainStar } from '../../components/Icons';
 
-import { C } from '../../theme/theme';
+
 import { numericRowValue } from '../../utils/input';
 import { POSITIONS, POS } from '@napl/contracts/league';
+import { Button } from '../../components/ui/button';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '../../components/ui/table';
+
 // Stats View
 export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[]; onPlayerClick?: (account:PlayerSelection) => void }) => {
   // Default sort: OVR descending (same as the old leaderboard default)
@@ -82,150 +90,56 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   ];
   const cols = posFilter === POS.GK ? gkCols : outfieldCols;
 
-  const SortArrow = ({ col }: { col: string }) => {
-    if (sortBy !== col) {
-      return <span className="opacity-30 ml-0.5">↕</span>;
-    }
-    return <span className="ml-0.5" style={{ color: C.goldLight }}>{sortDir === 'asc' ? '▲' : '▼'}</span>;
-  };
-
-  return (
-    <div>
-      <div className="mb-4">
-        <div className="flex items-center gap-3 mb-3">
-          <BarChart3 size={22} style={{ color: C.goldLight }} />
-          <h3 className="font-display text-3xl tracking-wider">STATS</h3>
+  return <section className="min-w-0 space-y-4">
+    <h2 className="flex items-center gap-2 text-2xl font-semibold"><BarChart3 className="size-6 text-primary" />Player statistics</h2>
+    <Card className="space-y-4 p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="w-full space-y-2 sm:w-56">
+          <Label htmlFor="stats-season">Season</Label>
+          <Select value={seasonFilter} onValueChange={season => { setSeasonFilter(season); resetPage(); }}>
+            <SelectTrigger id="stats-season"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">All time</SelectItem>{seasons.map(season => <SelectItem key={season} value={season}>{season}</SelectItem>)}</SelectContent>
+          </Select>
         </div>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          {/* Season chips — ALL TIME + each season that has data */}
-          <div className="flex gap-1 rounded p-0.5 flex-wrap" style={{ background: `${C.navyLight}33` }}>
-            <button
-              onClick={() => { setSeasonFilter('all'); resetPage(); }}
-              className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
-              style={seasonFilter === 'all'
-                ? { background: C.goldLight, color: C.brandNavyDeep }
-                : { color: `${C.cream}99` }
-              }
-            >ALL TIME</button>
-            {seasons.map(s => (
-              <button
-                key={s}
-                onClick={() => { setSeasonFilter(s); resetPage(); }}
-                className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
-                style={seasonFilter === s
-                  ? { background: C.goldLight, color: C.brandNavyDeep }
-                  : { color: `${C.cream}99` }
-                }
-              >{s}</button>
-            ))}
-          </div>
-          {/* Position filter chips */}
-          <div className="flex gap-1 rounded p-0.5" style={{ background: `${C.navyLight}33` }}>
-            {['ALL', ...POSITIONS].map(p => (
-              <button
-                key={p}
-                onClick={() => { setPosFilter(p); resetPage(); }}
-                className="px-2.5 py-1 font-mono text-xs tracking-widest rounded transition-colors"
-                style={posFilter === p
-                  ? { background: C.gold, color: C.brandNavyDeep }
-                  : { color: `${C.cream}99` }
-                }
-              >{p}</button>
-            ))}
-          </div>
-        </div>
+        <div className="space-y-2"><p className="text-sm font-medium" id="position-filter-label">Position</p><div role="group" aria-labelledby="position-filter-label" className="flex flex-wrap gap-1">
+          {['ALL', ...POSITIONS].map(position => <Button key={position} variant={posFilter === position ? 'default' : 'outline'} aria-pressed={posFilter === position} onClick={() => { setPosFilter(position); resetPage(); }}>{position}</Button>)}
+        </div></div>
       </div>
-
-      <div className="font-mono text-[10px] mb-2 tracking-wider" style={{ color: `${C.cream}66` }}>
-        Click any column header to sort. Click again to reverse.
-      </div>
-
-      {loading && <p role="status">Loading players…</p>}
-      {error && <p role="alert">{error.message} <button onClick={() => { resetPage(); void refetch({ after: null }).catch(() => {}); }}>Retry</button></p>}
-{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
-      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
-      {/* Scrollable table — scrolls horizontally on narrow screens so no column
-          gets squished. Sticky player column makes scrolling easier to follow. */}
-      <div className="rounded-lg overflow-x-auto" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}33` }}>
-        <table className="w-full" style={{ borderCollapse: 'separate', borderSpacing: 0 }}>
-          <thead>
-            <tr style={{ background: `${C.brandNavyDeep}cc` }}>
-              <th className="px-2 py-2 text-center font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 36 }}>#</th>
-              <th className="px-3 py-2 text-left font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 160 }}>PLAYER</th>
-              <th className="px-2 py-2 text-left font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 70 }}>TEAM</th>
-              <th className="px-2 py-2 text-center font-mono text-[10px] tracking-widest" style={{ color: `${C.cream}99`, minWidth: 50 }}>POS</th>
-              {cols.map(c => (
-                <th
-                  key={c.field}
-                  onClick={() => toggleSort(c.field)}
-                  title={c.help}
-                  className="px-2 py-2 text-center font-mono text-[10px] tracking-widest cursor-pointer select-none"
-                  style={{
-                    color: sortBy === c.field ? C.goldLight : `${C.cream}99`,
-                    minWidth: 55,
-                    userSelect: 'none',
-                  }}
-                >{c.label}<SortArrow col={c.field} /></th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((row, i) => (
-              <tr
-                key={row.player.username}
-                onClick={() => onPlayerClick?.({ id: row.player.id, season: seasonFilter })}
-                className="cursor-pointer transition-colors hover:opacity-90"
-                style={{
-                  background: i % 2 === 0 ? `${C.navyDeep}44` : 'transparent',
-                  borderBottom: `1px solid ${C.navyLight}22`,
-                }}
-              >
-                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{offset + i + 1}</td>
-                <td className="px-3 py-2 font-heading tracking-wider text-sm" style={{ color: C.cream }}>
-                  <div className="flex items-center gap-1.5">
-                    {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <CaptainStar size={11} />}
-                    {row.player.username}
-                  </div>
-                </td>
-                <td className="px-2 py-2 font-mono text-xs" style={{ color: row.team ? (row.team.color || C.greenLight) : `${C.cream}44` }}>
-                  {row.team?.tag || 'FA'}
-                </td>
-                <td className="px-2 py-2 text-center font-mono text-xs" style={{ color: `${C.cream}99` }}>{row.player.position}</td>
-                {cols.map(c => (
-                  <td
-                    key={c.field}
-                    className="px-2 py-2 text-center font-mono text-sm"
-                    style={{
-                      color: sortBy === c.field ? C.goldLight : C.cream,
-                      fontWeight: sortBy === c.field ? 600 : 400,
-                    }}
-                  >{numericRowValue(row,c.field)}</td>
-                ))}
-              </tr>
-            ))}
-            {sorted.length === 0 && (
-              <tr>
-                <td colSpan={cols.length + 4} className="text-center py-8 font-mono text-xs" style={{ color: `${C.cream}66` }}>
-                  No players match this filter.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex gap-3 mt-3">
-        <button disabled={loading || previous.length === 0} onClick={() => { const prior = previous.at(-1); setAfter(prior?.cursor ?? null); setOffset(prior?.offset ?? 0); setPrevious(previous.slice(0, -1)); }}>Previous players</button>
-        <button disabled={loading || !data?.leaderboard.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, { cursor: after, offset }]); setOffset(offset + sorted.length); setAfter(data?.leaderboard.pageInfo.endCursor ?? null); }}>Next players</button>
-      </div>
+      {seasonData?.seasons.pageInfo.hasNextPage && <Button variant="outline" onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</Button>}
+      {seasonPageError && <Alert variant="destructive"><AlertDescription>{seasonPageError}</AlertDescription><Button className="mt-2" variant="outline" onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</Button></Alert>}
+    </Card>
+    <p id="stats-sort-help" className="text-xs text-muted-foreground">Select a column heading to sort; select it again to reverse. Scroll horizontally to see every statistic.</p>
+    {loading && <p role="status" className="text-sm text-muted-foreground">Loading players…</p>}
+    {error && <Alert variant="destructive"><AlertDescription>{error.message}</AlertDescription><Button className="mt-2" variant="outline" onClick={() => { resetPage(); void refetch({ after: null }).catch(() => {}); }}>Retry</Button></Alert>}
+    <Card className="min-w-0 overflow-hidden">
+      <Table aria-label="Player statistics" aria-describedby="stats-sort-help">
+        <TableHeader><TableRow>
+          <TableHead className="w-12 text-center">#</TableHead>
+          <TableHead className="sticky left-0 z-10 min-w-40 bg-card">Player</TableHead>
+          <TableHead>Team</TableHead><TableHead>Position</TableHead>
+          {cols.map(column => <TableHead key={column.field} className="p-0 text-center" aria-sort={sortBy === column.field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+            <Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`Sort by ${column.help}`} title={column.help} onClick={() => toggleSort(column.field)}>{column.label}<span aria-hidden="true">{sortBy === column.field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span></Button>
+          </TableHead>)}
+        </TableRow></TableHeader>
+        <TableBody>
+          {sorted.map((row, index) => <TableRow key={row.player.id}>
+            <TableCell className="text-center tabular-nums text-muted-foreground">{offset + index + 1}</TableCell>
+            <TableCell className="sticky left-0 z-10 bg-card p-0">
+              <Button variant="ghost" className="w-full justify-start rounded-none px-4 text-left" disabled={!onPlayerClick} onClick={() => onPlayerClick?.({ id: row.player.id, season: seasonFilter })}>
+                {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <CaptainStar size={14} />}{row.player.username}
+              </Button>
+            </TableCell>
+            <TableCell><Badge variant="secondary">{row.team?.tag || 'FA'}</Badge></TableCell>
+            <TableCell>{row.player.position}</TableCell>
+            {cols.map(column => <TableCell key={column.field} className={sortBy === column.field ? 'text-center font-semibold tabular-nums' : 'text-center tabular-nums text-muted-foreground'}>{numericRowValue(row, column.field)}</TableCell>)}
+          </TableRow>)}
+          {!loading && sorted.length === 0 && <TableRow><TableCell colSpan={cols.length + 4} className="py-10 text-center text-muted-foreground">No players match this filter.</TableCell></TableRow>}
+        </TableBody>
+      </Table>
+    </Card>
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" disabled={loading || previous.length === 0} onClick={() => { const prior = previous.at(-1); setAfter(prior?.cursor ?? null); setOffset(prior?.offset ?? 0); setPrevious(previous.slice(0, -1)); }}>Previous players</Button>
+      <Button variant="outline" disabled={loading || !data?.leaderboard.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, { cursor: after, offset }]); setOffset(offset + sorted.length); setAfter(data?.leaderboard.pageInfo.endCursor ?? null); }}>Next players</Button>
     </div>
-  );
+  </section>;
 };
-
-// Shown once after a Discord user's first sign-in. Forces them to:
-//   1. Enter their Strikers Club Player ID (required to join a team)
-//   2. Confirm their primary position (default is 'CM' from account creation,
-//      but we want them to actively pick one so match-import matching works
-//      and their card displays accurately).
-// Cannot be dismissed without completing both. Once saved, the strikersId
-// lock kicks in just like the MY CARD editor — players can't change it
-// themselves after that.

@@ -20,6 +20,7 @@ import { isAdmin } from '../../utils/league';
 import { AddMatchModal, EditMatchModal, GenerateScheduleModal } from './schedule-setup';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { Slider } from '../../components/ui/slider';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 import { Card, CardContent } from '../../components/ui/card';
@@ -37,7 +38,11 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const page = useRestPage<MatchSummary>(season ? `/api/schedule?season=${segment(season)}${selectedWeek === null ? '' : `&week=${selectedWeek}`}` : null);
   const { loading, error: loadError, restart: reload } = page;
   const matches = page.data?.nodes ?? [];
-  const weekRange = page.data ? z.object({ weekRange: z.object({ min: z.number().nullable(), max: z.number().nullable(), count: z.number() }) }).parse(page.data).weekRange : null;
+  const loadedRange = useMemo(() => page.data ? z.object({ weekRange: z.object({ min: z.number().nullable(), max: z.number().nullable(), count: z.number() }) }).parse(page.data).weekRange : null, [page.data]);
+  const [savedRange, setSavedRange] = useState<{ season: string; value: NonNullable<typeof loadedRange> } | null>(null);
+  const [slidingWeek, setSlidingWeek] = useState<number | null>(null);
+  const weekRange = loadedRange ?? (savedRange?.season === season ? savedRange.value : null);
+  useEffect(() => { if (loadedRange) setSavedRange({ season, value: loadedRange }); }, [season, loadedRange]);
   const [editError, setEditError] = useState('');
   const [editingTeams, setEditingTeams] = useState<MatchTeam[]>([]);
   const [editing, setEditing] = useState<ScheduledMatch | null>(null);
@@ -54,7 +59,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
 
   // Reset the week slider whenever the season changes — different seasons
   // have different week ranges, so holding the old week would be confusing.
-  useEffect(() => { setSelectedWeek(null); }, [season]);
+  useEffect(() => { setSelectedWeek(null); setSlidingWeek(null); }, [season]);
 
   const filtered = matches;
   const recordStringFor = (record: MatchSummary['homeRecord']) =>
@@ -116,7 +121,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
       </div>
       {loadingEditor && <p role="status" className="text-sm text-muted-foreground">Loading match editor…</p>}
       {(loadError || editError || seasonQuery.error) && <Alert variant="destructive"><AlertDescription>{loadError || editError || seasonQuery.error?.message}<Button variant="outline" onClick={page.restart}>Restart schedule</Button></AlertDescription></Alert>}
-      {weekRange && weekRange.count >= 2 && weekRange.min !== null && weekRange.max !== null && <Card><CardContent className="flex flex-wrap items-center gap-3 p-4"><Label htmlFor="schedule-week">Week</Label><Input id="schedule-week" className="w-32" type="number" min={weekRange.min} max={weekRange.max} placeholder="All weeks" value={selectedWeek ?? ''} onChange={event => setSelectedWeek(event.target.value === '' ? null : Math.max(weekRange.min!, Math.min(weekRange.max!, Math.trunc(Number(event.target.value)))))} /><Button variant={selectedWeek === null ? 'secondary' : 'outline'} onClick={() => setSelectedWeek(null)}>All weeks</Button><div className="ml-auto flex items-center gap-2"><Button variant="outline" size="icon" aria-label="Previous week" disabled={selectedWeek === weekRange.min} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.max(weekRange.min!, w - 1))}><ChevronLeft className="size-4" /></Button><span className="text-sm text-muted-foreground">{selectedWeek === null ? `${weekRange.min}–${weekRange.max}` : `${selectedWeek} / ${weekRange.max}`}</span><Button variant="outline" size="icon" aria-label="Next week" disabled={selectedWeek === weekRange.max} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.min(weekRange.max!, w + 1))}><ChevronRight className="size-4" /></Button></div></CardContent></Card>}
+      {weekRange && weekRange.count >= 2 && weekRange.min !== null && weekRange.max !== null && <Card><CardContent className="flex flex-wrap items-center gap-3 p-4"><Label htmlFor="schedule-week">Week</Label><Input id="schedule-week" className="w-32" type="number" min={weekRange.min} max={weekRange.max} placeholder="All weeks" value={selectedWeek ?? ''} onChange={event => setSelectedWeek(event.target.value === '' ? null : Math.max(weekRange.min!, Math.min(weekRange.max!, Math.trunc(Number(event.target.value)))))} /><Button variant={selectedWeek === null ? 'secondary' : 'outline'} onClick={() => setSelectedWeek(null)}>All weeks</Button><div className="ml-auto flex items-center gap-2"><Button variant="outline" size="icon" aria-label="Previous week" disabled={selectedWeek === weekRange.min} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.max(weekRange.min!, w - 1))}><ChevronLeft className="size-4" /></Button><span className="text-sm text-muted-foreground">{selectedWeek === null ? `${weekRange.min}–${weekRange.max}` : `${selectedWeek} / ${weekRange.max}`}</span><Button variant="outline" size="icon" aria-label="Next week" disabled={selectedWeek === weekRange.max} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.min(weekRange.max!, w + 1))}><ChevronRight className="size-4" /></Button></div><Slider aria-label="Schedule week" className="basis-full" min={weekRange.min} max={weekRange.max} step={1} value={[slidingWeek ?? selectedWeek ?? weekRange.min]} onValueChange={values => setSlidingWeek(values[0]!)} onValueCommit={values => { setSelectedWeek(values[0]!); setSlidingWeek(null); }} /><p className="text-xs text-muted-foreground">{slidingWeek === null ? (selectedWeek === null ? "Showing all weeks. Move the slider to choose a week." : `Showing week ${selectedWeek}.`) : `Choose week ${slidingWeek}`}</p></CardContent></Card>}
       {(loading || seasonQuery.loading) ? <p role="status" className="py-8 text-center text-muted-foreground">Loading schedule…</p> : (filtered.length === 0 ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">No matches scheduled for this season yet. {isAdminUser ? 'Add a match or create a new season to generate a round-robin.' : 'Fixtures will appear here when ready.'}</CardContent></Card> : <div className="space-y-6">{Object.keys(byWeek).map(Number).filter(wkNum => selectedWeek === null || wkNum === selectedWeek).sort((a, b) => a - b).map(wkNum => <section key={wkNum} className="space-y-3"><h2 className="flex items-center gap-2 font-semibold">Week {wkNum}<Badge variant="secondary">{byWeek[wkNum].length} matches</Badge></h2><div className="grid gap-3 xl:grid-cols-2">{byWeek[wkNum].map(m => {
         const played = m.status === 'completed' && m.homeScore !== null && m.awayScore !== null;
         return <Card key={m.id} className="overflow-hidden"><CardContent className="p-0">

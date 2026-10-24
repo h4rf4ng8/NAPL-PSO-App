@@ -1,5 +1,4 @@
 import React from 'react';
-import { C } from '../theme/theme';
 
 // ============ ARTICLES ============
 // Long-form content lives here (match recaps, interviews, feature pieces).
@@ -66,26 +65,15 @@ const parseMarkdownBlocks = (body: string): MarkdownBlock[] => {
 
 const renderMarkdownBody = (body: string, article: boolean) => {
   if (!body) return null;
-  return parseMarkdownBlocks(body).map((block, i) => {
-    const inline = (text: string) => renderInline(text, article);
-    if (block.kind === 'h2') return article
-      ? <h3 key={i} className="font-display tracking-wider mt-7 mb-3" style={{ color: C.brandNavyDeep, letterSpacing: '0.08em', fontSize: 28, lineHeight: 1.2 }}>{inline(block.text)}</h3>
-      : <h3 key={i} className="font-heading tracking-wider text-lg mt-4 mb-2" style={{ color: C.brandNavyDeep, letterSpacing: '0.15em' }}>{inline(block.text)}</h3>;
-    if (block.kind === 'h3') return article
-      ? <h4 key={i} className="font-heading tracking-wider mt-5 mb-2" style={{ color: C.brandNavy, letterSpacing: '0.12em', fontSize: 20 }}>{inline(block.text)}</h4>
-      : <h4 key={i} className="font-heading tracking-wider text-sm mt-3 mb-1" style={{ color: C.brandNavy, letterSpacing: '0.15em' }}>{inline(block.text)}</h4>;
-    if (block.kind === 'p') return article
-      ? <p key={i} className="font-body mb-4" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.75 }}>{inline(block.text)}</p>
-      : <p key={i} className="font-body text-sm mb-2 leading-relaxed" style={{ color: C.brandNavy }}>{inline(block.text)}</p>;
+  return parseMarkdownBlocks(body).map((block, index) => {
+    if (block.kind === 'h2') return <h3 key={index} className={article ? 'mb-3 mt-7 text-2xl font-semibold' : 'mb-2 mt-5 text-xl font-semibold'}>{renderInline(block.text)}</h3>;
+    if (block.kind === 'h3') return <h4 key={index} className="mb-2 mt-4 text-lg font-semibold">{renderInline(block.text)}</h4>;
+    if (block.kind === 'p') return <p key={index} className="mb-4 leading-7">{renderInline(block.text)}</p>;
     if (block.kind !== 'ul' && block.kind !== 'ol') return null;
-    const items = block.items.map((text, j) => <li key={j}>{inline(text)}</li>);
+    const items = block.items.map((text, item) => <li key={item}>{renderInline(text)}</li>);
     return block.kind === 'ul'
-      ? (article
-        ? <ul key={i} className="list-disc pl-6 mb-4 space-y-2 font-body" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.7 }}>{items}</ul>
-        : <ul key={i} className="list-disc pl-5 mb-2 space-y-1 font-body text-sm leading-relaxed" style={{ color: C.brandNavy }}>{items}</ul>)
-      : (article
-        ? <ol key={i} className="list-decimal pl-6 mb-4 space-y-2 font-body" style={{ color: C.brandNavy, fontSize: 18, lineHeight: 1.7 }}>{items}</ol>
-        : <ol key={i} className="list-decimal pl-5 mb-2 space-y-1 font-body text-sm leading-relaxed" style={{ color: C.brandNavy }}>{items}</ol>);
+      ? <ul key={index} className="mb-4 list-disc space-y-2 pl-6 leading-7">{items}</ul>
+      : <ol key={index} className="mb-4 list-decimal space-y-2 pl-6 leading-7">{items}</ol>;
   });
 };
 
@@ -99,7 +87,7 @@ type MarkdownBlock = {kind:'p'|'h2'|'h3';text:string}|{kind:'ul'|'ol';items:stri
 const safeHttpUrl=(value:string):string|undefined=>{try{const url=new URL(value);return ['http:','https:'].includes(url.protocol)?url.href:undefined;}catch{return undefined;}};
 
 
-const renderInline = (text: string, article: boolean) => {
+const renderInline = (text: string) => {
   const parts: InlinePart[] = [];
   const linkRe = /\[([^\]]+)\]\(([^)]+)\)/g;
   let last = 0, match;
@@ -110,24 +98,22 @@ const renderInline = (text: string, article: boolean) => {
   }
   if (last < text.length) parts.push({ kind: 'text', value: text.slice(last) });
   return parts.map((part, i) => {
-    const children = renderInlineMarkup(part.kind === 'link' ? part.text : part.value, article, `${part.kind === 'link' ? 'l' : 't'}${i}`);
+    const children = renderInlineMarkup(part.kind === 'link' ? part.text : part.value, `${part.kind === 'link' ? 'l' : 't'}${i}`);
     return part.kind === 'link'
-      ? <a key={i} href={safeHttpUrl(part.href)} target="_blank" rel="noopener noreferrer" style={{ color: C.brandNavy, textDecoration: 'underline' }}>{children}</a>
+      ? <a key={i} href={safeHttpUrl(part.href)} target="_blank" rel="noopener noreferrer" className="text-primary underline underline-offset-4">{children}</a>
       : <span key={i}>{children}</span>;
   });
 };
 
-const renderInlineMarkup = (text: string, article: boolean, keyPrefix: string) => {
+const renderInlineMarkup = (text: string, keyPrefix: string) => {
   const out: React.ReactNode[] = [];
   const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g;
   let cursor = 0, match, index = 0;
   while ((match = re.exec(text)) !== null) {
     if (match.index > cursor) out.push(text.slice(cursor, match.index));
     const token = match[0], key = `${keyPrefix}-${index++}`;
-    if (token.startsWith('**')) out.push(<strong key={key} style={article ? { color: C.brandNavyDeep } : undefined}>{token.slice(2, -2)}</strong>);
-    else if (token.startsWith('`')) out.push(article
-      ? <code key={key} className="font-mono text-sm px-1 py-0.5 rounded" style={{ background: `${C.navyLight}22` }}>{token.slice(1, -1)}</code>
-      : <code key={key} style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: '0.9em', background: 'rgba(216,184,88,0.15)', padding: '1px 5px', borderRadius: 3 }}>{token.slice(1, -1)}</code>);
+    if (token.startsWith('**')) out.push(<strong key={key} >{token.slice(2, -2)}</strong>);
+    else if (token.startsWith('`')) out.push(<code key={key} className="rounded bg-muted px-1 py-0.5 font-mono text-sm">{token.slice(1, -1)}</code>);
     else out.push(<em key={key}>{token.slice(1, -1)}</em>);
     cursor = match.index + token.length;
   }

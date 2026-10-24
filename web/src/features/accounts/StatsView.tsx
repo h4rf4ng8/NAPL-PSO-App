@@ -7,6 +7,8 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Crown } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { sessionVersion } from '../../auth/client';
 import { useQuery } from '@apollo/client/react';
+import { NetworkStatus } from '@apollo/client';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/ui/tooltip';
 import { LeaderboardDocument, SeasonsDocument, type LeaderboardQuery } from '../../api/generated/graphql';
 import { accountStatsSchema } from '@napl/contracts/accounts';
 
@@ -35,15 +37,15 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   const [offset, setOffset] = useState(0);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const seasons = seasonData?.seasons.nodes ?? [];
-  const { data, loading: queryLoading, error, refetch, fetchMore } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
+  const { data, loading: queryLoading, networkStatus, error, refetch, fetchMore } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
     sortBy, sortDir, after, first: 50,
   } });
   const scope = JSON.stringify([seasonFilter, posFilter, sortBy, sortDir, after]);
-  const [attempt, setAttempt] = useState(0);
+  const loadingFirstChunk = queryLoading && networkStatus !== NetworkStatus.fetchMore;
   const [page, setPage] = useState<{ scope: string; data?: LeaderboardQuery['leaderboard']; error?: string }>({ scope: '' });
   useEffect(() => {
-    if (!data) return;
+    if (!data || loadingFirstChunk) { setPage({ scope }); return; }
     let active = true;
     const version = sessionVersion();
     setPage({ scope });
@@ -71,7 +73,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
     };
     void collect().catch((error_: unknown) => { if (active) setPage({ scope, error: error_ instanceof Error ? error_.message : 'Could not load players.' }); });
     return () => { active = false; };
-  }, [data, scope, after, fetchMore, attempt]);
+  }, [data, scope, after, fetchMore, loadingFirstChunk]);
   const displayPage = page.scope === scope ? page.data : undefined;
   const pageError = error?.message || (page.scope === scope ? page.error : '');
   const loading = !pageError && (queryLoading || !displayPage);
@@ -135,15 +137,15 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
     </div>
     <p id="stats-sort-help" className="sr-only">Select a column heading to sort; select it again to reverse. Scroll horizontally to see every statistic.</p>
     {loading && <p role="status" className="text-sm text-muted-foreground">Loading players…</p>}
-    {pageError && <Alert variant="destructive"><AlertDescription>{pageError}</AlertDescription><Button className="mt-2" variant="outline" onClick={() => { if (error) void refetch().catch(() => {}); else setAttempt(value => value + 1); }}>Retry players</Button></Alert>}
+    {pageError && <Alert variant="destructive"><AlertDescription>{pageError}</AlertDescription><Button className="mt-2" variant="outline" disabled={queryLoading} onClick={() => { if (after) resetPage(); else void refetch().catch(() => {}); }}>Retry players</Button></Alert>}
     <div className="min-w-0 rounded-md border">
-      <Table aria-label="Player statistics" aria-describedby="stats-sort-help">
+      <TooltipProvider><Table aria-label="Player statistics" aria-describedby="stats-sort-help">
         <TableHeader><TableRow>
           <TableHead className="w-12 text-center">#</TableHead>
           <TableHead className="min-w-40">Player</TableHead>
           <TableHead>Team</TableHead><TableHead>Position</TableHead>
           {cols.map(column => <TableHead key={column.field} className="p-0 text-center" aria-sort={sortBy === column.field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-            <Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`${column.label}: sort by ${column.help}`} title={column.help} onClick={() => toggleSort(column.field)}>{column.label}{sortBy === column.field ? (sortDir === 'asc' ? <ArrowUp className="size-4" aria-hidden="true" /> : <ArrowDown className="size-4" aria-hidden="true" />) : <ArrowUpDown className="size-4" aria-hidden="true" />}</Button>
+            <Tooltip><TooltipTrigger asChild><Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`${column.label}: sort by ${column.help}`} onClick={() => toggleSort(column.field)}>{column.label}{sortBy === column.field ? (sortDir === 'asc' ? <ArrowUp className="size-4" aria-hidden="true" /> : <ArrowDown className="size-4" aria-hidden="true" />) : <ArrowUpDown className="size-4" aria-hidden="true" />}</Button></TooltipTrigger><TooltipContent>{column.help}</TooltipContent></Tooltip>
           </TableHead>)}
         </TableRow></TableHeader>
         <TableBody>
@@ -160,7 +162,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           </TableRow>)}
           {!loading && !pageError && sorted.length === 0 && <TableRow><TableCell colSpan={cols.length + 4} className="py-10 text-center text-muted-foreground">No players match this filter.</TableCell></TableRow>}
         </TableBody>
-      </Table>
+      </Table></TooltipProvider>
     </div>
     <div className="flex flex-wrap items-center gap-2">
       {displayPage && <p className="mr-auto text-sm text-muted-foreground">{displayPage.totalCount === 0 ? '0 players' : `${offset + 1}–${offset + sorted.length} of ${displayPage.totalCount} players`}</p>}

@@ -1,9 +1,10 @@
+import type { CurrentCard } from '../../src/features/accounts/api';
 export type FixtureRole = 'visitor' | 'member' | 'captain' | 'admin' | 'super-admin';
 export const timestamp = Date.UTC(2026, 9, 20, 18);
 export const stats = { games: 12, wins: 8, draws: 2, losses: 2, goals: 24, assists: 9, passes: 80, tackles: 20, deflects: 0, catches: 0, cleanSheets: 2, motm: 3 };
-export const ranking = { __typename: 'AccountRanking', score: 82, percentile: 0.73, ranked: true, gamesPlayed: 12, tier: 'GOLD' };
+export const ranking = { __typename: 'AccountRanking' as const, score: 82, percentile: 0.73, ranked: true, gamesPlayed: 12, tier: 'GOLD' };
 export const team = {
-  __typename: 'TeamIdentity', id: 'fixture-team', name: 'Fixture United', tag: 'FXU', color: '#3068b0',
+  __typename: 'TeamIdentity' as const, id: 'fixture-team', name: 'Fixture United', tag: 'FXU', color: '#3068b0',
   ownerUsername: 'Fixture Captain', status: 'approved', logoUrl: null, totw: false, totwSetAt: null,
 };
 export const opponent = { ...team, id: 'fixture-opponent', name: 'Harbor Athletic', tag: 'HBA', color: '#15803d' };
@@ -11,13 +12,13 @@ export const pageInfo = { __typename: 'PayloadPageInfo', endCursor: null, hasNex
 export const pageOf = (nodes: unknown[], type = 'JsonPage') => ({ __typename: type, nodes, pageInfo, totalCount: nodes.length });
 export function currentCard(role: FixtureRole) {
   return {
-    __typename: 'CurrentAccountCard', id: 'fixture-player', username: role === 'captain' ? 'Fixture Captain' : 'Fixture Player',
+    __typename: 'CurrentAccountSummary', id: 'fixture-player', username: role === 'captain' ? 'Fixture Captain' : 'Fixture Player',
     position: 'ST', teamId: team.id, imageUrl: null, pendingImageUrl: null, country: null, email: 'player@example.test',
     roles: role === 'super-admin' ? ['super_admin'] : (role === 'admin' ? ['admin'] : []), stats, ranking, team,
-    season: 'all', cardStats: ['GOALS', 'ASSIST', 'PASS/G', 'TKL/G', 'W-L', 'GP'].map((label, index) => ({ __typename: 'CardStatCell', label, value: ['24', '9', '6.7', '1.7', '8-2', '12'][index] })),
+    season: 'all', cardStats: ['GOALS', 'ASSIST', 'PASS/G', 'TKL/G', 'W-L', 'GP'].map((label, index) => ({ __typename: 'AccountCardStatCell' as const, label, value: ['24', '9', '6.7', '1.7', '8-2', '12'][index] })),
     totwUntil: null, cheater: false, strikersId: '12345', steamUrl: null, createdAt: timestamp,
     awardCount: 0, championshipCount: 0, awardPreview: [], championshipPreview: [], previewHasMore: false,
-  };
+  } satisfies CurrentCard;
 }
 export function teamSummary(value = team) {
   return { ...value, __typename: 'TeamSummary', createdAt: timestamp, reviewedAt: timestamp, reviewedBy: 'Fixture Admin', memberCount: 1, invitationCount: 0, seasonCount: 1, viewerInvitation: null };
@@ -44,6 +45,9 @@ export const scheduledMatch = {
   homeScore: null, awayScore: null, linkedMatchId: null, notesUrl: '/api/schedule/fixture-match/notes', createdAt: timestamp, updatedAt: timestamp,
   homeRecord: { w: 8, d: 2, l: 2 }, awayRecord: { w: 6, d: 3, l: 3 },
 };
+export const playedMatch = { id: 'played-match', date: timestamp, season: 'S1', opponent: opponent.name, opponentTeamId: opponent.id, ownTeamId: team.id, result: 'W', goals: 3, assists: 1, passes: 12, tackles: 4, deflects: 0, catches: 0, cleanSheet: true, motm: true, goalsFor: 3, goalsAgainst: 0, detailUrl: '/api/accounts/fixture-player/matches/played-match' };
+export const playerAward = { awardId: 'striker', season: 'S1', assignedAt: timestamp, assignedBy: 'Fixture Admin', detailUrl: '/api/accounts/fixture-player/awards/fixture-award' };
+export const championship = { season: 'S1', placement: '1', teamId: team.id, awardedAt: timestamp, detailUrl: '/api/accounts/fixture-player/championships/fixture-championship' };
 export function news(kind: string) {
   return { id: `fixture-${kind}`, type: kind, title: kind === 'announcement' ? 'Welcome to the season' : 'Fixture United vs Harbor Athletic',
     pinned: kind === 'announcement', homeTeamId: team.id, awayTeamId: opponent.id, homeTeam: team, awayTeam: opponent,

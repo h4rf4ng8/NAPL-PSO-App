@@ -15,7 +15,7 @@ for (const theme of ['light', 'dark'] as const) {
     const fixture = await installLeagueFixture(page, 'member');
     await page.addInitScript(mode => localStorage.setItem('asl_theme', mode), theme);
     const errors: string[] = [];
-    page.on('pageerror', error => errors.push(error.message));
+    page.on('pageerror', error => { errors.push(error.message); });
     for (const [path, expected] of memberDestinations) {
       await test.step(path, async () => {
         await page.goto(`/#${path}`);

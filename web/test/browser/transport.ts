@@ -1,24 +1,27 @@
 import { readFile } from 'node:fs/promises';
 import type { Page, Request } from '@playwright/test';
 import { session } from '../session-fixture';
-import { article, candidateCards, currentCard, fullTeam, news, opponent, pageOf, period, positionRequest, rule, scheduledMatch, stats, team, teamSummary, transfer, type FixtureRole } from './league-data';
+import { article, candidateCards, championship, currentCard, fullTeam, news, opponent, pageOf, period, playedMatch, playerAward, positionRequest, rule, scheduledMatch, stats, team, teamSummary, transfer, type FixtureRole } from './league-data';
 
 const placeholder = '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96"><rect width="96" height="96" rx="16" fill="#1d4ed8"/><path d="M48 14 76 25v25c0 15-13 27-28 33C33 77 20 65 20 50V25Z" fill="#fff"/><path d="m48 28 18 30H30Z" fill="#1d4ed8"/></svg>';
 const fields = (value: Record<string, unknown>) => pageOf(Object.entries(value).map(([key, value], index) => ({ index, key, value })));
 
 // Intercepts the real app's transport; no test may contact a hosted API or auth service.
 export async function installLeagueFixture(page: Page, role: FixtureRole = 'visitor') {
+  const card = currentCard(role);
   const fixture = {
-    requests: [] as { operation: string; method: string; body: unknown }[],
+    requests: [] as { operation: string; method: string; body: unknown; authorization: string | null }[],
     unexpected: [] as string[],
     failures: new Set<string>(),
     holds: new Map<string, Promise<void>>(),
     paginated: new Set<string>(),
     empty: false,
     votingOpen: true,
+    votes: [] as { voterUsername: string; position: string; votedForUsername: string }[],
     responses: new Map<string, (request: Request) => unknown | Promise<unknown>>(),
+    account: card,
+    authSession: session(card.id),
   };
-  const card = currentCard(role);
   await page.addInitScript(({ value }) => {
     if (value) localStorage.setItem('napl-auth', JSON.stringify(value));
     else localStorage.removeItem('napl-auth');
@@ -39,14 +42,18 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
       }
       return route.fulfill(path.endsWith('.woff2') ? { status: 204 } : { body: placeholder, contentType: 'image/svg+xml', headers: { 'access-control-allow-origin': '*' } });
     }
-    if (path === '/auth/v1/logout' && url.hostname === 'fixture.supabase.test') return route.fulfill({ status: 204 });
+    if (url.hostname === 'fixture.supabase.test' && path.startsWith('/auth/')) {
+      await fixture.holds.get(path);
+      if (fixture.failures.has(path)) return route.fulfill({ status: 503, json: { message: 'Fixture auth unavailable' } });
+      return route.fulfill(path.endsWith('/logout') ? { status: 204 } : { json: fixture.authSession });
+    }
     if (!local) {
       fixture.unexpected.push(request.url());
       return route.abort('blockedbyclient');
     }
     const body = request.postDataJSON() as { operationName?: string; variables?: Record<string, unknown> } | null;
     const operation = path === '/api/graphql' ? body?.operationName ?? 'unknown' : path;
-    fixture.requests.push({ operation, method: request.method(), body });
+    fixture.requests.push({ operation, method: request.method(), body, authorization: request.headers().authorization ?? null });
     await fixture.holds.get(operation);
     if (fixture.failures.has(operation)) return route.fulfill({ status: 503, json: { error: 'fixture_unavailable', message: 'Fixture temporarily unavailable. Try again.' } });
     const respond = fixture.responses.get(operation);
@@ -62,7 +69,7 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
       const account = { ...card, __typename: 'AccountCard' };
       const summary = { ...card, __typename: 'AccountSummary' };
       const graph: Record<string, unknown> = {
-        LeagueOverview: { leagueOverview: { __typename: 'LeagueOverview', season: 'S1', playerCount: 24, activeTeamCount: 2, me: card, tickerHasMore: false, tickerNews: [], activeVotingPeriod: fixture.votingOpen ? { ...period, __typename: 'VotingPeriodSummary' } : null } },
+        LeagueOverview: { leagueOverview: { __typename: 'LeagueOverview', season: 'S1', playerCount: 24, activeTeamCount: 2, me: { ...card, season: variables.season ?? 'all' }, tickerHasMore: false, tickerNews: [], activeVotingPeriod: fixture.votingOpen ? { ...period, __typename: 'VotingPeriodSummary' } : null } },
         Seasons: { seasons: { ...rows(['S1'], 'StringPage'), summaries: [{ games: 12, players: 24 }] } },
         TeamSummaries: { teamSummaries: rows((variables.status && variables.status !== 'approved' ? [{ ...teamSummary(), status: variables.status }] : [teamSummary(), teamSummary(opponent)]).filter(value => !variables.search || value.name.toLowerCase().includes(String(variables.search).toLowerCase())), 'TeamSummaryPage') },
         Leaderboard: { leaderboard: rows([summary, ...candidateCards().map(value => ({ ...value, __typename: 'AccountSummary' }))].filter(value => !variables.position || value.position === variables.position), 'AccountSummaryPage') },
@@ -75,10 +82,10 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
         HallOfFame: { hallOfFame: rows([{ player: summary, award: { awardId: 'striker', season: 'S1' } }]) },
         DecoratedPlayers: { decoratedPlayers: rows([{ player: summary, count: 2 }]) },
         SeasonChampions: { seasonChampions: rows([{ season: 'S1', winnerTeam: team, runnerUpTeam: opponent }]) },
-        AccountAwards: { accountAwards: rows([]) },
-        AccountChampionships: { accountChampionships: rows([]) },
-        AccountMatches: { accountMatches: rows([]) },
-        AccountOpponents: { accountOpponents: rows([]) },
+        AccountAwards: { accountAwards: rows([playerAward]) },
+        AccountChampionships: { accountChampionships: rows([championship]) },
+        AccountMatches: { accountMatches: rows([playedMatch]) },
+        AccountOpponents: { accountOpponents: rows([{ opponent: opponent.name, games: 1, w: 1, d: 0, l: 0, goals: 3, assists: 1, motm: 1 }]) },
         VotingCandidates: { votingCandidates: rows(candidateCards().filter(value => !variables.position || value.position === variables.position).map(value => ({ ...value, __typename: 'AccountSummary' })), 'AccountSummaryPage') },
         AccountCardPreviews: { accountCardPreviews: fixture.empty ? [] : [{ label: 'Gold striker', description: 'A server-calculated preview.', account: { ...account, __typename: 'Account', seasonStats: { all: stats }, awards: [], championships: [], cardStats: [{ __typename: 'AccountCardStatSeason', season: 'all', cells: account.cardStats }] } }] },
         DefaultPositionWeights: { defaultPositionWeights: { ST: { goals: 1 }, GK: { catches: 1 }, DEF: { tackles: 1 }, CM: { passes: 1 } } },
@@ -86,6 +93,7 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
       };
       if (Object.hasOwn(graph, operation)) return route.fulfill({ json: { data: graph[operation] } });
     } else if (request.method() === 'GET') {
+      if (path === '/api/media/accounts/fixture-player/pending-image') return route.fulfill({ body: placeholder, contentType: 'image/svg+xml' });
       const rest: Record<string, unknown> = {
         '/api/accounts/me': card,
         '/api/settings/current_season': 'S1',
@@ -93,7 +101,7 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
         '/api/settings/season_champions': fields({}),
         '/api/integrations/discord': { configured: true },
         '/api/roles': rows([{ userId: card.id, username: card.username, role: 'super_admin' }]),
-        '/api/position-requests': rows([]),
+        '/api/position-requests': rows([positionRequest]),
         '/api/accounts': rows(url.searchParams.has('pendingImage') ? [{ ...summaryForRest(card), pendingImageUrl: '/api/media/accounts/fixture-player/pending-image' }] : [summaryForRest(card), ...candidateCards()]),
         '/api/transfers': rows([transfer]),
         '/api/rules': rows([rule]),
@@ -114,15 +122,19 @@ export async function installLeagueFixture(page: Page, role: FixtureRole = 'visi
         '/api/voting/periods': rows(fixture.votingOpen ? [{ ...period, eligiblePlayerCount: 4, winnerCount: 0 }] : []),
         '/api/voting/periods/fixture-vote/tally': { totalVotes: 1, positions: { GK: [['Candidate GK', 1]], DEF: [['Candidate DEF', 1]], CM: [['Candidate CM', 1]], ST: [['Candidate ST', 1]] } },
         '/api/voting/periods/fixture-vote/votes': rows([]),
-        '/api/voting/periods/fixture-vote/votes/me': [],
+        '/api/voting/periods/fixture-vote/votes/me': fixture.votes,
         '/api/accounts/fixture-player/stats': fields(stats),
+        '/api/accounts/fixture-player/matches/played-match': fields(playedMatch),
+        '/api/accounts/fixture-player/awards/fixture-award': fields(playerAward),
+        '/api/accounts/fixture-player/championships/fixture-championship': fields(championship),
         '/api/position-requests/fixture-position/reason': pageOf(['More experience playing midfield.']),
       };
-      rest['/api/position-requests'] = rows([positionRequest]);
-      if (path === '/api/media/accounts/fixture-player/pending-image') return route.fulfill({ body: placeholder, contentType: 'image/svg+xml' });
       if (Object.hasOwn(rest, path)) return route.fulfill({ json: rest[path] });
       if (/^\/api\/news\/fixture-(?:announcement|matchup|result)\/(?:body|notes)$/.test(path)) return route.fulfill({ json: pageOf(['Synthetic league news for browser validation.']) });
     } else {
+      if (operation === '/api/voting/periods/fixture-vote/votes/me' && request.method() === 'PUT') {
+        fixture.votes = Object.entries(body ?? {}).map(([position, votedForUsername]) => ({ voterUsername: card.username, position: position.toUpperCase(), votedForUsername: String(votedForUsername) }));
+      }
       return route.fulfill({ status: 204 });
     }
     fixture.unexpected.push(`${request.method()} ${operation}`);

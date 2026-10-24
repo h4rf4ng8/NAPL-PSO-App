@@ -1,8 +1,8 @@
 import React, { StrictMode, useState, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import '../../src/index.css';
-import { Dialog, ModalShell, useDialog } from '../../src/components/Dialog';
-import { Metric, RecordBox, ResultBadge, EmptyState, QuickStat, Section, ArticleCard, ResultRow, TeamPill } from '../../src/components/Display';
+import { Dialog, ModalShell } from '../../src/components/Dialog';
+import { Metric, RecordBox, ResultBadge, EmptyState, QuickStat, Section, ResultRow, TeamPill } from '../../src/components/Display';
 import { PlayerCard } from '../../src/components/PlayerCard';
 import { ShareableCardModal } from '../../src/components/ShareableCardModal';
 import { applyTheme, type ThemeMode } from '../../src/theme/theme';
@@ -12,10 +12,9 @@ import type { Account, Team } from '../../src/api/models';
 const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: '#000a', zIndex: 50, display: 'grid', placeItems: 'center' };
 const panel: React.CSSProperties = { background: 'white', padding: 24, minWidth: 320, borderRadius: 12, color: '#152238' };
 function Mandatory({ close, empty = false }: { close: () => void; empty?: boolean }) {
-  const ref = useDialog();
-  return <div ref={ref} role="dialog" aria-modal="true" aria-label={empty ? 'Empty dialog' : 'Mandatory onboarding'} tabIndex={-1} style={overlay}>
+  return <Dialog label={empty ? 'Empty dialog' : 'Mandatory onboarding'}>
     <div style={panel}>{empty ? 'No focusable controls' : <><p>Required onboarding</p><button onClick={close}>Complete onboarding</button></>}</div>
-  </div>;
+  </Dialog>;
 }
 const stats = { games: 12, wins: 8, draws: 2, losses: 2, goals: 24, assists: 9, passes: 80, tackles: 20, deflects: 0, catches: 0, cleanSheets: 2, motm: 3 };
 const account: Account = { id: 'fixture-player', username: 'Fixture Player', position: 'ST', teamId: null, imageUrl: null, country: null, stats, seasonStats: { all: stats }, ranking: { score: 82, percentile: 0.73, ranked: true, gamesPlayed: 12, tier: 'GOLD' }, cardStats: [{ season: 'all', cells: ['GOALS', 'TKL/G', 'ASSIST', 'W-L', 'PASS/G', 'GP'].map((label, i) => ({ label, value: String(i + 1) })) }], awards: [], championships: [], totwUntil: null, cheater: false, strikersId: null, steamUrl: null, createdAt: 1 };
@@ -84,7 +83,6 @@ function Fixture() {
       <EmptyState text="No fixtures yet" />
       <QuickStat label="PLAYERS" value={42} accent="#169b62" />
       <Section title="LATEST" onMore={() => {}}><ResultBadge result="D" small /></Section>
-      <ArticleCard title="League update" body="Synthetic fixture article for visual parity." pinned date={1_700_000_000_000} author="Fixture" />
       <ResultRow r={{ date: 1_700_000_000_000, homeScore: 3, awayScore: 1 } as Parameters<typeof ResultRow>[0]['r']} home={undefined} away={undefined} />
       <TeamPill fallback="TBD" />
     </div>

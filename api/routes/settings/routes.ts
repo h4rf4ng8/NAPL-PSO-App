@@ -51,8 +51,9 @@ export function registerSettings(app: FastifyInstance, { db }: Dependencies): vo
         // Fastify sends raw strings as text/plain by default, which breaks the
         // frontend's response.json() parser. Serialize current_season explicitly
         // so the body is a valid JSON string ("S1") with the correct type header.
-        if (key === 'current_season') return reply.type('application/json').send(JSON.stringify(value));
-        return fieldPage(value, `/api/settings/${key}`, request);
+        return key === 'current_season'
+            ? reply.type('application/json').send(JSON.stringify(value))
+            : fieldPage(value, `/api/settings/${key}`, request);
     });
     app.get('/api/settings/:key/fields/:field', { config: { public: true } }, async request => {
         const key = settingKey.parse(parameters(request).key);

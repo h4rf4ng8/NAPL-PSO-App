@@ -2,11 +2,22 @@ import React from 'react';
 import { Check, Copy, Download, Share2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type {Account, TeamSummary as Team} from '../api/models';
-import { C } from '../theme/theme';
+
 import { PlayerCard } from './PlayerCard';
-import { useDialog } from './Dialog';
+import { ModalShell } from './Dialog';
 import { renderCardToBlob, downloadCardBlob } from './player-card-image';
-export const ShareableCardModal = ({ account, team, onClose, children }: { account: Account; team?: Team | null | undefined; onClose: () => void; children?: React.ReactNode }) => {
+import { Button } from './ui/button';
+import { Alert, AlertDescription } from './ui/alert';
+
+type CardProps = { account: Account; team?: Team | null | undefined; onClose: () => void; children?: React.ReactNode };
+
+export const ShareableCardModal = ({ account, onClose, ...props }: CardProps) => (
+  <ModalShell title={`${account.username}'s player card`} onClose={onClose} maxWidth="max-w-xl" closeOnOutside>
+    <ShareableCardContent account={account} onClose={onClose} {...props} />
+  </ModalShell>
+);
+
+export const ShareableCardContent = ({ account, team, onClose, children }: CardProps) => {
   const lifetime = React.useRef<AbortController | null>(null);
   const copiedTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
@@ -15,7 +26,6 @@ export const ShareableCardModal = ({ account, team, onClose, children }: { accou
     return () => { controller.abort(); clearTimeout(copiedTimer.current); };
   }, []);
   const close = () => { lifetime.current?.abort(); onClose(); };
-  const dialogRef = useDialog(close);
   const cardRef = React.useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -82,56 +92,16 @@ export const ShareableCardModal = ({ account, team, onClose, children }: { accou
     if (!signal?.aborted) setDownloading(false);
   };
 
-  return (
-    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={`Share ${account.username} player card`} tabIndex={-1} className="dialog-backdrop" style={{
-      background: `${C.black}dd`,
-    }} onClick={close}>
-      <div onClick={(e) => e.stopPropagation()} className="flex flex-col items-center gap-4 fade-in">
-        <PlayerCard ref={cardRef} account={account} size="lg" team={team} />
-
-        <div className="flex flex-wrap gap-2 justify-center">
-          <button
-            onClick={handleNativeShare}
-            disabled={downloading}
-            className="card-action disabled:opacity-50"
-            style={{
-              background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-              color: C.onColor,
-              boxShadow: `0 4px 12px ${C.green}66`,
-            }}
-          >
-            <Share2 size={14} /> {downloading ? 'GENERATING...' : 'SHARE CARD'}
-          </button>
-          <button
-            onClick={handleDownload}
-            disabled={downloading}
-            className="card-action card-action-neutral disabled:opacity-50"
-          >
-            <Download size={14} /> DOWNLOAD
-          </button>
-          <button
-            onClick={handleCopyLink}
-            className="card-action card-action-neutral"
-          >
-            {copied ? <><Check size={14} /> COPIED</> : <><Copy size={14} /> COPY LINK</>}
-          </button>
-          <button onClick={close} className="px-4 py-2 rounded font-mono text-xs tracking-wider" style={{
-            background: `${C.navyLight}55`, color: C.white,
-          }}>CLOSE</button>
-        </div>
-
-        {error && (
-          <div className="font-mono text-xs px-3 py-1.5 rounded" style={{
-            background: `${C.brandNavy}cc`, color: C.white, border: `1px solid ${C.navyLight}66`,
-          }}>{error}</div>
-        )}
-        {info && !error && (
-          <div className="font-mono text-xs px-3 py-1.5 rounded" style={{
-            background: `${C.green}cc`, color: C.white, border: `1px solid ${C.greenLight}66`,
-          }}>{info}</div>
-        )}
-        {children}
-      </div>
+  return <div className="flex min-w-0 flex-col items-center gap-5">
+    <div className="w-full max-w-[320px] [&>.flip-card]:aspect-[320/510] [&>.flip-card]:!h-auto [&>.flip-card]:!w-full [&_.flip-card-face>svg]:size-full"><PlayerCard ref={cardRef} account={account} size="lg" team={team} /></div>
+    <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-center">
+      <Button onClick={handleNativeShare} disabled={downloading}><Share2 />{downloading ? 'Generating…' : 'Share card'}</Button>
+      <Button variant="outline" onClick={handleDownload} disabled={downloading}><Download />Download</Button>
+      <Button variant="outline" onClick={handleCopyLink}>{copied ? <><Check />Copied</> : <><Copy />Copy link</>}</Button>
+      <Button variant="ghost" onClick={close}>Close</Button>
     </div>
-  );
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {info && !error && <p role="status" className="text-sm text-success">{info}</p>}
+    <div className="w-full min-w-0 space-y-4">{children}</div>
+  </div>;
 };

@@ -19,7 +19,7 @@ test('league artwork retains its hosted Storage URLs and branding defaults', () 
   const crest = render(React.createElement(ASLCrest));
   assert.ok(crest.includes('width="40" height="40"'));
   assert.ok(crest.includes('alt="ASL"'));
-  assert.ok(render(React.createElement(ASLLogoFull)).includes('NORTH AMERICA PREMIER'));
+  assert.ok(render(React.createElement(ASLLogoFull)).includes('North America Premier'));
   assert.ok(render(React.createElement(CaptainStar)).includes('aria-label="Team Captain"'));
 });
 

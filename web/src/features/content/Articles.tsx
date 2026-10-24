@@ -1,12 +1,12 @@
 import { uploadImage } from '../../api/media';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
-import { BookOpen, ChevronRight, Plus } from 'lucide-react';
+import { ArrowLeft, BookOpen, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { content as contentApi } from './api';
 import type { Account } from '../accounts/models';
-import type { Article } from './models';
+import type { Article, ArticleSummary } from './models';
 import { ModalShell } from '../../components/Dialog';
-import { C } from '../../theme/theme';
 import { compressImage, fetchImageFile } from '../../utils/input';
 import { readTime, renderArticleBody, slugify } from '../../utils/content';
 import { isAdmin } from '../../utils/league';
@@ -14,11 +14,18 @@ import { useResource } from '../../hooks/use-resource';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { LazyText } from './LazyText';
-import type { ArticleSummary } from './models';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { Label } from '../../components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { AspectRatio } from '../../components/ui/aspect-ratio';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog';
 
-// Article compose/edit modal — admin only
 const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article | null; onClose: () => void; onSaved: () => void }) => {
-  const isNew = !article;
   const [title, setTitle] = useState(article?.title || '');
   const [slug, setSlug] = useState(article?.slug || '');
   const [coverImageUrl, setCoverImageUrl] = useState(article?.coverImageUrl || '');
@@ -27,375 +34,88 @@ const ArticleEditorModal = ({ article, onClose, onSaved }: { article?: Article |
   const [excerpt, setExcerpt] = useState(article?.excerpt || '');
   const [slugTouched, setSlugTouched] = useState(!!article);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
-
-  // When the user types a title, auto-fill the slug — but stop auto-filling
-  // once they manually edit the slug (so their custom slug isn't overwritten).
-  useEffect(() => {
-    if (!slugTouched) setSlug(slugify(title));
-  }, [title, slugTouched]);
-
+  const [error, setError] = useState('');
+  useEffect(() => { if (!slugTouched) setSlug(slugify(title)); }, [title, slugTouched]);
   const prepareCover = async (file: File) => {
     if (!file.type.startsWith('image/')) throw new Error('Choose an image file.');
     setCoverImageUrl(await compressImage(file, 1600, 0.85));
   };
   const importCover = async () => {
-    setBusy(true);setErr('');
-    try {
-      await prepareCover(await fetchImageFile(importUrl));
-      setImportUrl('');
-    } catch {
-      setErr('Could not import this image. Download it and choose the image file instead.');
-    } finally { setBusy(false); }
+    if (busy) return;
+    setBusy(true); setError('');
+    try { await prepareCover(await fetchImageFile(importUrl)); setImportUrl(''); }
+    catch { setError('Could not import this image. Download it and choose the image file instead.'); }
+    finally { setBusy(false); }
   };
-
   const handleSave = async () => {
-    setErr('');
-    if (!title.trim()) { setErr('Title is required.'); return; }
-    if (!slug.trim()) { setErr('Slug is required.'); return; }
-    if (!body.trim()) { setErr('Body cannot be empty.'); return; }
+    if (busy) return;
+    setError('');
+    if (!title.trim()) { setError('Title is required.'); return; }
+    if (!slug.trim()) { setError('Slug is required.'); return; }
+    if (!body.trim()) { setError('Body cannot be empty.'); return; }
     setBusy(true);
     try {
       const id = article?.id ?? slug.trim();
       const cover = coverImageUrl && coverImageUrl !== (article?.coverImageUrl ?? '') ? await uploadImage('article-cover', id, coverImageUrl) : coverImageUrl;
-      await contentApi.saveArticle({
-        id,
-        publishedAt: article?.publishedAt,
-        title: title.trim(),
-        slug: slug.trim(),
-        ...(coverImageUrl.trim() !== article?.coverImageUrl && { coverImageUrl: cover }),
-        body,
-        excerpt: excerpt.trim(),
-      });
-      onSaved?.();
-      onClose?.();
-    } catch (error) {
-      setErr('Could not save: ' + (error instanceof Error ? error.message : String(error)));
-      setBusy(false);
-    }
+      await contentApi.saveArticle({ id, publishedAt: article?.publishedAt, title: title.trim(), slug: slug.trim(), ...(coverImageUrl.trim() !== article?.coverImageUrl && { coverImageUrl: cover }), body, excerpt: excerpt.trim() });
+    } catch (error) { setError('Could not save: ' + (error instanceof Error ? error.message : String(error))); setBusy(false); return; }
+    toast.success(article ? 'Article saved.' : 'Article published.'); onClose(); onSaved();
   };
-
-  return (
-    <ModalShell title={isNew ? 'NEW ARTICLE' : 'EDIT ARTICLE'} onClose={onClose} maxWidth="max-w-3xl">
-      <div className="space-y-3">
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>TITLE *</label>
-          <input
-            type="text" value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Season 1 Opening Weekend Recap"
-            className="w-full px-3 py-2 font-display tracking-wider rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream, fontSize: 20 }}
-          />
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>URL SLUG *</label>
-          <input
-            type="text" value={slug}
-            onChange={(e) => { setSlug(e.target.value); setSlugTouched(true); }}
-            placeholder="season-1-opening-weekend-recap"
-            className="w-full px-3 py-2 font-mono text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
-            → /articles/{slug || 'your-slug'}
-          </div>
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>COVER IMAGE</label>
-          <input type="file" accept="image/*" aria-label="Choose cover image" disabled={busy}
-            className="block w-full px-3 py-2 font-mono text-xs rounded disabled:opacity-50"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-            onChange={event => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            setBusy(true);setErr('');
-            void prepareCover(file).catch((error: unknown) => {
-              setErr(error instanceof Error ? error.message : 'Could not process cover image.');
-            }).finally(() => setBusy(false));
-          }} />
-          <input type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} placeholder="https://... image to import" disabled={busy} aria-label="Image URL to import"
-            className="w-full px-3 py-2 font-mono text-xs rounded disabled:opacity-50"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }} />
-          <div className="flex gap-2">
-            <button type="button" onClick={() => { void importCover(); }} disabled={busy || !importUrl}
-              className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-              style={{ background: C.green, color: C.onColor }}>Import cover image</button>
-            {coverImageUrl && <button type="button" onClick={() => setCoverImageUrl('')} disabled={busy}
-              className="px-3 py-2 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-              style={{ background: `${C.navyLight}44`, color: C.cream }}>Remove cover image</button>}
-          </div>
-          {coverImageUrl && (
-            <MediaImage src={mediaUrl(coverImageUrl)} alt="Cover preview" className="mt-2 rounded max-h-32 object-cover"
-              style={{ border: `1px solid ${C.navyLight}66` }} />
-          )}
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-            EXCERPT (OPTIONAL — AUTO FROM BODY IF BLANK)
-          </label>
-          <input
-            type="text" value={excerpt}
-            onChange={(e) => setExcerpt(e.target.value)}
-            placeholder="One-sentence preview shown on the articles list card"
-            className="w-full px-3 py-2 font-body text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
-          />
-        </div>
-
-        <div>
-          <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
-            BODY (MARKDOWN-LITE) *
-          </label>
-          <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            placeholder={`## Heading\n\nParagraph with **bold** and *italic* text.\n\n- Bullet point\n- Another point\n\n### Sub-heading\n\nMore content.`}
-            rows={14}
-            className="w-full px-3 py-2 font-mono text-sm rounded"
-            style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream, fontFamily: 'JetBrains Mono, monospace' }}
-          />
-          <div className="font-mono text-[9px] mt-0.5" style={{ color: `${C.cream}66` }}>
-            Supports: ## heading, ### sub-heading, **bold**, *italic*, - bullets, 1. numbered lists, [link text](url), `code`.
-          </div>
-        </div>
-
-        {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSave}
-            disabled={busy}
-            className="flex-1 py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50"
-            style={{ background: C.green, color: C.onColor }}
-          >{busy ? 'SAVING...' : (isNew ? 'PUBLISH ARTICLE' : 'SAVE CHANGES')}</button>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 font-heading tracking-wider text-sm rounded"
-            style={{ background: `${C.navyLight}44`, color: `${C.cream}cc` }}
-          >CANCEL</button>
-        </div>
-      </div>
-    </ModalShell>
-  );
+  return <ModalShell title={article ? 'Edit article' : 'New article'} onClose={onClose} maxWidth="max-w-3xl"><form className="space-y-5" onSubmit={event => { event.preventDefault(); void handleSave(); }}>
+    <div className="space-y-2"><Label htmlFor="article-title">Title</Label><Input id="article-title" value={title} onChange={event => setTitle(event.target.value)} disabled={busy} placeholder="Season opening weekend recap" /></div>
+    <div className="space-y-2"><Label htmlFor="article-slug">URL slug</Label><Input id="article-slug" value={slug} onChange={event => { setSlug(event.target.value); setSlugTouched(true); }} disabled={busy} aria-describedby="article-slug-help" /><p id="article-slug-help" className="break-all text-sm text-muted-foreground">/articles/{slug || 'your-slug'}</p></div>
+    <Card><CardHeader><CardTitle className="text-lg">Cover image</CardTitle><CardDescription>Choose an image or import one from a URL.</CardDescription></CardHeader><CardContent className="space-y-3">
+      {coverImageUrl && <AspectRatio ratio={16 / 9} className="overflow-hidden rounded-lg bg-muted"><MediaImage src={mediaUrl(coverImageUrl)} alt="Cover preview" className="h-full w-full object-contain" /></AspectRatio>}
+      <div className="space-y-2"><Label htmlFor="article-cover">Choose cover image</Label><Input id="article-cover" type="file" accept="image/*" disabled={busy} onChange={event => { const file = event.target.files?.[0]; if (!file) return; setBusy(true); setError(''); void prepareCover(file).catch((error: unknown) => { setError(error instanceof Error ? error.message : 'Could not process cover image.'); }).finally(() => setBusy(false)); }} /></div>
+      <div className="space-y-2"><Label htmlFor="article-cover-url">Image URL to import</Label><Input id="article-cover-url" type="url" value={importUrl} onChange={event => setImportUrl(event.target.value)} disabled={busy} placeholder="https://…" /></div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => { void importCover(); }} disabled={busy || !importUrl}>Import cover image</Button>{coverImageUrl && <Button variant="outline" onClick={() => setCoverImageUrl('')} disabled={busy}>Remove cover image</Button>}</div>
+    </CardContent></Card>
+    <div className="space-y-2"><Label htmlFor="article-excerpt">Excerpt (optional)</Label><Textarea id="article-excerpt" rows={2} value={excerpt} onChange={event => setExcerpt(event.target.value)} disabled={busy} aria-describedby="article-excerpt-help" /><p id="article-excerpt-help" className="text-sm text-muted-foreground">A short preview for the article list. Leave blank to generate it from the body.</p></div>
+    <Tabs defaultValue="write"><TabsList aria-label="Article editor mode"><TabsTrigger value="write">Write</TabsTrigger><TabsTrigger value="preview">Preview</TabsTrigger></TabsList><TabsContent value="write" className="space-y-2"><Label htmlFor="article-body">Body</Label><Textarea id="article-body" rows={14} value={body} onChange={event => setBody(event.target.value)} disabled={busy} aria-describedby="article-format" /><p id="article-format" className="text-sm text-muted-foreground">Use ## headings, ### subheadings, **bold**, *italic*, - bullets, 1. numbered lists, [text](url), and `code`.</p></TabsContent><TabsContent value="preview" className="min-h-40 break-words rounded-lg border p-4">{body ? renderArticleBody(body) : <p className="text-muted-foreground">Your article preview will appear here.</p>}</TabsContent></Tabs>
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={busy}>{busy ? 'Saving…' : (article ? 'Save changes' : 'Publish article')}</Button><Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button></div>
+  </form></ModalShell>;
 };
 
-// Article detail — full-width hero image, title, metadata, body
 export const ArticleDetailView = ({ slug, account, onBack }: { slug: string; account: Account | null; onBack: () => void }) => {
   const { data: article = null, loading, error, reload: refresh } = useResource(() => contentApi.getArticleBySlug(slug), [slug]);
   const [editing, setEditing] = useState(false);
-  const isAdminUser = isAdmin(account);
-
+  const [deleting, setDeleting] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const handleDelete = async () => {
-    if (!article || !confirm(`Delete this article permanently?`)) return;
-    try { await contentApi.deleteArticle(article.id); onBack?.(); }
-    catch (error) { alert('Could not delete: ' + (error instanceof Error ? error.message : String(error))); }
+    if (!article || busy) return;
+    setBusy(true); setDeleteError('');
+    try { await contentApi.deleteArticle(article.id); }
+    catch (error) { setDeleteError('Could not delete: ' + (error instanceof Error ? error.message : String(error))); setBusy(false); return; }
+    toast.success('Article deleted.'); onBack();
   };
-
-  if (loading) {
-    return <div className="text-center py-10 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading article...</div>;
-  }
-  if (error) {
-    return <div role="alert" className="text-center py-10 font-mono text-sm" style={{ color: C.redLight }}>{error}</div>;
-  }
-  if (!article) {
-    return (
-      <div className="text-center py-10">
-        <div className="font-display text-2xl mb-2" style={{ color: C.brandNavy }}>ARTICLE NOT FOUND</div>
-        <button onClick={onBack} className="font-mono text-xs underline tracking-wider" style={{ color: C.brandNavy }}>
-          ← back to articles
-        </button>
-      </div>
-    );
-  }
-  const pub = new Date(article.publishedAt || 0);
-  const pubStr = pub.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-
-  return (
-    <div>
-      <button onClick={onBack} className="mb-4 font-mono text-xs tracking-widest flex items-center gap-1" style={{ color: C.brandNavy }}>
-        ← ALL ARTICLES
-      </button>
-
-      {article.coverImageUrl && (
-        // Container hugs the actual image (fit-content width) so a portrait
-        // image gets a portrait-shaped frame and a landscape one gets a
-        // landscape frame — no dead space on the sides. Centered in the
-        // column via the outer wrapper.
-        <div className="mb-6 flex justify-center">
-          <div className="rounded-xl overflow-hidden inline-block" style={{
-            border: `1px solid ${C.navyLight}66`,
-            boxShadow: `0 4px 24px ${C.brandNavy}22`,
-            background: C.brandNavyDeep,
-            maxWidth: '100%',
-          }}>
-            <MediaImage
-              src={mediaUrl(article.coverImageUrl)}
-              alt={article.title}
-              style={{
-                display: 'block',
-                maxHeight: 540,
-                maxWidth: '100%',
-                width: 'auto',
-                height: 'auto',
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      <h1 className="font-display tracking-wider mb-3" style={{
-        color: C.brandNavyDeep, fontSize: 42, lineHeight: 1.1, letterSpacing: '0.02em',
-      }}>
-        {article.title}
-      </h1>
-
-      <div className="flex items-center justify-between gap-3 flex-wrap mb-5 pb-4" style={{ borderBottom: `1px solid ${C.navyLight}66` }}>
-        <div className="font-mono text-xs tracking-widest flex items-center gap-2" style={{ color: `${C.brandNavy}cc` }}>
-          <span style={{ color: C.goldLight }}>BY</span>
-          <span style={{ color: C.cream, fontWeight: 600 }}>{(article.author || '').toUpperCase()}</span>
-          <span>•</span>
-          <span>{pubStr}</span>
-          <span>•</span>
-          <span>{readTime(article.body)} MIN READ</span>
-        </div>
-        {isAdminUser && (
-          <div className="flex gap-2">
-            <button onClick={() => setEditing(true)}
-              className="px-3 py-1 font-mono text-[10px] tracking-widest rounded"
-              style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
-            >EDIT</button>
-            <button onClick={handleDelete}
-              className="px-3 py-1 font-mono text-[10px] tracking-widest rounded"
-              style={{ background: `${C.red}33`, color: C.redLight }}
-            >DELETE</button>
-          </div>
-        )}
-      </div>
-
-      <div className="font-body" style={{ color: C.brandNavy }}>
-        {renderArticleBody(article.body)}
-      </div>
-
-      {editing && (
-        <ArticleEditorModal
-          article={article}
-          onClose={() => setEditing(false)}
-          onSaved={refresh}
-        />
-      )}
-    </div>
-  );
+  return <article className="mx-auto max-w-3xl space-y-6">
+    <Button variant="outline" onClick={onBack}><ArrowLeft className="mr-2 size-4" />All articles</Button>
+    {loading && <div role="status" className="space-y-4"><span className="sr-only">Loading article…</span><Skeleton className="h-48" /><Skeleton className="h-8 w-3/4" /></div>}
+    {error && <Alert variant="destructive"><AlertDescription>{error} <Button variant="outline" onClick={() => { void refresh(); }}>Try again</Button></AlertDescription></Alert>}
+    {!loading && !error && !article && <Card><CardHeader><CardTitle>Article not found</CardTitle><CardDescription>The article may have moved or been removed.</CardDescription></CardHeader></Card>}
+    {article && <>
+      {article.coverImageUrl && <MediaImage src={mediaUrl(article.coverImageUrl)} alt={article.title} className="mx-auto max-h-[34rem] w-auto rounded-lg border object-contain" />}
+      <header className="space-y-4 border-b pb-5"><h2 className="break-words text-3xl font-semibold leading-tight">{article.title}</h2><div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground"><span>By {article.author || 'League staff'}</span><time>{new Date(article.publishedAt || 0).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })}</time><span>{readTime(article.body)} min read</span></div>{isAdmin(account) && <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setEditing(true)}>Edit article</Button><Button variant="destructive" onClick={() => { setDeleteError(''); setDeleting(true); }}>Delete article</Button></div>}</header>
+      <div className="break-words">{renderArticleBody(article.body)}</div>
+      {editing && <ArticleEditorModal article={article} onClose={() => setEditing(false)} onSaved={() => { void refresh(); }} />}
+    </>}
+    <AlertDialog open={deleting} onOpenChange={open => { if (!busy) setDeleting(open); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this article?</AlertDialogTitle><AlertDialogDescription>“{article?.title}” and its public article page will be permanently removed.</AlertDialogDescription></AlertDialogHeader>{deleteError && <Alert variant="destructive"><AlertDescription>{deleteError}</AlertDescription></Alert>}<AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void handleDelete(); }}>{busy ? 'Deleting…' : 'Delete article'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  </article>;
 };
 
-// Articles list — card grid
-export const ArticlesListView = ({ account, onOpenArticle }: { account: Account | null; onOpenArticle: (slug:string) => void }) => {
+export const ArticlesListView = ({ account, onOpenArticle }: { account: Account | null; onOpenArticle: (slug: string) => void }) => {
   const page = useRestPage<ArticleSummary>('/api/articles');
-  const { loading, error, restart: refresh } = page;
-  const articles = page.data?.nodes ?? [];
   const [composing, setComposing] = useState(false);
-  const isAdminUser = isAdmin(account);
-
-  const fmtDate = (ms: number | null | undefined) => {
-    return ms ? new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '';
-  };
-
-  return (
-    <div>
-      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-3">
-          <BookOpen size={20} style={{ color: C.brandNavy }} />
-          <h2 className="font-display tracking-widest" style={{ color: C.brandNavyDeep, fontSize: 22, letterSpacing: '0.2em' }}>
-            FEATURE ARTICLES
-          </h2>
-        </div>
-        {isAdminUser && (
-          <button
-            onClick={() => setComposing(true)}
-            className="px-3 py-1.5 font-heading tracking-wider text-xs rounded flex items-center gap-1.5"
-            style={{ background: C.green, color: C.onColor }}
-          ><Plus size={12} /> NEW ARTICLE</button>
-        )}
-      </div>
-
-      {loading && <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading articles...</div>}
-      {!loading && error && <div role="alert" className="text-center py-8 font-mono text-sm" style={{ color: C.redLight }}>{error} <button onClick={page.restart}>Restart page</button></div>}
-      {!loading && !error && articles.length === 0 && (
-        <div className="text-center py-10 font-mono text-sm rounded" style={{
-          color: `${C.brandNavy}77`, background: `${C.navyLight}11`, border: `1px dashed ${C.navyLight}66`,
-        }}>
-          No articles yet. {isAdminUser ? 'Click NEW ARTICLE to publish the first one.' : 'Admins will post longer-form articles here.'}
-        </div>
-      )}
-      {!loading && !error && articles.length > 0 && (
-        // Horizontal article cards — image on the left, headline + preview on
-        // the right. Reads like a magazine/newspaper article list. Each card
-        // is a button, clicking anywhere opens the full article.
-        <div className="space-y-3">
-          {articles.map(a => (
-            <div key={a.id}
-              className="w-full text-left rounded-xl overflow-hidden transition-all hover:-translate-y-0.5"
-              style={{
-                background: C.white,
-                border: `1px solid ${C.navyLight}66`,
-                boxShadow: `0 2px 8px ${C.brandNavy}11, 0 6px 16px ${C.brandNavy}0a`,
-              }}
-            >
-              <div className="flex items-stretch gap-0" style={{ minHeight: 150 }}>
-                {/* Left: cover image (or placeholder) */}
-                {a.coverImageUrl ? (
-                  <MediaImage src={mediaUrl(a.coverImageUrl)} alt={a.title}
-                    className="object-cover shrink-0"
-                    style={{ width: 200, alignSelf: 'stretch' }} />
-                ) : (
-                  <div className="shrink-0 flex items-center justify-center" style={{
-                    width: 200, alignSelf: 'stretch',
-                    background: `linear-gradient(135deg, ${C.brandNavy} 0%, ${C.brandNavyDeep} 100%)`,
-                  }}>
-                    <BookOpen size={44} style={{ color: `${C.goldLight}99` }} />
-                  </div>
-                )}
-                {/* Right: title + excerpt + metadata */}
-                <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
-                  <div>
-                    <h3 className="font-display tracking-wider mb-2" style={{
-                      color: C.brandNavyDeep, fontSize: 24, lineHeight: 1.15, letterSpacing: '0.02em',
-                    }}>
-                      {a.title}
-                    </h3>
-                    <p className="font-body" style={{
-                      color: `${C.cream}cc`, fontSize: 14, lineHeight: 1.55,
-                      display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      <LazyText url={a.excerptUrl} label="Read excerpt" />
-                    </p>
-                  </div>
-                  <div className="font-mono text-[10px] tracking-widest flex items-center gap-2 mt-3 flex-wrap" style={{ color: `${C.brandNavy}99` }}>
-                    <span style={{ color: C.goldLight, fontWeight: 700 }}>{(a.author || '').toUpperCase()}</span>
-                    <span>•</span>
-                    <span>{fmtDate(a.publishedAt)}</span>
-                    <span>•</span>
-
-                    <button onClick={() => onOpenArticle(a.slug)} className="ml-auto flex items-center gap-1" style={{ color: C.brandNavy }}>READ <ChevronRight size={10} /></button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
-      {composing && (
-        <ArticleEditorModal
-          onClose={() => setComposing(false)}
-          onSaved={refresh}
-        />
-      )}
-    </div>
-  );
+  const articles = page.data?.nodes ?? [];
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">Feature articles</h2>{isAdmin(account) && <Button onClick={() => setComposing(true)}><Plus className="mr-2 size-4" />New article</Button>}</div>
+    {page.loading && <div role="status"><span className="sr-only">Loading articles…</span><Skeleton className="h-48" /></div>}
+    {page.error && <Alert variant="destructive"><AlertDescription>{page.error} <Button variant="outline" onClick={page.restart}>Restart articles</Button></AlertDescription></Alert>}
+    {!page.loading && !page.error && articles.length === 0 && <Card><CardContent className="p-6 text-muted-foreground">No articles have been published yet.</CardContent></Card>}
+    <div className="space-y-4">{articles.map(article => <Card key={article.id} className="overflow-hidden"><div className="grid sm:grid-cols-[14rem_minmax(0,1fr)]"><AspectRatio ratio={16 / 9} className="h-full bg-muted">{article.coverImageUrl ? <MediaImage src={mediaUrl(article.coverImageUrl)} alt="" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center"><BookOpen className="size-10 text-muted-foreground" /></div>}</AspectRatio><div className="min-w-0"><CardHeader><CardTitle className="break-words text-xl"><a href={`#/articles/${article.slug}`} onClick={event => { event.preventDefault(); onOpenArticle(article.slug); }} className="inline-flex min-h-11 items-center hover:text-primary focus-visible:rounded-sm">{article.title}</a></CardTitle><CardDescription>{article.author || 'League staff'} · {article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : 'Publication date unavailable'}</CardDescription></CardHeader><CardContent><LazyText url={article.excerptUrl} label="Read excerpt" /><Button variant="link" className="px-0" onClick={() => onOpenArticle(article.slug)}>Read article</Button></CardContent></div></div></Card>)}</div>
+    <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
+    {composing && <ArticleEditorModal onClose={() => setComposing(false)} onSaved={page.restart} />}
+  </div>;
 };

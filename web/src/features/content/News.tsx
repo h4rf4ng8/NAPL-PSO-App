@@ -1,336 +1,108 @@
 import { ArticleDetailView, ArticlesListView } from './Articles';
 import { Calendar, Flag, Plus, Star, Trophy } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { content as contentApi } from './api';
 import type { Account } from '../accounts/models';
-import type { News } from './models';
+import type { News, NewsSummary } from './models';
 import type { TeamSummary as Team } from '../teams/models';
+import { TeamSelect } from '../teams/TeamSelect';
 import { EmptyState, TeamPill } from '../../components/Display';
 import { ModalShell } from '../../components/Dialog';
-import { C } from '../../theme/theme';
 import { isAdmin } from '../../utils/league';
 import { useQuery } from '@apollo/client/react';
 import { HomeNewsDocument } from '../../api/generated/graphql';
 import { readText } from '../../api/page';
 import { LazyText } from './LazyText';
-import type { NewsSummary } from './models';
 import { newsSummarySchema } from './models';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Textarea } from '../../components/ui/textarea';
+import { Label } from '../../components/ui/label';
+import { Switch } from '../../components/ui/switch';
+import { Badge } from '../../components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Skeleton } from '../../components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '../../components/ui/alert-dialog';
 
-// ============ NEWS VIEW ============
-// ============ NEWS HUB (news + articles sub-navigation) ============
-// Wraps the three sub-views that share the NEWS tab:
-//   - News feed (default)
-//   - Articles list
-//   - Article detail (opened by slug)
-// Sub-nav uses URL paths /news, /articles, /articles/<slug> so sub-tabs are
-// shareable and browser back/forward works naturally.
-export const NewsHub = ({ account, allTeams }: { account: Account | null; allTeams: Team[]; }) => {
-  // Detect sub-view from hash (hash routing — see Dashboard for context).
-  const readPath = () => {
-    const h = location.hash || '';
-    if (!h || h === '#') return '/';
-    const stripped = h.startsWith('#/') ? h.slice(1) : h.slice(1);
-    return stripped.replace(/\/+$/, '') || '/';
-  };
-  const detect = () => {
-    const path = readPath();
-    if (path === '/articles') return { sub: 'articles', slug: null };
-    const m = path.match(/^\/articles\/([^/]+)$/);
-    return m ? { sub: 'articles', slug: m[1] } : { sub: 'news', slug: null };
-  };
-  const [state, setState] = useState(detect);
-
-  // Keep sub-state in sync when the hash changes (back/forward, nav clicks, etc.)
-  useEffect(() => {
-    const onHash = () => setState(detect());
-    addEventListener('hashchange', onHash);
-    return () => removeEventListener('hashchange', onHash);
-  }, []);
-
+const detectNewsPath = () => {
+  const path = (location.hash.slice(1) || '/').replace(/\/+$/, '');
+  const match = path.match(/^\/articles\/([^/]+)$/);
+  return { sub: path === '/articles' || match ? 'articles' : 'news', slug: match?.[1] ?? null };
+};
+export const NewsHub = ({ account, allTeams }: { account: Account | null; allTeams: Team[] }) => {
+  const [state, setState] = useState(detectNewsPath);
+  useEffect(() => { const changed = () => setState(detectNewsPath()); addEventListener('hashchange', changed); return () => removeEventListener('hashchange', changed); }, []);
   const goTo = (sub: string, slug: string | null = null) => {
-    const path = sub === 'news' ? '/news'
-      : (slug ? `/articles/${slug}`
-      : '/articles');
-    const newHash = '#' + path;
-    if (location.hash !== newHash) {
-      location.hash = newHash;
-    }
+    const hash = sub === 'news' ? '#/news' : (slug ? `#/articles/${slug}` : '#/articles');
+    if (location.hash !== hash) location.hash = hash;
     setState({ sub, slug });
   };
-
-  return (
-    <div>
-      {/* Sub-tab navigation — only shown when NOT reading a specific article
-          (article detail has its own back button so sub-nav would be noise). */}
-      {!state.slug && (
-        <div className="mb-5 flex gap-1 rounded p-1 w-fit" style={{ background: `${C.navyLight}66` }}>
-          <button
-            onClick={() => goTo('news')}
-            className="px-4 py-1.5 font-heading tracking-widest text-xs rounded"
-            style={state.sub === 'news'
-              ? { background: C.brandNavy, color: C.onColor }
-              : { color: C.brandNavy }
-            }
-          >NEWS</button>
-          <button
-            onClick={() => goTo('articles')}
-            className="px-4 py-1.5 font-heading tracking-widest text-xs rounded"
-            style={state.sub === 'articles'
-              ? { background: C.brandNavy, color: C.onColor }
-              : { color: C.brandNavy }
-            }
-          >ARTICLES</button>
-        </div>
-      )}
-
-      {state.sub === 'news' && (
-        <NewsView account={account} allTeams={allTeams} />
-      )}
-      {state.sub === 'articles' && !state.slug && (
-        <ArticlesListView account={account} onOpenArticle={(slug) => goTo('articles', slug)} />
-      )}
-      {state.sub === 'articles' && state.slug && (
-        <ArticleDetailView
-          slug={state.slug}
-          account={account}
-          onBack={() => goTo('articles')}
-        />
-      )}
-    </div>
-  );
+  return state.slug ? <ArticleDetailView key={state.slug} slug={state.slug} account={account} onBack={() => goTo('articles')} /> : <Tabs value={state.sub} onValueChange={goTo} className="space-y-4"><TabsList aria-label="News sections"><TabsTrigger value="news">News</TabsTrigger><TabsTrigger value="articles">Articles</TabsTrigger></TabsList><TabsContent value="news"><NewsView account={account} allTeams={allTeams} /></TabsContent><TabsContent value="articles"><ArticlesListView account={account} onOpenArticle={slug => goTo('articles', slug)} /></TabsContent></Tabs>;
 };
 
-const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Team[]; }) => {
-  const [subtab, setSubtab] = useState('matchups');
+const newsTabs = [
+  { id: 'matchup', label: 'Matchups', icon: Calendar },
+  { id: 'announcement', label: 'Announcements', icon: Flag },
+  { id: 'result', label: 'Results', icon: Trophy },
+];
+const NewsView = ({ account, allTeams }: { account: Account | null; allTeams: Team[] }) => {
+  const [kind, setKind] = useState('matchup');
   const [after, setAfter] = useState<string | null>(null);
   const [previous, setPrevious] = useState<(string | null)[]>([]);
-  const kind = subtab === 'announcements' ? 'announcement' : (subtab === 'results' ? 'result' : 'matchup');
   const { data, loading, error, refetch: refresh } = useQuery(HomeNewsDocument, { variables: { kind, after } });
   const news = (data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
+  const ordered = news.filter(item => item.type === kind).sort((a, b) => kind === 'announcement' ? (a.pinned === b.pinned ? b.createdAt - a.createdAt : Number(b.pinned) - Number(a.pinned)) : (kind === 'matchup' ? (a.date || 0) - (b.date || 0) : (b.date || 0) - (a.date || 0)));
   const [editError, setEditError] = useState('');
+  const [busy, setBusy] = useState(false);
   const [showCompose, setShowCompose] = useState(false);
   const [editing, setEditing] = useState<News | null>(null);
-
-  const teamById = (id: string | null | undefined) => allTeams.find(t => t.id === id);
-
-  const matchups     = news.filter(n => n.type === 'matchup').sort((a, b) => (a.date || 0) - (b.date || 0));
-  const announcements = news.filter(n => n.type === 'announcement').sort((a, b) => {
-    return a.pinned === b.pinned ? b.createdAt - a.createdAt : Number(b.pinned) - Number(a.pinned);
-  });
-  const results      = news.filter(n => n.type === 'result').sort((a, b) => (b.date || 0) - (a.date || 0));
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this news item?')) return;
-    try {
-      await contentApi.deleteNews(id);
-      setAfter(null); setPrevious([]); await refresh({ after: null });
-    } catch (deleteError) {
-      alert('Could not delete: ' + (deleteError instanceof Error ? deleteError.message : String(deleteError)));
-    }
+  const [deleting, setDeleting] = useState<NewsSummary | null>(null);
+  const [receipt, setReceipt] = useState('');
+  const restart = () => { setAfter(null); setPrevious([]); void refresh({ after: null }).catch(() => {}); };
+  const handleDelete = async () => {
+    if (!deleting || busy) return;
+    setBusy(true); setEditError('');
+    try { await contentApi.deleteNews(deleting.id); }
+    catch (error) { setEditError('Could not delete: ' + (error instanceof Error ? error.message : String(error))); setBusy(false); return; }
+    setDeleting(null); setBusy(false); setReceipt('News item deleted.'); toast.success('News item deleted.'); restart();
   };
   const handleEdit = async (item: NewsSummary) => {
-    setEditError('');
-    try {
-      const [body, notes] = await Promise.all([readText(item.bodyUrl), readText(item.notesUrl)]);
-      setEditing({ ...item, body, notes }); setShowCompose(true);
-    } catch (error) { setEditError(error instanceof Error ? error.message : 'Could not load post.'); }
+    if (busy) return;
+    setBusy(true); setEditError('');
+    try { const [body, notes] = await Promise.all([readText(item.bodyUrl), readText(item.notesUrl)]); setEditing({ ...item, body, notes }); setShowCompose(true); }
+    catch (error) { setEditError(error instanceof Error ? error.message : 'Could not load post.'); }
+    finally { setBusy(false); }
   };
-
-  const isAdminUser = isAdmin(account);
-
-  const subtabs = [
-    { id: 'matchups',      label: `MATCHUPS (${matchups.length})`,           icon: Calendar },
-    { id: 'announcements', label: `ANNOUNCEMENTS (${announcements.length})`, icon: Flag },
-    { id: 'results',       label: `RESULTS (${results.length})`,             icon: Trophy },
-  ];
-
-  return (
-    <div>
-      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
-        <div className="flex items-center gap-2">
-          <Flag size={22} style={{ color: C.goldLight }} />
-          <h3 className="font-display text-3xl tracking-wider" style={{ color: C.cream }}>NEWS</h3>
-        </div>
-        {isAdminUser && (
-          <button
-            onClick={() => { setEditing(null); setShowCompose(true); }}
-            className="px-3 py-1.5 font-heading tracking-wider text-xs flex items-center gap-1.5 rounded transition-all hover:scale-105"
-            style={{
-              background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-              color: C.onColor, boxShadow: `0 2px 8px ${C.green}66`,
-            }}
-          ><Plus size={12} /> NEW POST</button>
-        )}
-      </div>
-
-      {/* SUBTABS */}
-      <div className="flex gap-1 mb-5 p-1 rounded" style={{ background: `${C.navyDeep}88` }}>
-        {subtabs.map(s => {
-          const active = subtab === s.id;
-          return (
-            <button
-              key={s.id}
-              onClick={() => { setSubtab(s.id); setAfter(null); setPrevious([]); }}
-              className="flex-1 px-3 py-2 font-heading tracking-wider text-[10px] sm:text-[11px] rounded transition-all flex items-center justify-center gap-1.5"
-              style={{
-                background: active ? `${C.goldLight}22` : 'transparent',
-                color: active ? C.goldLight : `${C.cream}88`,
-                border: `1px solid ${active ? C.goldLight : 'transparent'}66`,
-              }}
-            ><s.icon size={12} /> {s.label}</button>
-          );
+  const admin = isAdmin(account);
+  return <div className="space-y-4">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-semibold">League news</h2>{admin && <Button disabled={busy} onClick={() => { setEditing(null); setShowCompose(true); }}><Plus className="mr-2 size-4" />New post</Button>}</div>
+    <Tabs value={kind} onValueChange={value => { setKind(value); setAfter(null); setPrevious([]); }}><TabsList aria-label="News type" className="h-auto w-full flex-wrap justify-start">{newsTabs.map(tab => <TabsTrigger key={tab.id} value={tab.id}><tab.icon className="mr-2 size-4" />{tab.label}</TabsTrigger>)}</TabsList>
+      {newsTabs.map(tab => <TabsContent key={tab.id} value={tab.id} className="space-y-4">
+        {error && <Alert variant="destructive"><AlertDescription>{error.message} <Button variant="outline" onClick={restart}>Restart posts</Button></AlertDescription></Alert>}
+        {editError && <Alert variant="destructive"><AlertDescription>{editError}</AlertDescription></Alert>}
+        {receipt && <p role="status" className="text-sm text-success">{receipt}</p>}
+        {loading && <div role="status"><span className="sr-only">Loading news…</span><Skeleton className="h-32" /></div>}
+        {!loading && !error && ordered.length === 0 && <EmptyState icon={<tab.icon className="size-8" />} text={`No ${tab.label.toLowerCase()} posted yet.`} />}
+        {ordered.map(item => {
+          const home = item.homeTeam ?? allTeams.find(team => team.id === item.homeTeamId);
+          const away = item.awayTeam ?? allTeams.find(team => team.id === item.awayTeamId);
+          return <Card key={item.id} className={item.pinned ? 'border-warning/50' : undefined}><CardHeader className="gap-3"><div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{item.pinned && <Badge variant="secondary"><Star className="mr-1 size-3 text-warning" />Pinned</Badge>}{item.type === 'matchup' && <Badge variant="outline">{item.date && item.date >= Date.now() ? 'Upcoming' : (item.date ? 'Past' : 'Date TBD')}</Badge>}{item.autoFromSubmission && <Badge variant="secondary">Imported result</Badge>}<time>{item.type === 'announcement' ? new Date(item.createdAt).toLocaleDateString() : (item.date ? new Date(item.date).toLocaleString() : 'Date to be confirmed')}</time></div>
+            {item.type === 'announcement' ? <CardTitle className="break-words text-xl">{item.title}</CardTitle> : <div className="grid min-w-0 items-center gap-3 sm:grid-cols-[1fr_auto_1fr]"><TeamPill team={home} fallback={item.homeTeamId} /><span className="text-2xl font-semibold tabular-nums">{item.type === 'result' ? `${item.homeScore ?? 0} – ${item.awayScore ?? 0}` : 'vs'}</span><TeamPill team={away} fallback={item.awayTeamId} /></div>}
+          </CardHeader><CardContent className="space-y-3"><LazyText url={item.type === 'announcement' ? item.bodyUrl : item.notesUrl} label={item.type === 'announcement' ? 'Read announcement' : 'Read match notes'} />{item.type === 'announcement' && <p className="text-sm text-muted-foreground">By {item.author || 'League staff'}</p>}{admin && <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => { void handleEdit(item); }}>Edit</Button><Button variant="destructive" disabled={busy} onClick={() => { setEditError(''); setDeleting(item); }}>Delete</Button></div>}</CardContent></Card>;
         })}
-      </div>
-
-      {error && <div role="alert" className="mb-4 font-mono text-xs" style={{ color: C.redLight }}>{error.message} <button onClick={() => { setAfter(null); setPrevious([]); void refresh({ after: null }).catch(() => {}); }}>Restart page</button></div>}
-      {editError && <p role="alert">{editError}</p>}
-      {loading && <div className="mb-4 font-mono text-xs" style={{ color: `${C.cream}66` }}>Loading news...</div>}
-
-      {/* MATCHUPS */}
-      {subtab === 'matchups' && (
-        matchups.length === 0
-          ? <EmptyState icon={<Calendar size={40} />} text="No matchups posted yet." />
-          : <div className="space-y-2">
-              {matchups.map(m => {
-                const home = m.homeTeam ?? teamById(m.homeTeamId);
-                const away = m.awayTeam ?? teamById(m.awayTeamId);
-                const upcoming = (m.date || 0) >= Date.now();
-                return (
-                  <div key={m.id} className="rounded-lg p-4" style={{
-                    background: `${C.navyDeep}aa`,
-                    border: `1px solid ${C.navyLight}44`,
-                    borderLeft: `3px solid ${upcoming ? C.greenLight : C.navyLight}`,
-                  }}>
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex-1">
-                        <div className="font-mono text-[10px] tracking-[0.25em] mb-1" style={{ color: upcoming ? C.greenLight : `${C.cream}66` }}>
-                          {upcoming ? 'UPCOMING' : 'PAST'} • {new Date(m.date || 0).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • {new Date(m.date || 0).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <TeamPill team={home} fallback={m.homeTeamId} />
-                          <span className="font-display text-xl" style={{ color: `${C.cream}77` }}>VS</span>
-                          <TeamPill team={away} fallback={m.awayTeamId} />
-                        </div>
-                        <LazyText url={m.notesUrl} label="Matchup notes" />
-                      </div>
-                      {isAdminUser && (
-                        <div className="flex gap-1">
-                          <button onClick={() => handleEdit(m)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.navyLight}66`, color: C.cream }}>EDIT</button>
-                          <button onClick={() => handleDelete(m.id)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.red}33`, color: C.redLight }}>DEL</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-      )}
-
-      {/* ANNOUNCEMENTS */}
-      {subtab === 'announcements' && (
-        announcements.length === 0
-          ? <EmptyState icon={<Flag size={40} />} text="No announcements yet." />
-          : <div className="space-y-2">
-              {announcements.map(a => (
-                <div key={a.id} className="rounded-lg p-4" style={{
-                  background: a.pinned ? `${C.gold}11` : `${C.navyDeep}aa`,
-                  border: `1px solid ${a.pinned ? C.gold + '66' : C.navyLight + '44'}`,
-                  borderLeft: `3px solid ${a.pinned ? C.goldLight : C.brandNavy}`,
-                }}>
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        {a.pinned && <Star size={12} style={{ color: C.goldLight }} />}
-                        <span className="font-display text-xl tracking-wider" style={{ color: C.cream }}>{a.title}</span>
-                      </div>
-                      <LazyText url={a.bodyUrl} label="Read announcement" />
-                      <div className="font-mono text-[10px] tracking-wider mt-2" style={{ color: `${C.cream}55` }}>
-                        BY {(a.author || 'admin').toUpperCase()} • {new Date(a.createdAt).toLocaleDateString()}
-                      </div>
-                    </div>
-                    {isAdminUser && (
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => handleEdit(a)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.navyLight}66`, color: C.cream }}>EDIT</button>
-                        <button onClick={() => handleDelete(a.id)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.red}33`, color: C.redLight }}>DEL</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-      )}
-
-      {/* RESULTS */}
-      {subtab === 'results' && (
-        results.length === 0
-          ? <EmptyState icon={<Trophy size={40} />} text="No results posted yet." />
-          : <div className="space-y-2">
-              {results.map(r => {
-                const home = r.homeTeam ?? teamById(r.homeTeamId);
-                const away = r.awayTeam ?? teamById(r.awayTeamId);
-                const homeWon = (r.homeScore || 0) > (r.awayScore || 0);
-                const awayWon = (r.awayScore || 0) > (r.homeScore || 0);
-                return (
-                  <div key={r.id} className="rounded-lg p-4" style={{
-                    background: `${C.navyDeep}aa`,
-                    border: `1px solid ${C.navyLight}44`,
-                    borderLeft: `3px solid ${C.goldLight}`,
-                  }}>
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div className="flex-1">
-                        <div className="font-mono text-[10px] tracking-[0.25em] mb-2 flex items-center gap-2" style={{ color: `${C.cream}66` }}>
-                          {new Date(r.date || 0).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
-                          {r.autoFromSubmission && (
-                            <span className="px-1.5 py-0.5 rounded" style={{
-                              background: `${C.greenLight}22`, color: C.greenLight, letterSpacing: '0.15em',
-                            }}>FROM STATS</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <div className="flex items-center gap-2">
-                            <TeamPill team={home} fallback={r.homeTeamId} dimmed={!homeWon && r.homeScore !== r.awayScore} />
-                            <span className="font-display text-3xl" style={{ color: homeWon ? C.goldLight : C.cream }}>{r.homeScore}</span>
-                          </div>
-                          <span className="font-mono text-xs" style={{ color: `${C.cream}66` }}>—</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-display text-3xl" style={{ color: awayWon ? C.goldLight : C.cream }}>{r.awayScore}</span>
-                            <TeamPill team={away} fallback={r.awayTeamId} dimmed={!awayWon && r.homeScore !== r.awayScore} />
-                          </div>
-                        </div>
-                        <LazyText url={r.notesUrl} label="Result notes" />
-                      </div>
-                      {isAdminUser && (
-                        <div className="flex gap-1">
-                          <button onClick={() => handleEdit(r)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.navyLight}66`, color: C.cream }}>EDIT</button>
-                          <button onClick={() => handleDelete(r.id)} className="px-2 py-1 font-mono text-[9px] tracking-wider rounded" style={{ background: `${C.red}33`, color: C.redLight }}>DEL</button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-      )}
-
-      <div className="flex gap-3 my-3">
-        <button disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous posts</button>
-        <button disabled={loading || !data?.homeNews.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.homeNews.pageInfo.endCursor ?? null); }}>Next posts</button>
-      </div>
-      {showCompose && (
-        <NewsComposeModal
-          existing={editing}
-          defaultType={subtab === 'announcements' ? 'announcement' : (subtab === 'results' ? 'result' : 'matchup')}
-          allTeams={allTeams}
-          onClose={() => { setShowCompose(false); setEditing(null); }}
-          onSave={() => { setShowCompose(false); setEditing(null); refresh(); }}
-        />
-      )}
-    </div>
-  );
+        <div className="flex flex-wrap items-center gap-3"><Button variant="outline" disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous posts</Button><Button variant="outline" disabled={loading || !data?.homeNews.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.homeNews.pageInfo.endCursor ?? null); }}>Next posts</Button>{data && <span className="text-sm text-muted-foreground">{data.homeNews.totalCount} posts</span>}</div>
+      </TabsContent>)}
+    </Tabs>
+    {showCompose && <NewsComposeModal existing={editing} defaultType={kind} onClose={() => { setShowCompose(false); setEditing(null); }} onSave={() => { setShowCompose(false); setEditing(null); setReceipt('News post saved.'); toast.success('News post saved.'); restart(); }} />}
+    <AlertDialog open={!!deleting} onOpenChange={open => { if (!open && !busy) setDeleting(null); }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete this news item?</AlertDialogTitle><AlertDialogDescription>This permanently removes the post from the league feed.</AlertDialogDescription></AlertDialogHeader>{editError && <Alert variant="destructive"><AlertDescription>{editError}</AlertDescription></Alert>}<AlertDialogFooter><AlertDialogCancel disabled={busy}>Cancel</AlertDialogCancel><AlertDialogAction disabled={busy} onClick={event => { event.preventDefault(); void handleDelete(); }}>{busy ? 'Deleting…' : 'Delete post'}</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+  </div>;
 };
 
-const NewsComposeModal = ({ existing, defaultType, allTeams, onClose, onSave }: { existing?: News | null; defaultType: string; allTeams: Team[]; onClose: () => void; onSave?: () => void }) => {
-  const isEdit = !!existing;
+const NewsComposeModal = ({ existing, defaultType, onClose, onSave }: { existing?: News | null; defaultType: string; onClose: () => void; onSave: () => void }) => {
   const [type, setType] = useState(existing?.type || defaultType);
   const [title, setTitle] = useState(existing?.title || '');
   const [body, setBody] = useState(existing?.body || '');
@@ -339,154 +111,38 @@ const NewsComposeModal = ({ existing, defaultType, allTeams, onClose, onSave }: 
   const [awayTeamId, setAwayTeamId] = useState(existing?.awayTeamId || '');
   const [homeScore, setHomeScore] = useState(existing?.homeScore ?? 0);
   const [awayScore, setAwayScore] = useState(existing?.awayScore ?? 0);
-  const [date, setDate] = useState(() => {
-    const d = existing?.date ? new Date(existing.date) : new Date();
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  });
+  const [date, setDate] = useState(() => { const date = existing?.date ? new Date(existing.date) : new Date(); const pad = (value: number) => String(value).padStart(2, '0'); return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`; });
   const [notes, setNotes] = useState(existing?.notes || '');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-
-  const approvedTeams = allTeams.filter(t => t.status === 'approved');
-
   const save = async () => {
+    if (saving) return;
     setError('');
-    const id = existing?.id || `n_${Math.random().toString(36).slice(2, 10)}`;
-    const base = {
-      id, type,
-    };
+    const base = { id: existing?.id || `n_${Math.random().toString(36).slice(2, 10)}`, type };
     let item;
     if (type === 'announcement') {
-      if (!title.trim()) { setError('Title is required'); return; }
-      if (!body.trim()) { setError('Body is required'); return; }
+      if (!title.trim() || !body.trim()) { setError('Title and body are required.'); return; }
       item = { ...base, title: title.trim(), body: body.trim(), pinned };
-    } else if (type === 'matchup') {
-      if (!homeTeamId || !awayTeamId) { setError('Pick both teams'); return; }
-      if (homeTeamId === awayTeamId) { setError('Teams must be different'); return; }
-      item = { ...base, homeTeamId, awayTeamId, date: new Date(date || 0).getTime(), notes: notes.trim() };
     } else {
-      if (!homeTeamId || !awayTeamId) { setError('Pick both teams'); return; }
-      if (homeTeamId === awayTeamId) { setError('Teams must be different'); return; }
-      item = { ...base, homeTeamId, awayTeamId, date: new Date(date || 0).getTime(),
-               homeScore: Number(homeScore) || 0, awayScore: Number(awayScore) || 0,
-               notes: notes.trim() };
+      if (!homeTeamId || !awayTeamId) { setError('Pick both teams.'); return; }
+      if (homeTeamId === awayTeamId) { setError('Teams must be different.'); return; }
+      if (!date || !Number.isFinite(new Date(date).getTime())) { setError('Enter a valid match date.'); return; }
+      item = { ...base, homeTeamId, awayTeamId, date: new Date(date).getTime(), notes: notes.trim(), ...(type === 'result' && { homeScore: Number(homeScore) || 0, awayScore: Number(awayScore) || 0 }) };
     }
     setSaving(true);
-    try {
-      await contentApi.saveNews(item);
-      onSave?.();
-    } catch (saveError) {
-      setError('Could not save: ' + (saveError instanceof Error ? saveError.message : String(saveError)));
-    } finally {
-      setSaving(false);
-    }
+    try { await contentApi.saveNews(item); }
+    catch (error) { setError('Could not save: ' + (error instanceof Error ? error.message : String(error))); setSaving(false); return; }
+    onSave();
   };
-
-  const Lbl = ({ children }: { children: React.ReactNode }) => <label className="font-mono text-[10px] tracking-[0.2em] block mb-1" style={{ color: `${C.cream}88` }}>{children}</label>;
-  const inputStyle = { background: C.navyDeep, border: `1px solid ${C.navyLight}66`, color: C.cream };
-
-  return (
-    <ModalShell onClose={onClose} title={isEdit ? 'EDIT NEWS' : 'NEW NEWS POST'} maxWidth="max-w-lg">
-      {/* Type picker (only when creating new) */}
-      {!isEdit && (
-        <div className="flex gap-1 mb-4 p-1 rounded" style={{ background: `${C.navyDeep}88` }}>
-          {[
-            { id: 'matchup', label: 'MATCHUP' },
-            { id: 'announcement', label: 'ANNOUNCEMENT' },
-            { id: 'result', label: 'RESULT' },
-          ].map(t => (
-            <button key={t.id} onClick={() => setType(t.id)}
-              className="flex-1 py-1.5 font-heading tracking-wider text-[10px] rounded"
-              style={{
-                background: type === t.id ? `${C.goldLight}22` : 'transparent',
-                color: type === t.id ? C.goldLight : `${C.cream}88`,
-                border: `1px solid ${type === t.id ? C.goldLight : 'transparent'}66`,
-              }}>{t.label}</button>
-          ))}
-        </div>
-      )}
-
-      <div className="space-y-3">
-        {type === 'announcement' && (
-          <>
-            <div>
-              <Lbl>TITLE</Lbl>
-              <input value={title} onChange={(e) => setTitle(e.target.value)}
-                className="w-full rounded px-3 py-2" style={inputStyle} placeholder="Season 2 has begun!" />
-            </div>
-            <div>
-              <Lbl>BODY</Lbl>
-              <textarea value={body} onChange={(e) => setBody(e.target.value)}
-                rows={5} className="w-full rounded px-3 py-2 resize-none" style={inputStyle}
-                placeholder="Write your announcement here..." />
-            </div>
-            <label className="flex items-center gap-2 font-mono text-xs cursor-pointer" style={{ color: C.cream }}>
-              <input type="checkbox" checked={pinned} onChange={(e) => setPinned(e.target.checked)} />
-              <span>📌 PIN TO TOP</span>
-            </label>
-          </>
-        )}
-
-        {(type === 'matchup' || type === 'result') && (
-          <>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Lbl>HOME TEAM</Lbl>
-                <select value={homeTeamId} onChange={(e) => setHomeTeamId(e.target.value)}
-                  className="w-full rounded px-3 py-2" style={inputStyle}>
-                  <option value="" style={{ background: C.navyDeep }}>— select —</option>
-                  {approvedTeams.map(t => <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>{t.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <Lbl>AWAY TEAM</Lbl>
-                <select value={awayTeamId} onChange={(e) => setAwayTeamId(e.target.value)}
-                  className="w-full rounded px-3 py-2" style={inputStyle}>
-                  <option value="" style={{ background: C.navyDeep }}>— select —</option>
-                  {approvedTeams.map(t => <option key={t.id} value={t.id} style={{ background: C.navyDeep }}>{t.name}</option>)}
-                </select>
-              </div>
-            </div>
-            <div>
-              <Lbl>{type === 'matchup' ? 'KICKOFF DATE & TIME' : 'MATCH DATE'}</Lbl>
-              <input type="datetime-local" value={date} onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded px-3 py-2" style={inputStyle} />
-            </div>
-            {type === 'result' && (
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Lbl>HOME SCORE</Lbl>
-                  <input type="number" min="0" value={homeScore} onChange={(e) => setHomeScore(Number(e.target.value))}
-                    className="w-full rounded px-3 py-2" style={inputStyle} />
-                </div>
-                <div>
-                  <Lbl>AWAY SCORE</Lbl>
-                  <input type="number" min="0" value={awayScore} onChange={(e) => setAwayScore(Number(e.target.value))}
-                    className="w-full rounded px-3 py-2" style={inputStyle} />
-                </div>
-              </div>
-            )}
-            <div>
-              <Lbl>NOTES (OPTIONAL)</Lbl>
-              <input value={notes} onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded px-3 py-2" style={inputStyle} placeholder="Featured match, late equalizer, etc." />
-            </div>
-          </>
-        )}
-
-        {error && <div className="font-mono text-xs px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{error}</div>}
-
-        <button
-          onClick={save}
-          disabled={saving}
-          className="w-full py-2.5 font-heading tracking-wider text-sm rounded mt-2"
-          style={{
-            background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-            color: C.onColor, boxShadow: `0 2px 8px ${C.green}66`,
-          }}
-        >{saving ? 'SAVING...' : (isEdit ? 'SAVE CHANGES' : 'POST')}</button>
-      </div>
-    </ModalShell>
-  );
+  return <ModalShell title={existing ? 'Edit news' : 'New news post'} onClose={onClose} maxWidth="max-w-xl"><form className="space-y-5" onSubmit={event => { event.preventDefault(); void save(); }}>
+    {!existing && <fieldset disabled={saving} className="space-y-2"><legend className="mb-2 text-sm font-medium">Post type</legend><RadioGroup value={type} onValueChange={setType} className="flex flex-wrap gap-3">{newsTabs.map(tab => <Label key={tab.id} className="flex min-h-11 items-center gap-2 rounded-md border px-3"><RadioGroupItem value={tab.id} />{tab.label}</Label>)}</RadioGroup></fieldset>}
+    {type === 'announcement' ? <><div className="space-y-2"><Label htmlFor="news-title">Title</Label><Input id="news-title" value={title} onChange={event => setTitle(event.target.value)} disabled={saving} /></div><div className="space-y-2"><Label htmlFor="news-body">Body</Label><Textarea id="news-body" rows={6} value={body} onChange={event => setBody(event.target.value)} disabled={saving} /></div><div className="flex min-h-11 items-center gap-3"><Switch id="news-pinned" checked={pinned} onCheckedChange={setPinned} disabled={saving} /><Label htmlFor="news-pinned">Pin to top</Label></div></> : <>
+      <fieldset disabled={saving} className="grid gap-4 sm:grid-cols-2"><TeamSelect value={homeTeamId} onChange={setHomeTeamId} label="Home team" /><TeamSelect value={awayTeamId} onChange={setAwayTeamId} label="Away team" /></fieldset>
+      <div className="space-y-2"><Label htmlFor="news-date">{type === 'matchup' ? 'Kickoff date and time' : 'Match date'}</Label><Input id="news-date" type="datetime-local" value={date} onChange={event => setDate(event.target.value)} disabled={saving} /></div>
+      {type === 'result' && <div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label htmlFor="news-home-score">Home score</Label><Input id="news-home-score" type="number" min={0} value={homeScore} onChange={event => setHomeScore(Number(event.target.value))} disabled={saving} /></div><div className="space-y-2"><Label htmlFor="news-away-score">Away score</Label><Input id="news-away-score" type="number" min={0} value={awayScore} onChange={event => setAwayScore(Number(event.target.value))} disabled={saving} /></div></div>}
+      <div className="space-y-2"><Label htmlFor="news-notes">Notes (optional)</Label><Textarea id="news-notes" value={notes} onChange={event => setNotes(event.target.value)} disabled={saving} /></div>
+    </>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    <div className="flex flex-wrap gap-2"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : (existing ? 'Save changes' : 'Publish post')}</Button><Button variant="outline" disabled={saving} onClick={onClose}>Cancel</Button></div>
+  </form></ModalShell>;
 };

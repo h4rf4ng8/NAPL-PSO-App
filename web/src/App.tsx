@@ -5,6 +5,9 @@ import { auth } from './auth/session';
 import { sessionVersion, supabase } from './auth/client';
 import { resetClient } from './api/client';
 import { Dashboard,PublicLeague } from './features/dashboard';
+import { Alert, AlertDescription } from './components/ui/alert';
+import { Button } from './components/ui/button';
+import { Skeleton } from './components/ui/skeleton';
 
 export default function App() {
   const [session,setSession] = useState<Session|null>();
@@ -57,8 +60,8 @@ export default function App() {
   const handleLogin=async()=>{if(loggingOut.current)return;const result=await auth.signInWithDiscord();if(!result.ok)setError(result.reason);};
   const loading=!ready||session===undefined||loadedFor!==userId;
   return <>
-    {error&&<div role="alert" className="pitch-bg p-4">{error}<button onClick={()=>{setError('');location.reload();}}>Try again</button><button onClick={()=>setError('')}>Dismiss</button></div>}
-    {loading?<div className="min-h-screen pitch-bg flex items-center justify-center">Loading league…</div>
+    {error&&<Alert variant="destructive" className="relative z-30 rounded-none"><AlertDescription className="flex flex-wrap items-center gap-3"><span className="min-w-0 flex-1">{error}</span><Button variant="outline" onClick={()=>{setError('');location.reload();}}>Try again</Button><Button variant="ghost" onClick={()=>setError('')}>Dismiss</Button></AlertDescription></Alert>}
+    {loading?<div className="min-h-screen bg-background flex items-center justify-center p-6"><div role="status" className="w-full max-w-sm space-y-4"><p className="text-lg font-semibold">Loading league…</p><Skeleton className="h-6 w-3/4" /><Skeleton className="h-32 w-full" /></div></div>
       :(account&&account.id===userId?<Dashboard key={account.id} account={account} onLogout={handleLogout} onUpdate={current=>{if(renderVersion===sessionVersion()&&activeUser.current===userId&&current.id===userId)setAccount(current);}}/>
         :<PublicLeague onLogin={()=>{void handleLogin();}}/>)}
   </>;

@@ -13,3 +13,9 @@ test('voting and match navigation round-trips and article links select news', ()
   assert.equal(viewFromHash('#/articles/season-preview'), 'news');
   assert.equal(viewFromHash('#/missing'), 'home');
 });
+
+test('public routing defaults to teams, normalizes stats, and retains protected destinations', () => {
+  for (const hash of ['', '#/', '#/missing']) assert.equal(viewFromHash(hash, 'teams'), 'teams');
+  for (const hash of ['#/stats', '#/leaderboard']) assert.equal(viewFromHash(hash, 'teams'), 'leaderboard');
+  for (const view of ['standings', 'admin', 'me', 'vote', 'matches']) assert.equal(viewFromHash(hashForView(view), 'teams'), view);
+});

@@ -1,20 +1,11 @@
-.pitch-bg {
-  background:
-    radial-gradient(ellipse at top, var(--brandNavy-0c) 0%, transparent 60%),
-    radial-gradient(ellipse at bottom, var(--green-0d) 0%, transparent 60%),
-    linear-gradient(180deg, #ffffff 0%, var(--navyDeep) 100%);
-}
 .pitch-lines {
   background-image:
-    linear-gradient(90deg, transparent 49.7%, var(--brandNavy-08) 49.85%, var(--brandNavy-10) 50.15%, transparent 50.3%),
-    linear-gradient(0deg, transparent 49.7%, var(--brandNavy-08) 49.85%, var(--brandNavy-10) 50.15%, transparent 50.3%);
-}
-.crest-shape {
-  clip-path: polygon(50% 0%, 100% 8%, 100% 75%, 50% 100%, 0% 75%, 0% 8%);
+    linear-gradient(90deg, transparent 49.7%, hsl(var(--primary) / 0.03) 49.85%, hsl(var(--primary) / 0.06) 50.15%, transparent 50.3%),
+    linear-gradient(0deg, transparent 49.7%, hsl(var(--primary) / 0.03) 49.85%, hsl(var(--primary) / 0.06) 50.15%, transparent 50.3%);
 }
 input[type=number]::-webkit-inner-spin-button { opacity: 1; }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: var(--navyDeep); }
-::-webkit-scrollbar-thumb { background: var(--navyLight); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--green); }
+::-webkit-scrollbar-track { background: hsl(var(--background)); }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground)); }
 

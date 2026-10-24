@@ -153,6 +153,7 @@ const Sidebar = React.forwardRef<
     side?: "left" | "right"
     variant?: "sidebar" | "floating" | "inset"
     collapsible?: "offcanvas" | "icon" | "none"
+    onMobileCloseAutoFocus?: React.ComponentProps<typeof SheetContent>["onCloseAutoFocus"]
   }
 >(
   (
@@ -160,6 +161,7 @@ const Sidebar = React.forwardRef<
       side = "left",
       variant = "sidebar",
       collapsible = "offcanvas",
+      onMobileCloseAutoFocus,
       className,
       children,
       ...props
@@ -187,6 +189,7 @@ const Sidebar = React.forwardRef<
       return (
         <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
           <SheetContent
+            onCloseAutoFocus={onMobileCloseAutoFocus}
             data-sidebar="sidebar"
             data-mobile="true"
             className="w-[--sidebar-width] max-w-[calc(100vw-2rem)] bg-sidebar p-0 text-sidebar-foreground"

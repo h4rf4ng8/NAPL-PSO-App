@@ -1,70 +1,16 @@
-
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
+@layer base {
+  * { @apply border-border; }
+  html, body, #root { min-height: 100%; margin: 0; }
+  html { color-scheme: light; }
+  html[data-theme="dark"] { color-scheme: dark; }
+  body { @apply bg-background font-sans text-base text-foreground antialiased; }
+  button, input, select, textarea { font: inherit; }
+  button, a, input, select, textarea, [tabindex] { -webkit-tap-highlight-color: transparent; }
+  :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
+  select { min-height: 44px; max-width: 100%; border-radius: var(--radius); }
+  img { max-width: 100%; }
 }
 
-body {
-  font-family: 'Barlow Condensed', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  background: #f4f6fa;
-  transition: background 0.3s ease;
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }
-
-/* ============ DARK MODE ============
-   Hooked up via data-theme="dark" on <html> (set by applyTheme in App.jsx).
-   These rules override anything the C palette swap can't reach — including
-   CSS-in-JS template strings baked at module load (fontCSS block) and
-   hardcoded colors in the retro-2006 header/nav/ticker chrome.
-
-   The !important flags are necessary because the inline <style>{fontCSS}</style>
-   block in App.jsx has frozen the light-theme values at module-load time and
-   those rules otherwise win against ours. */
-
-html[data-theme="dark"] body {
-  background: #0f1522 !important;
-}
-
-/* Main app page background — was a white→light-navy gradient. Flip to a
-   true dark navy field so the whole page is dark, not just a strip. */
-html[data-theme="dark"] .pitch-bg {
-  background:
-    radial-gradient(ellipse at top, rgba(92,144,212,0.08) 0%, transparent 60%),
-    radial-gradient(ellipse at bottom, rgba(63,160,95,0.08) 0%, transparent 60%),
-    linear-gradient(180deg, #0f1522 0%, #0a0f1a 100%) !important;
-}
-
-/* Pitch lines overlay — brighten slightly so they're still faintly visible */
-html[data-theme="dark"] .pitch-lines {
-  background-image:
-    linear-gradient(90deg, transparent 49.7%, rgba(255,255,255,0.03) 49.85%, rgba(255,255,255,0.05) 50.15%, transparent 50.3%),
-    linear-gradient(0deg,  transparent 49.7%, rgba(255,255,255,0.03) 49.85%, rgba(255,255,255,0.05) 50.15%, transparent 50.3%) !important;
-}
-
-/* Scrollbars — the inline fontCSS sets light-theme colors; override here */
-html[data-theme="dark"] ::-webkit-scrollbar-track {
-  background: #0f1522 !important;
-}
-html[data-theme="dark"] ::-webkit-scrollbar-thumb {
-  background: #2a3447 !important;
-}
-html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
-  background: #3fa05f !important;
-}
-
-/* Form controls — browser-native dropdowns + inputs need the dark hint */
-html[data-theme="dark"] select,
-html[data-theme="dark"] select option {
-  background: #1a2235;
-  color: #e4e9f0;
-}
-html[data-theme="dark"] input,
-html[data-theme="dark"] textarea {
-  color-scheme: dark;
-}
-
-/* The 2006-style glossy header + navy nav are brand elements that look right
-   in both themes — we leave them as-is. Same for team-colored borders and
-   the pitch's green on the login screen (handled above). */
-

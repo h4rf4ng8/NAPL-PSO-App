@@ -1,5 +1,6 @@
 import { mediaUrl } from '../MediaImage';
 import React from 'react';
+import { Star } from 'lucide-react';
 import type { Account, TeamSummary as Team } from '../../api/models';
 import { cardTier, getCardStatsForSeason } from '../../utils/rankings';
 import { cardDimensions, cardPalette, cardPath, MetallicDefs, MetallicSurface, CardOutline } from './artwork';
@@ -95,23 +96,14 @@ export const CardFront = ({ account, team, hideTeam, size }: { account: Account;
             <line x1="0" y1="339" x2="320" y2="339" stroke={palette.awardText} strokeWidth="0.6" opacity="0.55" />
           </g>
           <text x="160" y="328" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.awardText} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 14)}</text>
-          {isCaptain && (
-            <text x="46" y="328" fontSize="20" textAnchor="middle" fill="#000"
-              stroke="#fff" strokeWidth="1" style={{ paintOrder: 'stroke' }}
-              aria-label="Captain">★</text>
-          )}
         </g>
       ) : (
         <g>
           <text x="160" y="326" fontFamily="Anton, sans-serif" fontSize="22" fill={palette.text} textAnchor="middle" letterSpacing="2.5">{(account.username || '').toUpperCase().slice(0, 14)}</text>
           <line x1="55" y1="338" x2="265" y2="338" stroke={palette.shadow} strokeWidth="0.8" strokeOpacity="0.6" />
-          {isCaptain && (
-            <text x="46" y="326" fontSize="20" textAnchor="middle" fill="#000"
-              stroke="#fff" strokeWidth="1" style={{ paintOrder: 'stroke' }}
-              aria-label="Captain">★</text>
-          )}
         </g>
       )}
+      {isCaptain && <Star x={36} y={hasAwards ? 310 : 308} size={20} fill="#000" stroke="#fff" strokeWidth={1} aria-label="Captain" />}
       <g fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fill={palette.text}>
         {displayCells.map((cell, i) => {
           const row = Math.floor(i / 2);

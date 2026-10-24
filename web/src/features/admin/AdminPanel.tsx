@@ -44,14 +44,21 @@ export const AdminPanel = ({ account }: { account: Account }) => {
   };
   const teams = teamPage.data?.nodes ?? [];
 
+  // Include the underlying error so admins can tell apart auth problems,
+  // CORS failures, missing routes, and real 500s instead of guessing from
+  // a generic string.
+  const seasonError = (loadError: unknown): string =>
+    `Could not load current season: ${loadError instanceof Error ? loadError.message : String(loadError)}`;
   const refresh = async () => {
     teamPage.restart();
     try { setCurrentSeason(await adminApi.getSeason()); }
-    catch { setLoadError('Could not load current season.'); }
+    catch (loadError) { setLoadError(seasonError(loadError)); }
   };
   useEffect(() => {
     let active=true;
-    void adminApi.getSeason().then(season=>{if(active)setCurrentSeason(season);}).catch(()=>{if(active)setLoadError('Could not load current season.');});
+    void adminApi.getSeason()
+      .then(season=>{if(active)setCurrentSeason(season);})
+      .catch((loadError: unknown)=>{if(active)setLoadError(seasonError(loadError));});
     return ()=>{active=false;};
   }, []);
 

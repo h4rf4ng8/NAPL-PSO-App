@@ -46,7 +46,7 @@ Writes disable duplicates and retain failed drafts. Completed writes keep their 
 ### Deletion evidence
 
 - `Header.tsx` had one production caller, `Dashboard`; navigation/theme/season/account/Discord moved into the shell. `chrome.css` served that replaced markup.
-- All custom dialog-stack consumers migrated before removing listeners/focus trapping. Browser tests cover those contracts. The legacy `Dialog` adapter had no remaining callers and was removed; `ModalShell` remains the small controlled Radix boundary.
+- All custom dialog-stack consumers migrated before removing listeners/focus trapping. Browser tests cover those contracts. The legacy `Dialog` adapter had no remaining production callers; the browser harness migrated to `ModalShell` before the adapter was removed; `ModalShell` remains the small controlled Radix boundary.
 - `C`, `LIGHT_PALETTE`, `DARK_PALETTE` and palette mutation had no production callers after migration. Theme storage/document application remain. Artwork retains explicit SVG attributes.
 - Legacy `tokens.css`, `dialogs.css`, `motion.css` and imports were removed after selector checks. Formation hover popups, team-card styles and unused pitch selectors had no consumers. Live slot stacking, card flipping and reduced-motion rules remain.
 - `ArticleCard` had only the old fixture as a caller after News/Articles migrated; the helper and obsolete fixture case were removed together.

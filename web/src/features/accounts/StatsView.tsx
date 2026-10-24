@@ -118,7 +118,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           <TableHead className="sticky left-0 z-10 min-w-40 bg-card">Player</TableHead>
           <TableHead>Team</TableHead><TableHead>Position</TableHead>
           {cols.map(column => <TableHead key={column.field} className="p-0 text-center" aria-sort={sortBy === column.field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}>
-            <Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`Sort by ${column.help}`} title={column.help} onClick={() => toggleSort(column.field)}>{column.label}<span aria-hidden="true">{sortBy === column.field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span></Button>
+            <Button variant="ghost" className="w-full min-w-16 rounded-none px-2" aria-label={`${column.label}: sort by ${column.help}`} title={column.help} onClick={() => toggleSort(column.field)}>{column.label}<span aria-hidden="true">{sortBy === column.field ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}</span></Button>
           </TableHead>)}
         </TableRow></TableHeader>
         <TableBody>

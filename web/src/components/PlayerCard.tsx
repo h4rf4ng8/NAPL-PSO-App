@@ -43,8 +43,8 @@ export const PlayerCard = React.forwardRef<HTMLDivElement, {account:Account;size
       title="Click, Enter, or Space to flip"
     >
       <div className="flip-card-inner">
-        <div className="flip-card-face" aria-hidden={flipped}><CardFront account={account} team={team} hideTeam={hideTeam} size={size} /></div>
-        <div className="flip-card-face flip-card-back" aria-hidden={!flipped}><CardBack account={account} team={team} size={size} /></div>
+        <div className="flip-card-face" aria-hidden={true}><CardFront account={account} team={team} hideTeam={hideTeam} size={size} /></div>
+        <div className="flip-card-face flip-card-back" aria-hidden={true}><CardBack account={account} team={team} size={size} /></div>
       </div>
     </div>
   );

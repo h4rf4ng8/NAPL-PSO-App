@@ -76,11 +76,13 @@ test('large cards flip by click, Enter and Space while smaller cards stay displa
   const shell = () => card!.root.findByProps({role:'button'});
   assert.equal(shell().props['aria-pressed'], false);
   const faces = () => card!.root.findAll(node => typeof node.props['aria-hidden'] === 'boolean');
-  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [false, true]);
+  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [true, true]);
+  assert.match(shell().props['aria-label'], /show back$/);
   const firstSvg = card!.root.findAllByType('svg')[0];
   act(() => shell().props.onClick());
   assert.equal(shell().props['aria-pressed'], true);
-  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [true, false]);
+  assert.deepEqual(faces().map(node => node.props['aria-hidden']), [true, true]);
+  assert.match(shell().props['aria-label'], /show front$/);
   assert.equal(card!.root.findAllByType('svg')[0], firstSvg);
   assert.ok(firstSvg!.findAllByType('text').some(node => node.children.includes('G')));
   for (const key of ['Enter', ' ']) {

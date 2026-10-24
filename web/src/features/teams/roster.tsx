@@ -262,8 +262,9 @@ const FormationSlot = ({ player, positionLabel, actionLabel, team, onCardClick }
   const ranking = player.ranking;
   const tier = cardTier(ranking.ranked ? ranking.tier : 'BRONZE');
   const ringColor = tier.from || '#d8b858';
-  return <Button type="button" variant="ghost" onClick={() => onCardClick(player)} aria-label={actionLabel ?? `View ${player.username}, ${positionLabel}`} className="relative flex h-auto w-16 flex-col gap-1 whitespace-normal rounded-lg p-1 hover:bg-black/20">
-    <span className="relative"><span className="flex size-10 items-center justify-center overflow-hidden rounded-full border-2 bg-slate-900 sm:size-14" style={{ borderColor: ringColor }}>{player.imageUrl ? <MediaImage src={mediaUrl(player.imageUrl)} alt="" className="size-full object-cover" /> : <span className="text-lg font-semibold" style={{ color: ringColor }}>{player.username.slice(0, 1).toUpperCase()}</span>}</span><span className="absolute -right-1 -top-1 rounded-full px-1 text-xs font-semibold" style={{ background: ringColor, color: tier.accent || '#102343' }}>{ranking.ranked ? ranking.score : 'NR'}</span></span>
-    <span data-player-name className="flex w-full items-center justify-center gap-0.5 text-xs text-foreground">{isTeamCaptain(player, team) && <CaptainStar size={10} />}<span className="truncate">{player.username}</span></span>
-  </Button>;
+  return <div className="relative flex w-16 flex-col items-center gap-1 rounded-lg p-1">
+    <span className="relative" aria-hidden="true"><span className="flex size-10 items-center justify-center overflow-hidden rounded-full border-2 bg-slate-900 sm:size-14" style={{ borderColor: ringColor }}>{player.imageUrl ? <MediaImage src={mediaUrl(player.imageUrl)} alt="" className="size-full object-cover" /> : <span className="text-lg font-semibold" style={{ color: ringColor }}>{player.username.slice(0, 1).toUpperCase()}</span>}</span><span className="absolute -right-1 -top-1 rounded-full border bg-background px-1 text-xs font-semibold text-foreground">{ranking.ranked ? ranking.score : 'NR'}</span></span>
+    <span aria-hidden="true" data-player-name className="flex w-full items-center justify-center gap-0.5 text-xs text-foreground">{isTeamCaptain(player, team) && <CaptainStar size={10} />}<span className="truncate">{player.username}</span></span>
+    <Button type="button" variant="ghost" onClick={() => onCardClick(player)} aria-label={`${actionLabel ?? `View ${player.username}, ${positionLabel}`}, ${ranking.ranked ? `overall rating ${ranking.score}` : 'unranked'}`} className="absolute inset-0 h-full w-full rounded-lg p-0 hover:bg-black/20" />
+  </div>;
 };

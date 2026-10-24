@@ -1,6 +1,6 @@
 import { mergeSeasonPages } from '../dashboard/season-pages';
 import { BarChart3 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@apollo/client/react';
 import { LeaderboardDocument, SeasonsDocument } from '../../api/generated/graphql';
 import { accountStatsSchema } from '@napl/contracts/accounts';
@@ -23,15 +23,34 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   const [seasonFilter, setSeasonFilter] = useState('all');
 
   const [seasonPageError, setSeasonPageError] = useState('');
-  const [after, setAfter] = useState<string | null>(null);
-  const [previous, setPrevious] = useState<{ cursor: string | null; offset: number }[]>([]);
-  const [offset, setOffset] = useState(0);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const seasons = seasonData?.seasons.nodes ?? [];
-  const { data, loading, error, refetch } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
+  // Request the server's max page size (50) and then auto-fetch any
+  // remaining pages. We used to show manual Previous/Next buttons, but the
+  // byte-size cap in page() would sometimes shrink a page down to 6 rows,
+  // which made the stats tab feel broken. Auto-pagination is a cleaner
+  // experience even if it costs a few extra round trips when the league
+  // grows past 50 players.
+  const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
-    sortBy, sortDir, after,
+    sortBy, sortDir, first: 50,
   } });
+  // Keep calling fetchMore while there's another page. Apollo's updateQuery
+  // concatenates nodes into the cached first-page result, so `data.leaderboard.nodes`
+  // grows until it holds every row. Changing any filter (season, position,
+  // sortBy, sortDir) refetches the first page and this effect restarts.
+  useEffect(() => {
+    if (!data?.leaderboard.pageInfo.hasNextPage) return;
+    void fetchMore({
+      variables: { after: data.leaderboard.pageInfo.endCursor },
+      updateQuery: (previous, { fetchMoreResult }) => ({
+        leaderboard: {
+          ...fetchMoreResult.leaderboard,
+          nodes: [...previous.leaderboard.nodes, ...fetchMoreResult.leaderboard.nodes],
+        },
+      }),
+    }).catch((loadError: unknown) => { console.error('leaderboard fetchMore failed:', loadError); });
+  }, [data?.leaderboard.pageInfo.endCursor, data?.leaderboard.pageInfo.hasNextPage, fetchMore]);
   const sorted = useMemo(() => (data?.leaderboard.nodes ?? []).map(player => {
     const s = accountStatsSchema.parse(player.stats);
     return { player, team: player.team ?? allTeams.find(team => team.id === player.teamId),
@@ -39,10 +58,8 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
       pts: s.goals + s.assists, motm: s.motm, tkl: s.tackles, pass: s.passes,
       cs: s.cleanSheets, dfl: s.deflects, catches: s.catches, w: s.wins, d: s.draws, l: s.losses };
   }), [data, allTeams]);
-  const resetPage = () => { setAfter(null); setPrevious([]); setOffset(0); };
 
   const toggleSort = (col: string) => {
-    resetPage();
     if (sortBy === col) {
       setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     } else {
@@ -100,7 +117,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           {/* Season chips — ALL TIME + each season that has data */}
           <div className="flex gap-1 rounded p-0.5 flex-wrap" style={{ background: `${C.navyLight}33` }}>
             <button
-              onClick={() => { setSeasonFilter('all'); resetPage(); }}
+              onClick={() => { setSeasonFilter('all'); }}
               className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
               style={seasonFilter === 'all'
                 ? { background: C.goldLight, color: C.brandNavyDeep }
@@ -110,7 +127,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
             {seasons.map(s => (
               <button
                 key={s}
-                onClick={() => { setSeasonFilter(s); resetPage(); }}
+                onClick={() => { setSeasonFilter(s); }}
                 className="px-3 py-1 font-mono text-xs tracking-widest rounded transition-colors"
                 style={seasonFilter === s
                   ? { background: C.goldLight, color: C.brandNavyDeep }
@@ -124,7 +141,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
             {['ALL', ...POSITIONS].map(p => (
               <button
                 key={p}
-                onClick={() => { setPosFilter(p); resetPage(); }}
+                onClick={() => { setPosFilter(p); }}
                 className="px-2.5 py-1 font-mono text-xs tracking-widest rounded transition-colors"
                 style={posFilter === p
                   ? { background: C.gold, color: C.brandNavyDeep }
@@ -141,7 +158,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
       </div>
 
       {loading && <p role="status">Loading players…</p>}
-      {error && <p role="alert">{error.message} <button onClick={() => { resetPage(); void refetch({ after: null }).catch(() => {}); }}>Retry</button></p>}
+      {error && <p role="alert">{error.message} <button onClick={() => { void refetch().catch(() => {}); }}>Retry</button></p>}
 {seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
       {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
       {/* Scrollable table — scrolls horizontally on narrow screens so no column
@@ -180,7 +197,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
                   borderBottom: `1px solid ${C.navyLight}22`,
                 }}
               >
-                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{offset + i + 1}</td>
+                <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{i + 1}</td>
                 <td className="px-3 py-2 font-heading tracking-wider text-sm" style={{ color: C.cream }}>
                   <div className="flex items-center gap-1.5">
                     {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <CaptainStar size={11} />}
@@ -213,10 +230,11 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           </tbody>
         </table>
       </div>
-      <div className="flex gap-3 mt-3">
-        <button disabled={loading || previous.length === 0} onClick={() => { const prior = previous.at(-1); setAfter(prior?.cursor ?? null); setOffset(prior?.offset ?? 0); setPrevious(previous.slice(0, -1)); }}>Previous players</button>
-        <button disabled={loading || !data?.leaderboard.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, { cursor: after, offset }]); setOffset(offset + sorted.length); setAfter(data?.leaderboard.pageInfo.endCursor ?? null); }}>Next players</button>
-      </div>
+      {data?.leaderboard.pageInfo.hasNextPage && (
+        <p className="font-mono text-[10px] mt-3 tracking-wider" style={{ color: `${C.cream}66` }}>
+          Loading more players…
+        </p>
+      )}
     </div>
   );
 };

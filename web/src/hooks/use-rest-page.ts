@@ -6,6 +6,7 @@ import { useResource } from './use-resource';
 export function useRestPage<T>(path: string | null) {
   const [cursor, setCursor] = useState<{ path: string | null; after: string | null; previous: (string | null)[] }>({ path, after: null, previous: [] });
   const current = cursor.path === path ? cursor : { path, after: null, previous: [] };
+  if (cursor.path !== path) setCursor(current);
   const resource = useResource(() => path ? request<Page<T>>(pagePath(path, current.after)) : Promise.resolve(undefined), [path, current.after]);
   const restart = () => { setCursor({ path, after: null, previous: [] }); if (!current.after) void resource.reload(); };
   return { ...resource, loading: !!path && resource.loading, restart, canPrevious: current.previous.length > 0,

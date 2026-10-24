@@ -21,14 +21,16 @@
     "lint": "eslint . --max-warnings 0",
     "check:dependencies": "depcruise --config .dependency-cruiser.cjs --ignore-known .dependency-cruiser-known-violations.json web/src pkgs/contracts/src",
     "lint:fix": "eslint . --fix",
-    "check": "pnpm run prisma:generate && pnpm run gql:check && pnpm run typecheck && pnpm run lint && pnpm test && pnpm run build",
+    "check": "pnpm run prisma:generate && pnpm run gql:check && pnpm run typecheck && pnpm run typecheck:browser && pnpm run check:dependencies && pnpm run lint && pnpm test && pnpm run build && pnpm run test:browser",
     "gql:generate": "pnpm --filter @napl/web run gql:generate",
     "gql:check": "pnpm --filter @napl/web run gql:check",
     "prisma:generate": "pnpm --filter @napl/api run prisma:generate",
     "dev:api": "pnpm --filter @napl/api run dev",
     "env:sam": "pnpm --filter @napl/api run env:sam",
     "test:sam": "NAPL_SAM_TEST=1 bash api/test/integration/run.sh",
-    "test:load": "node --import tsx api/test/load/run-staging.mjs"
+    "test:load": "node --import tsx api/test/load/run-staging.mjs",
+    "typecheck:browser": "pnpm --filter @napl/web exec tsc -p tsconfig.browser.json",
+    "test:browser": "pnpm --filter @napl/web run test:browser"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

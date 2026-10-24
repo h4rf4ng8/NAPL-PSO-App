@@ -1,4 +1,4 @@
-import { useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { ASLCrest } from './Branding';
 import { Dialog as DialogRoot, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { cn } from '../lib/utils';
@@ -35,9 +35,4 @@ export function ModalShell({ title, children, onClose, maxWidth = 'max-w-2xl', c
       {children}
     </DialogContent>
   </DialogRoot>;
-}
-
-// Legacy callers supply backdrop styles; Radix now owns the overlay and focus lifecycle.
-export function Dialog({ onClose, label, children, className: _className, style: _style, ...props }: HTMLAttributes<HTMLDivElement> & { onClose?: () => void; label: string }) {
-  return <ModalShell title={label} onClose={onClose}><div {...props} className="[&>div]:mx-auto">{children}</div></ModalShell>;
 }

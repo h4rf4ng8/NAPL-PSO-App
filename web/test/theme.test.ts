@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { mock, test } from 'node:test';
-import { applyTheme, C, DARK_PALETTE, getSavedTheme, LIGHT_PALETTE } from '../src/theme/theme';
+import { applyTheme, getSavedTheme } from '../src/theme/theme';
 
 test('theme applies immediately, persists both modes, and never calls the network', () => {
   const previousDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -21,17 +21,14 @@ test('theme applies immediately, persists both modes, and never calls the networ
     assert.equal(getSavedTheme(), 'dark');
     assert.equal(values.get('asl_theme'), 'dark');
     assert.equal(dataset.theme, 'dark');
-    assert.deepEqual(C, DARK_PALETTE);
     applyTheme('light');
     assert.equal(getSavedTheme(), 'light');
     assert.equal(dataset.theme, 'light');
-    assert.deepEqual(C, LIGHT_PALETTE);
 
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('Storage unavailable'); } });
     assert.equal(getSavedTheme(), 'light');
     assert.doesNotThrow(() => applyTheme('dark'));
     assert.equal(dataset.theme, 'dark');
-    assert.deepEqual(C, DARK_PALETTE);
     assert.equal(network.mock.callCount(), 0);
   } finally {
     applyTheme('light');

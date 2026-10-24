@@ -1,25 +1,24 @@
-import { ChevronRight, Star } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { News, TeamSummary as Team } from '../api/models';
 import { cn } from '../lib/utils';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { Card } from './ui/card';
 
 export const Metric = ({ icon, label, value, accent }: { icon?: ReactNode; label: string; value: ReactNode; accent?: string }) => (
-  <Card className="min-w-0 border-t-2 p-4 shadow-sm" style={{ borderTopColor: accent }}>
-    <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+  <div className="min-w-0 border-l-2 border-primary/30 px-4 py-2" style={{ borderLeftColor: accent }}>
+    <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-muted-foreground">
       {icon && <span className="inline-flex size-4 items-center justify-center" aria-hidden="true">{icon}</span>}{label}
     </div>
-    <div className="text-2xl font-semibold tabular-nums">{value}</div>
-  </Card>
+    <div className="text-3xl font-semibold tabular-nums">{value}</div>
+  </div>
 );
 
 export const RecordBox = ({ value, label, color }: { value: ReactNode; label: string; color: string }) => (
-  <Card className="p-3 text-center shadow-sm">
+  <div className="p-3 text-center">
     <div className="text-3xl font-semibold tabular-nums" style={{ color }}>{value}</div>
-    <div className="mt-1 text-xs font-medium text-muted-foreground">{label}</div>
-  </Card>
+    <div className="mt-1 text-sm font-semibold text-muted-foreground">{label}</div>
+  </div>
 );
 
 export const ResultBadge = ({ result, small }: { result: string; small?: boolean }) => (
@@ -30,9 +29,9 @@ export const ResultBadge = ({ result, small }: { result: string; small?: boolean
 );
 
 export const EmptyState = ({ icon, text }: { icon?: ReactNode; text: string }) => (
-  <Card className="border-dashed px-4 py-12 text-center text-sm text-muted-foreground shadow-none">
+  <div className="px-4 py-12 text-center text-base text-muted-foreground">
     {icon && <div className="mb-3 flex justify-center" aria-hidden="true">{icon}</div>}{text}
-  </Card>
+  </div>
 );
 
 export const QuickStat = ({ label, value, accent }: { label: string; value: ReactNode; accent?: string }) => (
@@ -49,26 +48,17 @@ export const Section = ({ title, children, onMore }: { title: string; children: 
   </section>
 );
 
-export const ArticleCard = ({ title, body, pinned, date, author }: { title: string; body: string; pinned: boolean; date: number | null; author: string }) => (
-  <Card role="article" className={cn('space-y-3 p-5 shadow-sm', pinned && 'border-warning/40')}>
-    <Badge variant="secondary">{pinned && <Star className="mr-1 size-3" />}{pinned ? 'Pinned' : 'Announcement'}</Badge>
-    <h4 className="text-xl font-semibold leading-tight">{title}</h4>
-    <p className="text-sm leading-relaxed text-muted-foreground">{body.length > 180 ? body.slice(0, 180) + '…' : body}</p>
-    <p className="text-xs text-muted-foreground">By {author.length > 0 ? author : 'admin'} · {new Date(date === null ? 0 : date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</p>
-  </Card>
-);
-
 export const ResultRow = ({ r, home, away }: { r: Pick<News, 'date' | 'homeScore' | 'awayScore'>; home: Pick<Team, 'name'> | null | undefined; away: Pick<Team, 'name'> | null | undefined }) => {
   const homeWon = (r.homeScore || 0) > (r.awayScore || 0);
   const awayWon = (r.awayScore || 0) > (r.homeScore || 0);
-  return <Card className="flex flex-col gap-3 p-4 shadow-sm sm:flex-row sm:items-center">
+  return <div className="flex flex-col gap-3 border-b py-4 last:border-0 sm:flex-row sm:items-center">
     <span className="shrink-0 text-xs text-muted-foreground">{new Date(r.date || 0).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
     <div className="grid min-w-0 flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3 text-sm">
       <span className={cn('break-words text-right', homeWon ? 'font-semibold' : 'text-muted-foreground')}>{home?.name || '?'}</span>
       <span className="whitespace-nowrap text-lg font-semibold tabular-nums"><span className={homeWon ? 'text-success' : undefined}>{r.homeScore}</span> <span className="text-muted-foreground">–</span> <span className={awayWon ? 'text-success' : undefined}>{r.awayScore}</span></span>
       <span className={cn('break-words', awayWon ? 'font-semibold' : 'text-muted-foreground')}>{away?.name || '?'}</span>
     </div>
-  </Card>;
+  </div>;
 };
 
 export const TeamPill = ({ team, fallback, dimmed = false }: { team?: { name: string; tag: string; color: string | null } | null | undefined; fallback: string | null; dimmed?: boolean }) => (

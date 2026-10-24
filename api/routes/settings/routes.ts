@@ -45,10 +45,14 @@ async function setChampions(database: Database, next: z.infer<typeof championsIn
 }
 
 export function registerSettings(app: FastifyInstance, { db }: Dependencies): void {
-    app.get('/api/settings/:key', { config: { public: true } }, async (request) => {
+    app.get('/api/settings/:key', { config: { public: true } }, async (request, reply) => {
         const key = settingKey.parse(parameters(request).key);
         const value = await getSetting(db, key);
-        return key === 'current_season' ? value : fieldPage(value, `/api/settings/${key}`, request);
+        // Fastify sends raw strings as text/plain by default, which breaks the
+        // frontend's response.json() parser. Serialize current_season explicitly
+        // so the body is a valid JSON string ("S1") with the correct type header.
+        if (key === 'current_season') return reply.type('application/json').send(JSON.stringify(value));
+        return fieldPage(value, `/api/settings/${key}`, request);
     });
     app.get('/api/settings/:key/fields/:field', { config: { public: true } }, async request => {
         const key = settingKey.parse(parameters(request).key);

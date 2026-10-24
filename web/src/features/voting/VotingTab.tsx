@@ -1,48 +1,63 @@
 import { Trophy } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { VOTE_FIELDS, type VoteKey, type VotePosition } from '@napl/contracts/league';
-import { voting as votingApi } from './api';
-import type { Account } from '../accounts/models';
-import type { VotingPeriod } from './models';
-import { C } from '../../theme/theme';
+import { accountStatsSchema } from '@napl/contracts/accounts';
 import { useQuery } from '@apollo/client/react';
 import { VotingCandidatesDocument } from '../../api/generated/graphql';
-import { accountStatsSchema } from '@napl/contracts/accounts';
 import { useResource } from '../../hooks/use-resource';
+import type { Account } from '../accounts/models';
+import type { VotingPeriod } from './models';
+import { voting as votingApi } from './api';
 import { choicesFromVotes, emptyVoteChoices, hasCompleteVote } from './voting-utils';
+import { Button } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+import { Label } from '../../components/ui/label';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
 
-// ============ DASHBOARD ============
-// ============ VOTING TAB (player-facing) ============
-// Shown only when there's an open voting period. Players pick 1 player per
-// configured vote position from the eligible pool, then submit. Once
-// submitted, the tab shows what they voted for and lets them change votes
-// until the period closes.
-export const VotingTab = ({ account, period }: { account: Account; period: Pick<VotingPeriod, 'id' | 'closesAt' | 'status'> }) => {
+type VotingProps = { account: Account; period: Pick<VotingPeriod, 'id' | 'closesAt' | 'status'> };
+
+// A new period or account starts a new ballot and resets all candidate cursors.
+export const VotingTab = ({ account, period }: VotingProps) =>
+  <VotingBallot key={`${account.id}:${period.id}`} account={account} period={period} />;
+
+function VotingBallot({ account, period }: VotingProps) {
   const [myVotes, setMyVotes] = useState(emptyVoteChoices);
   const [submitted, setSubmitted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
-
-  const { data: priorVotes, error: priorVotesError } = useResource(
-    () => votingApi.myTotwVotes(period.id),
-    [period.id],
-  );
+  const [now, setNow] = useState(Date.now);
+  const prior = useResource(() => votingApi.myTotwVotes(period.id), [period.id, account.id]);
 
   useEffect(() => {
-    const nextVotes = choicesFromVotes(priorVotes || [], account.username);
+    const nextVotes = choicesFromVotes(prior.data || [], account.username);
     setMyVotes(nextVotes);
     setSubmitted(hasCompleteVote(nextVotes));
-  }, [priorVotes, account.username]);
+  }, [prior.data, account.username]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const closed = period.status !== 'open' || now >= period.closesAt;
   const pickFor = (key: VoteKey, username: string) => {
-    setError(''); setInfo('');
+    setError('');
+    setInfo('');
     setSubmitted(false);
-    setMyVotes(prev => ({ ...prev, [key]: username }));
+    setMyVotes(previous => ({ ...previous, [key]: username }));
   };
 
   const handleSubmit = async () => {
-    setError(''); setInfo('');
+    setError('');
+    setInfo('');
+    if (period.status !== 'open' || Date.now() >= period.closesAt) {
+      setNow(Date.now());
+      setError('Voting has closed. Your selections have not been submitted.');
+      return;
+    }
     if (!hasCompleteVote(myVotes)) {
       setError('Pick one player for every position before submitting.');
       return;
@@ -51,99 +66,81 @@ export const VotingTab = ({ account, period }: { account: Account; period: Pick<
     try {
       await votingApi.submitTotwVotes(period.id, myVotes);
       setSubmitted(true);
-      setInfo('✓ Your votes are in. You can change them until voting closes.');
-      setTimeout(() => setInfo(''), 4000);
+      setInfo('Your votes are saved. You can change them until voting closes.');
     } catch (error_) {
       setError('Could not submit: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
     setBusy(false);
   };
 
-  const closesIn = useMemo(() => {
-    const ms = period.closesAt - Date.now();
-    if (ms <= 0) return 'CLOSED';
-    const hours = Math.floor(ms / 3_600_000);
-    const mins = Math.floor((ms % 3_600_000) / 60_000);
-    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
-  }, [period.closesAt]);
-
-  const canSubmit = hasCompleteVote(myVotes);
+  const selectedCount = VOTE_FIELDS.filter(({ key }) => myVotes[key]).length;
   const rosterNeeds = VOTE_FIELDS.map(({ needed, label }) => `${needed} ${label.toLowerCase()}${needed === 1 ? '' : 's'}`).join(', ');
+  const disabled = busy || closed || prior.loading || !!prior.error;
+  let submitLabel = submitted ? 'Update votes' : 'Submit votes';
+  if (closed) submitLabel = 'Voting closed';
+  if (busy) submitLabel = 'Submitting…';
 
-  return (
-    <div className="max-w-4xl mx-auto p-4 space-y-4">
-      {/* HEADER */}
-      <div className="rounded-xl p-4 fade-in" style={{
-        background: `linear-gradient(135deg, #2196f322 0%, ${C.white} 100%)`,
-        border: `1px solid #2196f355`,
-      }}>
-        <div className="flex items-center gap-2 mb-1">
-          <Trophy size={16} style={{ color: '#2196f3' }} />
-          <span className="font-display text-2xl tracking-wider" style={{ color: C.brandNavy }}>VOTE TOTW</span>
-        </div>
-        <p className="font-body text-sm" style={{ color: `${C.brandNavy}aa` }}>
-          Pick the best player at each position. The TOTW XI will have {rosterNeeds} — but you only vote for one per position. Admin picks the final winners after voting closes.
-        </p>
-        <div className="mt-3 flex items-center gap-2 flex-wrap">
-          <span className="font-mono text-[10px] tracking-[0.2em] px-2 py-1 rounded" style={{ background: `#2196f322`, color: '#2196f3' }}>
-            CLOSES IN {closesIn}
-          </span>
-          {submitted && (
-            <span className="font-mono text-[10px] tracking-[0.2em] px-2 py-1 rounded" style={{ background: `${C.green}22`, color: C.green }}>
-              ✓ YOUR VOTES SUBMITTED
-            </span>
-          )}
-        </div>
-      </div>
-
-      {info && (
-        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.green, border: `1px solid ${C.green}44` }}>{info}</div>
-      )}
-      {error && (
-        <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>{error}</div>
-      )}
-      {priorVotesError && (
-        <div role="alert" className="font-mono text-xs px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red, border: `1px solid ${C.red}44` }}>
-          Could not load your previous votes: {priorVotesError}
-        </div>
-      )}
-
-      {/* POSITION COLUMNS */}
-      {VOTE_FIELDS.map(({ key, label, pos, needed }) => {
-        const picked = myVotes[key as keyof typeof myVotes];
-        return <CandidatePosition key={key} periodId={period.id} position={pos} label={label} needed={needed} picked={picked} onPick={username => pickFor(key, username)} />;
-      })}
-
-      {/* SUBMIT */}
-      <button
-        onClick={handleSubmit}
-        disabled={busy || !canSubmit}
-        className="w-full py-3 font-display text-lg tracking-wider rounded disabled:opacity-50"
-        style={{ background: '#2196f3', color: '#fff' }}
-      >{busy ? 'SUBMITTING…' : (submitted ? 'UPDATE VOTES' : 'SUBMIT VOTES')}</button>
+  return <div className="mx-auto max-w-4xl space-y-5">
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2"><Trophy className="size-5" aria-hidden="true" /> Team of the Week voting</CardTitle>
+        <CardDescription>Choose one player at each position. The final team needs {rosterNeeds}.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center gap-2">
+        <Badge variant={closed ? 'secondary' : 'outline'}>{closed ? 'Voting closed' : `Closes ${new Date(period.closesAt).toLocaleString()}`}</Badge>
+        <Badge variant="secondary">{selectedCount} of {VOTE_FIELDS.length} positions selected</Badge>
+        {submitted && <Badge>Votes submitted</Badge>}
+      </CardContent>
+    </Card>
+    {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+    {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+    {prior.loading && <p role="status" className="text-sm text-muted-foreground">Loading your previous votes…</p>}
+    {prior.error && <Alert variant="destructive"><AlertDescription>Could not load your previous votes: {prior.error}<Button className="mt-2" variant="outline" onClick={() => { void prior.reload(); }}>Retry previous votes</Button></AlertDescription></Alert>}
+    {VOTE_FIELDS.map(({ key, label, pos, needed }) => <CandidatePosition
+      key={key} periodId={period.id} position={pos} label={label} needed={needed}
+      picked={myVotes[key]} disabled={disabled} onPick={username => pickFor(key, username)}
+    />)}
+    <div className="sticky bottom-3 rounded-xl border bg-card p-3 shadow-lg">
+      <Button className="w-full" onClick={handleSubmit} disabled={disabled || !hasCompleteVote(myVotes)}>
+        {submitLabel}
+      </Button>
+      {!hasCompleteVote(myVotes) && !closed && <p className="mt-2 text-center text-xs text-muted-foreground">Choose one player in each of the {VOTE_FIELDS.length} positions to submit.</p>}
     </div>
-  );
-};
+  </div>;
+}
 
-function CandidatePosition({ periodId, position, label, needed, picked, onPick }: { periodId: string; position: VotePosition; label: string; needed: number; picked: string; onPick: (username: string) => void }) {
+function CandidatePosition({ periodId, position, label, needed, picked, disabled, onPick }: {
+  periodId: string; position: VotePosition; label: string; needed: number; picked: string; disabled: boolean; onPick: (username: string) => void;
+}) {
+  const id = useId();
   const [after, setAfter] = useState<string | null>(null);
   const [previous, setPrevious] = useState<(string | null)[]>([]);
   const { data, loading, error, refetch } = useQuery(VotingCandidatesDocument, { variables: { periodId, position, after } });
-  return <section className="rounded-lg p-3 space-y-2" style={{ background: C.white }}>
-    <h3>{label} · TOTW needs {needed} · You pick 1</h3>
-    {picked && <p>Your selection: {picked}</p>}
-    {loading && <p role="status">Loading candidates…</p>}
-    {error && <p role="alert">{error.message} <button onClick={() => { setAfter(null); setPrevious([]); void refetch({ after: null }).catch(() => {}); }}>Restart candidates</button></p>}
-    {(data?.votingCandidates.nodes ?? []).map(player => {
-      const stats = accountStatsSchema.parse(player.stats);
-      return <button key={player.id} type="button" aria-pressed={picked === player.username} onClick={() => onPick(player.username)} className="block w-full text-left p-2 border rounded">
-        {player.username} · OVR {player.ranking.score} · {stats.games}G · {stats.goals} goals · {stats.assists} assists
-      </button>;
-    })}
-    {data?.votingCandidates.totalCount === 0 && <p>No eligible {label}s</p>}
-    <div className="flex gap-3">
-      <button disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous {label}s</button>
-      <button disabled={loading || !data?.votingCandidates.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.votingCandidates.pageInfo.endCursor ?? null); }}>Next {label}s</button>
-    </div>
-  </section>;
+  const title = label.charAt(0) + label.slice(1).toLowerCase();
+
+  return <Card>
+    <CardHeader className="pb-3">
+      <CardTitle id={id} className="text-base">{title}</CardTitle>
+      <CardDescription>The final team needs {needed}. You choose one.</CardDescription>
+      {picked && <p className="break-words text-sm font-medium">Your selection: {picked}</p>}
+    </CardHeader>
+    <CardContent className="space-y-3">
+      {loading && <p role="status" className="text-sm text-muted-foreground">Loading candidates…</p>}
+      {error && <Alert variant="destructive"><AlertDescription>{error.message}<Button variant="outline" onClick={() => { setAfter(null); setPrevious([]); void refetch({ after: null }).catch(() => {}); }}>Restart candidates</Button></AlertDescription></Alert>}
+      <RadioGroup aria-labelledby={id} value={picked} onValueChange={onPick} disabled={disabled || loading || !!error} className="grid gap-2 sm:grid-cols-2">
+        {(data?.votingCandidates.nodes ?? []).map(player => {
+          const stats = accountStatsSchema.parse(player.stats);
+          return <Label key={player.id} htmlFor={`${id}-${player.id}`} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-4 ${picked === player.username ? 'border-primary bg-accent' : 'hover:bg-muted'}`}>
+            <RadioGroupItem id={`${id}-${player.id}`} value={player.username} className="mt-0.5" />
+            <span className="min-w-0 space-y-1"><span className="block break-words font-medium">{player.username}</span><span className="block text-xs font-normal text-muted-foreground">OVR {player.ranking.score} · {stats.games} games · {stats.goals} goals · {stats.assists} assists</span></span>
+          </Label>;
+        })}
+      </RadioGroup>
+      {!loading && !error && data?.votingCandidates.totalCount === 0 && <p className="text-sm text-muted-foreground">No eligible {title.toLowerCase()}s.</p>}
+      <div className="flex flex-wrap justify-between gap-2">
+        <Button variant="outline" disabled={loading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous {title.toLowerCase()}s</Button>
+        <Button variant="outline" disabled={loading || !data?.votingCandidates.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.votingCandidates.pageInfo.endCursor ?? null); }}>Next {title.toLowerCase()}s</Button>
+      </div>
+    </CardContent>
+  </Card>;
 }

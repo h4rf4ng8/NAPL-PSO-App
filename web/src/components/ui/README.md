@@ -11,6 +11,7 @@ Source: [`apps/www/registry/new-york/ui`](https://github.com/shadcn-ui/ui/tree/c
 - Dialogs and alert dialogs have viewport margins and a scrollable `100dvh` height limit. DialogContent accepts `showCloseButton={false}` for mandatory onboarding; consumers also control Escape and outside interaction. Dialog and sheet close buttons have 44px targets.
 - Sidebar switches to its mobile sheet below 1024px, uses 256px desktop / 288px mobile widths, and bounds the sheet to the viewport. React state controls expansion; the upstream write-only cookie was removed.
 - Sidebar's mobile sheet and CommandDialog include screen-reader titles and descriptions. Other dialog consumers must supply a meaningful title and description.
+- Table owns a keyboard-focusable, labeled horizontal scroll region. Slider forwards its accessible name to the interactive thumb and provides a 44px target.
 - Progress forwards its value to Radix so its accessibility value matches the visual indicator. Alert element refs match their rendered DOM elements.
 - Sonner receives its theme through its existing `theme` prop. It does not install or import Next.js theme infrastructure.
 - Browser event calls and early-return style follow project ESLint rules. No lint exclusions were added for this directory.

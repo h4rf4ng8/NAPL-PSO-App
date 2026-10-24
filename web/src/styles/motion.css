@@ -10,7 +10,7 @@
 
 
 @media (prefers-reduced-motion: reduce) {
-  .fade-in, .shimmer-text, .asl-ticker-track { animation: none; }
+  .fade-in, .shimmer-text { animation: none; }
   .flip-card-inner { transition: none; }
 }
 

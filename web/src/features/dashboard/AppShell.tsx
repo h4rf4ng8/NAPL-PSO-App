@@ -35,10 +35,11 @@ export function LeagueNavigation({ account, view, onNavigate, votingOpen = false
   const navigate = (next: string) => { navigated.current = openMobile; onNavigate(next); setOpenMobile(false); };
   const visible = destinations.filter(item => (account || item.public) && (item.id !== 'admin' || isAdmin(account)) && (item.id !== 'vote' || votingOpen));
   return <Sidebar collapsible="offcanvas" onMobileCloseAutoFocus={event => {
-    if (!navigated.current) return;
     event.preventDefault();
+    const trigger = document.querySelector<HTMLElement>('#navigation-trigger');
+    const target = navigated.current || !trigger?.getClientRects().length ? document.querySelector<HTMLElement>('#page-heading') : trigger;
     navigated.current = false;
-    document.querySelector<HTMLElement>('#page-heading')?.focus();
+    target?.focus();
   }}>
     <SidebarHeader className="border-b p-4 pr-14 lg:pr-4">
       <a href={hashForView(account ? 'home' : 'teams')} onClick={event => { event.preventDefault(); navigate(account ? 'home' : 'teams'); }} className="flex min-h-11 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -81,7 +82,7 @@ export function AppShell({ title, navigation, toolbar, children }: { title: stri
     {navigation}
     <SidebarInset className="asl-workspace min-w-0 bg-background">
       <header className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
-        <SidebarTrigger aria-label="Open navigation" className="size-11 lg:hidden" />
+        <SidebarTrigger id="navigation-trigger" aria-label="Open navigation" className="size-11 lg:hidden" />
         <div className="flex min-w-0 flex-1 basis-20 items-center gap-2 sm:gap-3">{title !== 'Home' && <><span aria-label="Alliance Strikers League" className="font-display text-2xl text-primary sm:text-3xl">ASL</span><span className="h-6 border-l" aria-hidden="true" /></>}<h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 truncate text-xl font-semibold sm:text-2xl tracking-tight outline-none">{title}</h1></div>
         <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
       </header>

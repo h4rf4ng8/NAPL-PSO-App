@@ -18,11 +18,14 @@ export default defineConfig({
     serviceWorkers: 'block',
   },
   projects: [
-    { name: 'chromium-desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
+    { name: 'chromium-desktop', testMatch: ['**/*.spec.ts', '**/breakpoints.chromium.ts'], use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } },
     { name: 'chromium-mobile', use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } } },
     { name: 'webkit-desktop', use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 900 } } },
     { name: 'webkit-mobile', use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 } } },
     { name: 'chromium-narrow', testMatch: /(?:destinations|admin|navigation|states)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 320, height: 740 } } },
+    { name: 'chromium-768', testMatch: /(?:destinations|admin|navigation|states)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } } },
+    { name: 'chromium-1024', testMatch: /(?:destinations|admin|navigation|states)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1024, height: 768 } } },
+    { name: 'chromium-1280', testMatch: /(?:destinations|admin|navigation|states)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
   ],
   webServer: {
     command: 'pnpm dev --port 4174',

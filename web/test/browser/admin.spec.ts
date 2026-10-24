@@ -4,8 +4,15 @@ import { installLeagueFixture } from './transport';
 
 export async function adminSection(page: Page, name: string) {
   const mobile = page.getByRole('combobox', { name: 'Admin section', exact: true });
-  if (await mobile.isVisible()) { await mobile.click(); await page.getByRole('option', { name, exact: true }).click(); }
-  else await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name, exact: true }).click();
+  if (page.viewportSize()!.width < 1280) {
+    await expect(mobile).toBeVisible();
+    await mobile.click();
+    await page.getByRole('option', { name, exact: true }).press('Enter');
+    await expect(mobile).toContainText(name);
+    await expect(page.getByRole('listbox')).toHaveCount(0);
+    return;
+  }
+  await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name, exact: true }).click();
 }
 for (const theme of ['light', 'dark']) test(`super-admin sections work in ${theme} theme`, async ({ page }, info) => {
   test.setTimeout(180_000);

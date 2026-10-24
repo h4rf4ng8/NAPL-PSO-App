@@ -62,3 +62,21 @@ test('successful approval survives a failed administration refresh without repea
   expect(fixture.requests.filter(request => request.operation.endsWith('/review'))).toHaveLength(1);
   expect(fixture.unexpected).toEqual([]);
 });
+
+test('schedule restarts a failed initial season read before requesting fixtures', async ({ page }) => {
+  const fixture = await installLeagueFixture(page);
+  fixture.failures.add('Seasons');
+  await page.goto('/#/schedule');
+  await expect(page.getByRole('alert')).toContainText('Fixture temporarily unavailable');
+  expect(fixture.requests.filter(request => request.operation === '/api/schedule')).toHaveLength(0);
+  fixture.failures.delete('Seasons');
+  await page.getByRole('button', { name: 'Restart seasons', exact: true }).click();
+  await expect(page.getByRole('main')).toContainText('Fixture United');
+  await expect(page.getByRole('main')).toContainText('Harbor Athletic');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  const seasons = fixture.requests.filter(request => request.operation === 'Seasons');
+  expect(seasons).toHaveLength(2);
+  expect(seasons[1]!.body).toMatchObject({ variables: { after: null } });
+  expect(fixture.requests.filter(request => request.operation === '/api/schedule')).toHaveLength(1);
+  expect(fixture.unexpected).toEqual([]);
+});

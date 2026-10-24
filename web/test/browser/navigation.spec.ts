@@ -3,6 +3,7 @@ import { installLeagueFixture } from './transport';
 import { captureAndAudit } from './checks';
 
 async function openNavigation(page: import('@playwright/test').Page) {
+  await expect(page.locator('#page-heading')).toBeVisible();
   const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
   if (await menu.isVisible()) await menu.click();
   return page.getByRole('navigation', { name: 'League navigation' });

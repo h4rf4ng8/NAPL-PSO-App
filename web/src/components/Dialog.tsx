@@ -1,6 +1,6 @@
 import { useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { ASLCrest } from './Branding';
-import { Dialog as DialogRoot, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { Dialog as DialogRoot, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import { cn } from '../lib/utils';
 
 type ModalProps = {
@@ -16,7 +16,6 @@ export function ModalShell({ title, children, onClose, maxWidth = 'max-w-2xl', c
   return <DialogRoot open onOpenChange={open => { if (!open) onClose?.(); }}>
     <DialogContent
       className={cn('gap-5 p-4 sm:p-6', maxWidth)}
-      aria-describedby={undefined}
       showCloseButton={!!onClose}
       onOpenAutoFocus={() => { opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
       onCloseAutoFocus={event => {
@@ -31,6 +30,7 @@ export function ModalShell({ title, children, onClose, maxWidth = 'max-w-2xl', c
         <DialogTitle className="flex items-center gap-3 text-xl">
           <ASLCrest size={28} />{title}
         </DialogTitle>
+        <DialogDescription className="sr-only">{onClose ? 'Use Close or press Escape to return to the previous view.' : 'Complete this required step to continue.'}</DialogDescription>
       </DialogHeader>
       {children}
     </DialogContent>

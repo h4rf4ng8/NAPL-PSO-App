@@ -59,7 +59,7 @@ export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh
   const [selectedTeams, setSelectedTeams] = useState<Record<string,string>>({});
   const [mappingPlayer, setMappingPlayer] = useState<string | null>(null);
   const [accountSearch, setAccountSearch] = useState('');
-  const accountPage = useRestPage<Pick<Account, 'id' | 'username' | 'position'>>(mappingPlayer ? `/api/accounts?search=${segment(accountSearch)}` : null);
+  const accountPage = useRestPage<Pick<Account, 'id' | 'username' | 'position'>>(mappingPlayer ? `/api/accounts?search=${segment(accountSearch)}` : null, 50);
 
   // ---------- STEP 1: parse uploaded file ----------
   // Accepts BOTH the legacy flat Strikers Club export format and the newer

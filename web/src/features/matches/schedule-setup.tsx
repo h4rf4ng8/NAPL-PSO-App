@@ -154,7 +154,7 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
 
 // ============ SCHEDULE: EDIT MATCH MODAL ============
 // Admin opens this on any individual match to set the date/time, enter a
-// score, mark postponed/forfeit, add a stream link, etc.
+// score, mark postponed/cancelled, add a stream link, etc.
 export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { match: ScheduledMatch; allTeams?: Pick<Team, 'id' | 'name' | 'tag'>[]; onClose: () => void; onSaved: () => void }) => {
   const home = allTeams.find(t => t.id === match.homeTeamId);
   const away = allTeams.find(t => t.id === match.awayTeamId);
@@ -214,7 +214,7 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
       <div className="space-y-4">
         <p className="rounded-lg bg-muted p-3 text-center font-medium">{home?.name || '?'} vs {away?.name || '?'}</p>
         <div className="space-y-2"><Label htmlFor="match-date">Date & time</Label><Input id="match-date" type="datetime-local" value={dateInput} onChange={e => setDateInput(e.target.value)} /><p className="text-xs text-muted-foreground">Your local time. Leave empty if undecided.</p></div>
-        <div className="space-y-2"><Label htmlFor="match-status">Status</Label><Select value={status} onValueChange={setStatus}><SelectTrigger id="match-status"><SelectValue /></SelectTrigger><SelectContent>{['scheduled', 'completed', 'postponed', 'forfeit'].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2"><Label htmlFor="match-status">Status</Label><Select value={status} onValueChange={setStatus}><SelectTrigger id="match-status"><SelectValue /></SelectTrigger><SelectContent>{['scheduled', 'completed', 'postponed', 'cancelled'].map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}</SelectContent></Select></div>
         {status === 'completed' && <div className="grid grid-cols-2 gap-3"><div className="space-y-2"><Label htmlFor="home-score">{home?.tag || 'Home'} score</Label><Input id="home-score" type="number" min="0" value={homeScore} onChange={e => setHomeScore(e.target.value === '' ? '' : Number(e.target.value))} /></div><div className="space-y-2"><Label htmlFor="away-score">{away?.tag || 'Away'} score</Label><Input id="away-score" type="number" min="0" value={awayScore} onChange={e => setAwayScore(e.target.value === '' ? '' : Number(e.target.value))} /></div></div>}
         <div className="space-y-2"><Label htmlFor="match-stream">Stream URL (optional)</Label><Input id="match-stream" type="url" value={streamUrl} onChange={e => setStreamUrl(e.target.value)} placeholder="https://twitch.tv/…" /></div>
         <div className="space-y-2"><Label htmlFor="match-notes">Notes (optional)</Label><Textarea id="match-notes" value={notes} onChange={e => setNotes(e.target.value)} placeholder="Rescheduled from last week…" /></div>

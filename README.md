@@ -530,6 +530,20 @@ The transaction applies gateway, RBAC, role audit, auth state, then normalized `
 
 Before deploying the API, configure a restricted database login inheriting `app_runtime` and `gateway_runtime` as described above. Schema installation does not create login credentials or change the API environment. The administrator connection used for migration retains administrative privileges. Rollback before application writes can switch the application back to the preserved public snapshot after restoring reviewed legacy runtime grants; a code revert alone does not restore those revoked privileges; after writes begin in `asl`, reconcile those changes before switching back.
 
+### Audited legacy refresh
+
+`supabase/merge-source.mjs` is a one-time merge for the reviewed source and replacement projects. It compares source `public`, destination recovery `public`, and live `asl`. Audit mode only reads databases; it writes protected snapshots, findings, and an exact plan outside the repository. It preserves destination edits, roles, Storage, recovery rows, and excluded test records. Suspicious changes remain withheld. Historical totals and match histories are preserved independently and conflicting changes to either are held together.
+
+Run from `api/`, using administrator connections in `SOURCE_DATABASE_URL` and `DATABASE_URL`, with a PostgreSQL 17 `pg_dump` available:
+
+```sh
+node --env-file=.env ../supabase/merge-source.mjs audit /protected/new-audit-directory ../secrets/asl-migration/replacement-rollout-manifest.json
+MERGE_TEST_DATABASE_URL=postgresql://postgres:local-only@127.0.0.1:5432/empty_rehearsal node ../supabase/merge-rehearse.mjs /protected/new-audit-directory
+node --env-file=.env ../supabase/merge-source.mjs apply /protected/new-audit-directory
+```
+
+Review `plan.json` and the security inventories before apply. Rehearsal requires an empty localhost database and rolls back all changes. Apply creates full backups, blocks concurrent league writes with table locks, checks snapshot/security fingerprints, and commits only after parity checks. It then revokes legacy browser and service-role table, sequence, and function access. Imported Discord identities keep their UUIDs and require fresh sign-in; passwords, sessions, tokens, and source privileges are not copied. Keep the receipts and backups protected. An attempted apply reserves its directory so retries cannot overwrite backups; use a new audit directory after resolving a failed attempt. If `destination-committed.json` exists without `applied.json`, inspect the destination and source retirement state before retrying. Reopening writes ends the simple backup-restore rollback window.
+
 After rollout, check public pages, anonymous standings rejection, signed-in standings, sign-in, session renewal, sign-out, and an authorized change through the frontend's public address. Watch Lambda errors, throttling, request duration, and database connections. A direct anonymous public read should succeed, and protected routes must reject absent or invalid bearer credentials.
 
 To roll back application code, enter maintenance, restore the previous API artifact and its IAM URL/role configuration, then restore its compatible proxy frontend and secrets. Recheck the old flow before reopening; retained database auth tables permit this rollback. A code rollback does not undo database migrations, so the older application must still work with the current database.

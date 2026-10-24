@@ -91,6 +91,52 @@ test('home reads start while league overview is pending and overview failures re
  assert.equal(renderer!.root.findAllByType(HomeView).length,1);
 });
 
+test('career and stats refresh when revisited after another session changes the server stats', async () => {
+  page.hash = '#/card';
+  let games = 1;
+  let overviewUnavailable = false;
+  const reads: string[] = [];
+  await login(async (url, init) => {
+    const path = apiTarget(url, init);
+    reads.push(path);
+    if (path === '/api/accounts/me') return json(account());
+    if (path === 'LeagueOverview' && overviewUnavailable) return json({ message: 'Stats unavailable' }, 503);
+    const card = { ...account(), __typename: 'CurrentAccountSummary', stats: { ...account().stats, games },
+      ranking: { ...account().ranking, __typename: 'AccountRanking', gamesPlayed: games },
+      cardStats: account().cardStats.map(cell => ({ ...cell, __typename: 'AccountCardStatCell' })), previewHasMore: false };
+    if (path === 'LeagueOverview') return json({ data: { leagueOverview: { __typename: 'LeagueOverview', season: 'S1',
+      playerCount: 1, activeTeamCount: 0, me: card, tickerHasMore: false, tickerNews: [], activeVotingPeriod: null } } });
+    const pageInfo = { __typename: 'PayloadPageInfo', endCursor: null, hasNextPage: false };
+    if (path === 'Leaderboard') return json({ data: { leaderboard: { __typename: 'AccountSummaryPage',
+      nodes: [{ ...card, __typename: 'AccountSummary' }], totalCount: 1, pageInfo } } });
+    if (path === 'Seasons') return json({ data: { seasons: { __typename: 'StringPage', nodes: ['S1'], summaries: [{ games, players: 1 }], totalCount: 1, pageInfo } } });
+    assert.ok(['AccountAwards', 'AccountChampionships'].includes(path), `Unexpected request: ${path}`);
+    return json({ data: { [path === 'AccountAwards' ? 'accountAwards' : 'accountChampionships']: { __typename: 'JsonPage', nodes: [], totalCount: 0, pageInfo } } });
+  });
+  const [{ Header }, { MyCard }, { StatsView }] = await Promise.all([
+    import('../src/features/dashboard/Header'), import('../src/features/dashboard/MyCard'), import('../src/features/accounts/StatsView'),
+  ]);
+  await mount();
+  const visit = async (view: string) => { await act(async () => { renderer!.root.findByType(Header).props.setView(view); await tick(); }); };
+  const careerGames = () => renderer!.root.findByType(MyCard).props.account.stats.games;
+  const leaderboardGames = () => renderer!.root.findByType(StatsView).findByType('tbody').findAllByType('td')[5]!.children.join('');
+  assert.equal(careerGames(), 1);
+  assert.equal(reads.filter(path => path === 'LeagueOverview').length, 1, 'initial career entry must not refetch twice');
+  await visit('leaderboard');
+  assert.equal(leaderboardGames(), '1');
+  games = 4;
+  await visit('me');
+  assert.equal(careerGames(), 4);
+  assert.equal(reads.filter(path => path === 'LeagueOverview').length, 2);
+  await visit('leaderboard');
+  assert.equal(leaderboardGames(), '4');
+  assert.equal(reads.filter(path => path === 'Leaderboard').length, 2);
+  assert.equal(renderer!.root.findAllByProps({ role: 'alert' }).length, 0);
+  overviewUnavailable = true;
+  await visit('me');
+  assert.ok(renderer!.root.findByProps({ role: 'alert' }).children.includes('Stats unavailable'));
+});
+
 test('real SDK cross-tab sign-out clears the mounted private screen and ignores late old updates',async()=>{
  await login(async url=>apiPath(url)==='/api/accounts/me'?json(account()):new Promise<Response>(()=>{}));await mount();
  const old=renderer!.root.findByType(Dashboard).props;assert.equal(old.account.id,'user-a');

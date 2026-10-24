@@ -88,7 +88,7 @@ export const EditTeamModal = ({ team, onClose, onSaved }: { team: Team; onClose:
     setLoading(false);
   };
 
-  return <ModalShell onClose={onClose} title="Edit team" maxWidth="max-w-xl">
+  return <ModalShell onClose={loading ? undefined : onClose} title="Edit team" maxWidth="max-w-xl">
     <div className="space-y-5">
       <p className="text-sm text-muted-foreground">Update this team’s identity and season exclusions. Manage roster membership in Players.</p>
       <div className="space-y-2"><Label htmlFor={`${fieldId}-name`}>Team name</Label><Input id={`${fieldId}-name`} value={name} onChange={event => setName(event.target.value)} maxLength={28} /></div>
@@ -190,7 +190,7 @@ export const SubmitTeamModal = ({ account, onClose, onSave }: { account: Account
     finally { setLoading(false); }
   };
 
-  return <ModalShell onClose={onClose} title="Submit team" maxWidth="max-w-xl">
+  return <ModalShell onClose={loading ? undefined : onClose} title="Submit team" maxWidth="max-w-xl">
     <div className="space-y-5">
       <Alert><Clock className="size-4" /><AlertDescription>Your team and player invitations will be reviewed by league administrators.</AlertDescription></Alert>
       <div className="space-y-2"><Label htmlFor={`${fieldId}-name`}>Team name</Label><Input id={`${fieldId}-name`} value={name} onChange={event => setName(event.target.value)} maxLength={32} placeholder="FC Lightning" /></div>

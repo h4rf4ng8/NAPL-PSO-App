@@ -5,6 +5,7 @@ The React application provides public league pages, member dashboards, and admin
 ## Table of Contents
 
 - [Components](#components)
+- [UI Architecture](#ui-architecture)
 - [How It Works](#how-it-works)
   - [Opening the App](#opening-the-app)
   - [Reading League Data](#reading-league-data)
@@ -25,8 +26,32 @@ The React application provides public league pages, member dashboards, and admin
 | [src/auth/session.ts](src/auth/session.ts) | Loads the current account, starts Discord sign-in, and signs out. |
 | [src/hooks/](src/hooks/) | Tracks loading, data, and errors for REST consumers; GraphQL consumers use Apollo hooks. |
 | [src/components/](src/components/), [src/styles/](src/styles/), and [src/theme/](src/theme/) | Provide shared UI elements, styling, and theme preferences. |
+| [src/components/ui/](src/components/ui/) | Checked-in shadcn/ui primitives built on Radix UI, with documented project adaptations. |
 | [scripts/codegen.ts](scripts/codegen.ts) | Checks API-owned queries and generates server execution documents and browser typed documents. |
 | [../pkgs/contracts/](../pkgs/contracts/) | Shares domain types and validation rules with the API. |
+
+## UI Architecture
+
+The application uses React 18, Tailwind CSS 3, and the official shadcn/ui **New York** sources from `shadcn@2.3.0`, pinned to [`c8c4027b6b192822ea2952b225ee4760cddedf0d`](https://github.com/shadcn-ui/ui/tree/c8c4027b6b192822ea2952b225ee4760cddedf0d/apps/www/registry/new-york/ui). These are application-owned source files, not a runtime shadcn package. The [source provenance and adaptations](src/components/ui/README.md) and [upstream license](src/components/ui/LICENSE.md) travel with the components. [components.json](components.json) records the New York, CSS-variable, non-RSC configuration; committed component imports are relative so Vite and Node tests resolve the same files.
+
+| Area | Implementation |
+| --- | --- |
+| Navigation | [AppShell](src/features/dashboard/AppShell.tsx) shares role-filtered navigation between visitors and members. The sidebar becomes a Sheet below **1024px**. Administration uses its section Select below **1280px**, then a section navigation rail. Hash navigation and browser history remain owned by `useView`. |
+| Controls and feedback | shadcn Button, Input, Select, RadioGroup, Checkbox, Tabs, Accordion, Slider and related primitives supply the controls. Buttons, input/select triggers and menu rows use at least 44px targets. Labels, field errors, loading states and confirmation copy remain feature-owned; Sonner supplies transient success feedback. |
+| Dialogs | [ModalShell](src/components/Dialog.tsx) composes the controlled Radix Dialog and restores the actual opener for programmatic dialogs. Radix owns focus trapping, stacking and scroll locking. Editors keep outside clicks open; the share card allows outside dismissal; mandatory onboarding blocks Escape and outside dismissal. Destructive confirmations use AlertDialog. The custom `useDialog` implementation has been removed. |
+| Theme and fonts | Semantic CSS variables own light/dark colors. The browser-local `asl_theme` preference sets `data-theme` and defaults to light; no account setting or Next.js theme provider is involved. Rajdhani is the interface font and Anton supplies the ASL display lettering. Player artwork retains its dedicated fonts and SVG designs. |
+| Tables and player pages | shadcn Table supplies semantic tables with sortable headers and contained horizontal scrolling. The leaderboard and REST account directories/selectors assemble **up to 50 players per display page** from sequential response chunks. The API still limits each response to 50 records and its 7000-byte page budget. The UI requests only the remaining rows, preserves server order and the final cursor, resets on filters, and exposes a failed chunk as an error instead of publishing a partial page or skipping it. |
+| Artwork | Player cards remain SVG artwork. A native Button covers the large card for pointer/keyboard flipping; explicit face visibility handles WebKit rendering. Export keeps both SVG nodes mounted and produces the front at 960×1530 even while the card is flipped. Trophy/captain icons are SVG rather than emoji. |
+
+The 50-row REST setting applies to player management, picture review, roster selection, import account mapping, TOTW candidate setup, awards and administrator assignments. Other paged resources retain their existing page sizes. Apollo `useQuery`/`fetchMore` owns leaderboard reads; the REST-only `useRestPage(path, 50)` handles account directories. Neither path changes ranking, authorization or API pagination rules.
+
+Normal setup is `pnpm install --frozen-lockfile`; the existing primitives do not need CLI regeneration. For a new component, the compatible CLI invocation from the repository root is:
+
+```sh
+pnpm dlx shadcn@2.3.0 add button --cwd web
+```
+
+The CLI can overwrite application-owned files, and its live registry is separate from the CLI version. Review generated files against the pinned [React 18 / Tailwind 3 sources](src/components/ui/README.md), retain the documented adaptations, and avoid replacing them with current React 19 / Tailwind 4 registry files. The [UI overhaul design](../docs/ui-overhaul.md) records the per-tab and per-feature decisions and verification evidence.
 
 ## How It Works
 
@@ -43,20 +68,27 @@ Browser requests resolve API paths against `VITE_API_URL` and call Lambda direct
 
 ### Reading League Data
 
-GraphQL screens use `useQuery` and `useLazyQuery` through `ApolloProvider`. Apollo supplies loading, error, data, and refetch state. Pure feature mappers prepare validated results for display. Canonical selections live in [API operations](../api/routes/graphql/operations/); the browser uses generated typed documents.
+GraphQL screens use native Apollo hooks through `ApolloProvider`, with `refetch` and `fetchMore` for refreshes and pagination. Apollo supplies loading, error and data state. Pure feature mappers prepare validated results for display. Canonical selections live in [API operations](../api/routes/graphql/operations/); the browser uses generated typed documents.
 
 | Query | Used by | Data returned |
 | --- | --- | --- |
-| `Standings` | Retained authenticated API operation and transport validation; no current screen | Players, teams, and team records; sign-in required. |
-| `MemberLeagueData` | [Dashboard](src/features/dashboard/Dashboard.tsx) | League data, season, news, voting periods, and the current account. |
+| `LeagueOverview` | [Dashboard](src/features/dashboard/Dashboard.tsx) | Current account, selected-season card data, league counts and voting summary. |
+| `HomeSummary`, `HomeNews` | Home and News | Independent league metrics and filtered news pages. |
+| `Leaderboard`, `PlayerCard` | Stats and selected-player dialogs | Server-sorted player pages and one player's season card. |
+| `TeamSummaries`, `TeamPlayers` | Team directories, selectors and rosters | Bounded team summaries and roster cards. |
+| `TeamStandings` | Signed-in standings | Season team standings; sign-in required. |
 | `AccountMatches` | [MatchLog](src/features/dashboard/MatchLog.tsx) | Bounded match-history pages. |
-| `AccountOpponents` | Retained API operation and transport validation; no current screen | Opponent summaries; the unreachable `HeadToHead` component was removed. |
-| `TeamRecords` | Signed-in standings and schedule screens | Aggregated team records; sign-in required. Public Schedule skips this query and shows its existing public fixtures without team records. |
+| `AccountOpponents`, `TeamRecords` | Retained named API operations | Bounded opponent summaries and authenticated aggregate team records. Current Schedule uses its REST fixture summaries and does not load private record queries for visitors. |
+| `AccountAwards`, `AccountChampionships` | Trophy history and award management | Independently paged account achievements. |
+| `Seasons`, `SeasonChampions` | Season selectors, administration and Hall of Fame | Season choices and enriched champions. |
+| `HallOfFame`, `DecoratedPlayers` | Hall of Fame | Award leaders and decorated players. |
+| `VotingCandidates` | Voting | Eligible candidate pages for each position. |
+| `ImportAccountMatches` | Match import | Administrator-only lookups for uploaded player IDs. |
 | `AccountCardPreviews` and `DefaultPositionWeights` | Player-card previews and ranking controls | Server-calculated samples and default weights. |
 
 The [transport](src/api/link.ts) sends `{operationName, variables}` to the shared `POST /api/graphql` [trusted-operation transport](../pkgs/contracts/src/index.ts), with `Apollo-Require-Preflight: true`. Apollo Server handles GraphQL CSRF protection; these reads no longer bootstrap or send signed CSRF tokens or write idempotency keys. The link validates response data before Apollo caches it and aborts requests when Apollo cancels them. The server accepts only the 21 allowlisted operation names and their variables; it rejects arbitrary query documents, unknown names, batches and unsupported body fields.
 
-The exported [Apollo client](src/api/client.ts) is one stable singleton. Apollo's default `cache-first` policy reuses complete cached data; explicit refresh requests fresh data. Its default error policy rejects partial failures. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their existing loading hooks. [PublicLeague](src/features/dashboard/PublicLeague.tsx) loads public accounts and teams through named Apollo queries; it never requests Standings or TeamRecords.
+The exported [Apollo client](src/api/client.ts) is one stable singleton. Apollo's default `cache-first` policy reuses complete cached data; explicit refresh requests fresh data. Its default error policy rejects partial failures. The [root cache documentation](../README.md#browser-cache) covers invalidation and session isolation. REST-only screens keep their loading hooks. [PublicLeague](src/features/dashboard/PublicLeague.tsx) composes public feature screens, which own their reads; it never requests `LeagueOverview`, `TeamStandings` or `TeamRecords`.
 
 Player rankings and card statistics remain calculated by the API. The browser selects and renders those results; canonical ranking and name-validation rules stay on the server.
 
@@ -74,20 +106,20 @@ A logical write retains its URL, method, body and idempotency key across one ret
 
 | Caller | Actual data source | Verdict and reason |
 | --- | --- | --- |
-| `PublicLeague` | Named `Leaderboard` and `TeamSummaries` operations | Apollo public reads; no authenticated standings or team records. |
+| Public feature screens inside `PublicLeague` | Named `Leaderboard` and `TeamSummaries` operations | Apollo public reads; no authenticated standings or team records. |
 | `WeightingsPublicView` | `GET /api/settings/position_weights` | Keep REST: saved weightings have a schema field but no named GraphQL operation. Its separate default-weight query already uses Apollo. |
 | `AdminsManager` | `GET /api/roles` | Keep REST: the authorized `admins` schema field has no named operation; retain save lockout during failed/pending reads. |
 | `ArticleDetailView` | `GET /api/articles/slug/:slug` | Keep REST: no GraphQL equivalent; preserve 404 handling and slug-change reset. |
 | `ArticlesListView` | `GET /api/articles` | Keep REST: no GraphQL equivalent. |
 | `HallOfFameView` | Named `HallOfFame` operation | Apollo derived league view. |
 | `NewsView` | Named `HomeNews` operation | Apollo filtered public news. |
-| `ScheduleView` | `GET /api/schedule` | REST scheduled matches; team records use Apollo only while signed in. |
+| `ScheduleView` | `GET /api/schedule` | REST scheduled matches with the fixture summaries supplied by the API. |
 | `StatsManager` (removed) | `GET /api/submissions` | Delete frontend caller: no tab, route, or state transition could open it. Preserve the REST API. |
 | `TeamsView` and team selectors | Named `TeamSummaries` / `TeamPlayers` operations | Apollo directories and rosters; selected-team editing retains REST detail reads. |
 | `TransfersView` | `GET /api/transfers` | REST transfer summaries include team identities. |
-| `VotingTab` | `GET /api/voting/periods/:id/votes` | Keep REST: GraphQL exposes periods, not ballots; preserve period reset and server-side ballot visibility. |
+| `VotingTab` | `GET /api/voting/periods/:id/votes/me` | Keep REST: load the current member's ballot; submit its complete replacement with `PUT` to the same path. Preserve period reset and server-side ballot visibility. |
 
-The hook loads on mount and dependency changes, discards data on dependency reset, and ignores outdated responses after replacement or cleanup. Explicit reload retains the previous data while loading and after failure. It exposes read errors in state and resolves `reload()`, so a failed refresh does not misreport a completed write. It does not provide caching, authentication, or network cancellation. The [resource tests](test/resource.test.ts) exercise the underlying state machine's reset, invalidation, race, and reload behavior; [mounted hook tests](test/resource-hook.test.ts) cover dependency changes, pending reads at unmount, disabled reload after unmount, and reload failure/recovery through React. The [public-page tests](test/public-league.test.ts) mount real consumers and verify navigation, public REST reads, and skipped private queries. React Test Renderer is pinned to React 18 for these effect-running tests; server rendering alone cannot verify requests started by effects. GraphQL cache/cancellation behavior is covered separately by [cache tests](test/cache.test.ts).
+The hook loads on mount and dependency changes, discards data on dependency reset, and ignores outdated responses after replacement or cleanup. Explicit reload retains the previous data while loading and after failure. It exposes read errors in state and resolves `reload()`, so a failed refresh does not misreport a completed write. It does not provide caching, authentication, or network cancellation. The [resource tests](test/resource.test.ts) and [mounted hook tests](test/resource-hook.test.ts) cover reset, races, unmount and reload recovery. Public navigation and private-query exclusions now run against the real App in [navigation](test/browser/navigation.spec.ts), [destination](test/browser/destinations.spec.ts) and [content regression](test/browser/content-regressions.spec.ts) browser tests. Radix portal/focus assertions use a real browser; pure lifecycle tests retain React Test Renderer 18. GraphQL cache/cancellation behavior is covered separately by [cache tests](test/cache.test.ts).
 
 ## Retained Helpers
 
@@ -101,7 +133,7 @@ Custom helpers remain only where they supply application behavior beyond React o
 | `resetClient`, `resetQueries` | Separate identity clearing (stop departing observers without refetch) from successful-write invalidation (refetch active reads; expose read failures separately). |
 | `auth` | Coordinate current-account loading, Discord redirects, sign-out cache clearing, and cross-tab notification. |
 | `createResource`, `useResource` | Share the REST loading/race/error lifecycle described above. |
-| `useDialog`, dialog components | Maintain focus trapping/restoration, Escape handling, scroll locking, and accessible dialog semantics. |
+| `ModalShell`, shadcn Dialog/AlertDialog/Sheet | Compose Radix interaction behavior, feature dismissal rules and programmatic opener restoration; no custom focus trap or dialog stack. |
 | `useTheme`, theme functions | Apply the selected palette, persist the preference, and expose the theme toggle to screens. |
 | `useView` | Keep dashboard navigation, article URLs, and browser back/forward history in sync. |
 | Feature API methods and GraphQL mappers | Keep command payload contracts explicit; validate JSON scalars and map server results to display models without calculating rankings in the browser. |
@@ -136,12 +168,21 @@ Run from the repository root after setup:
 | `pnpm run gql:generate` | Regenerate GraphQL documents and response types. |
 | `pnpm run gql:check` | Check that generated GraphQL files match the current queries and schema. |
 | `pnpm --filter @napl/web run typecheck` | Check browser TypeScript. |
+| `pnpm run typecheck:browser` | Type-check Playwright configuration and browser fixtures separately from application code. |
+| `pnpm run check:dependencies` | Check dependency boundaries against the recorded baseline of existing cycles. |
 | `pnpm --filter @napl/web test` | Run the [web tests](test/), including bearer requests, caching, auth lifecycle and UI logic. |
+| `pnpm run test:browser` | Run real App/component interactions, accessibility and responsive checks in Chromium and WebKit. |
 | `pnpm --filter @napl/web run build` | Build static browser assets. |
+| `pnpm run check` | Run the root generation, type, dependency, lint, unit, build and browser checks. |
+
+Install browser binaries once with `pnpm --filter @napl/web exec playwright install chromium webkit` (`--with-deps` also installs Linux system dependencies). The [Playwright configuration](playwright.config.ts) starts an isolated Vite server on port 4174 with synthetic API/auth settings. Its four projects cover desktop Chromium/WebKit at 1440×900 and mobile Chromium/WebKit at 390×844. Suites also exercise narrower viewports, light/dark themes, keyboard/focus behavior, mutation payloads and axe WCAG A/AA checks. Fixture transports block external requests and need no hosted account or database; optional `BROWSER_ASSET_CACHE` supplies local copies of original fonts/artwork. See the [browser guide](test/browser/README.md) for fixture details and migrated renderer coverage.
+
+The [CI workflow](../.github/workflows/ci-cd.yml) type-checks browser fixtures and dependency boundaries in Lint, then runs all four browser projects in Test after the disposable-database checks. It uploads `web/playwright-report` and `web/test-results` as browser evidence. These commands describe the verification workflow; current run results belong in the PR and [overhaul evidence](../docs/ui-overhaul.md).
 
 ## Related Documentation
 
 - [System architecture and sequence diagrams](../README.md#system-architecture)
 - [Browser cache behavior](../README.md#browser-cache)
+- [UI overhaul design and verification](../docs/ui-overhaul.md)
 - [API internals](../api/README.md)
 - [Production deployment and Vercel configuration](../README.md#production-deployment)

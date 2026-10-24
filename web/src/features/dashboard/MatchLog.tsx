@@ -2,11 +2,16 @@ import { Activity, ChevronLeft, ChevronRight, Shield } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Account } from '../accounts/models';
 import { EmptyState, ResultBadge } from '../../components/Display';
-import { C } from '../../theme/theme';
+
 import { useQuery } from '@apollo/client/react';
 import { AccountMatchesDocument } from '../../api/generated/graphql';
 import { FullRecord } from '../../components/FullRecord';
 import { mapAccountMatchPage } from '../accounts/api';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Alert, AlertDescription } from '../../components/ui/alert';
+
 
 export function MatchLog({ account, season }: { account: Account; season: string }) {
   const filterKey = `${account.id}:${season}`;
@@ -30,41 +35,14 @@ export function MatchLog({ account, season }: { account: Account; season: string
     return { ...currentPage, cursor: currentPage.back.at(-1) ?? null, back: currentPage.back.slice(0, -1) };
   });
 
-  return <div>
-    <div className="flex items-center gap-2 mb-4">
-      <Activity size={22} style={{ color: C.greenLight }} />
-      <h3 className="font-display text-3xl tracking-wider">MATCH LOG</h3>
-    </div>
-    {error && <p role="alert" className="mb-3">{error.message} <button onClick={() => { setPageState({ key: filterKey, cursor: null, back: [] }); void refetch({ after: null }).catch(() => {}); }}>Retry from newest</button></p>}
-    {loading && <p role="status">Loading match history…</p>}
-    {!loading && !error && (!page || page.nodes.length === 0) && <EmptyState icon={<Activity size={40} />} text="No matches yet. Stats will appear here once an admin submits and approves your match data." />}
-    {!loading && !error && page && page.nodes.length > 0 && (
-      <>
-        <div className="space-y-2">
-          {page.nodes.map((m, i) => (
-            <div key={m.id || i} className="rounded-lg p-3 flex items-center gap-3 transition-all hover:translate-x-1" style={{
-              background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}44`,
-              borderLeft: `3px solid ${m.result === 'W' ? C.green : (m.result === 'L' ? C.red : C.gold)}`,
-            }}>
-              <ResultBadge result={m.result} />
-              <div className="flex-1 min-w-0">
-                <div className="font-heading tracking-wider truncate" style={{ color: C.cream }}>VS {(m.opponent || 'UNKNOWN').toUpperCase()}</div>
-                <div className="font-mono text-[10px] tracking-wider" style={{ color: `${C.cream}66` }}>{new Date(m.date || 0).toLocaleDateString()} • {m.season || 'S1'}</div>
-                {typeof m.detailUrl === 'string' && <FullRecord key={m.detailUrl} url={m.detailUrl} label="Full match details" />}
-              </div>
-              <div className="flex gap-3 font-mono text-xs items-center">
-                <span><span style={{ color: C.greenLight }}>{m.goals}</span>G</span>
-                <span><span style={{ color: C.goldLight }}>{m.assists}</span>A</span>
-                {m.cleanSheet && <Shield size={14} style={{ color: C.greenLight }} />}
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-3 flex justify-between">
-          <button disabled={pageState.back.length === 0 || loading || !!error} onClick={goPrevious} className="px-3 py-2 flex items-center gap-1 disabled:opacity-40"><ChevronLeft size={16} /> Previous</button>
-          <button disabled={!page?.pageInfo.hasNextPage || loading || !!error} onClick={goNext} className="px-3 py-2 flex items-center gap-1 disabled:opacity-40">Next <ChevronRight size={16} /></button>
-        </div>
-      </>
-    )}
-  </div>;
+  return <section className="space-y-4">
+    <h3 className="flex items-center gap-2 text-xl font-semibold"><Activity className="size-5" aria-hidden="true" /> Match log</h3>
+    {error && <Alert variant="destructive"><AlertDescription>{error.message} <Button variant="outline" onClick={() => { setPageState({ key: filterKey, cursor: null, back: [] }); void refetch({ after: null }).catch(() => {}); }}>Retry from newest</Button></AlertDescription></Alert>}
+    {loading && <p role="status" className="text-sm text-muted-foreground">Loading match history…</p>}
+    {!loading && !error && (!page || page.nodes.length === 0) && <EmptyState icon={<Activity size={40} />} text="No matches yet. Stats appear here after an admin imports your match data." />}
+    {!loading && !error && page && page.nodes.length > 0 && <>
+      <div className="space-y-3">{page.nodes.map((m, i) => <Card key={m.id || i}><CardContent className="flex flex-wrap items-center gap-3 p-4"><ResultBadge result={m.result} /><div className="min-w-0 flex-1"><p className="break-words font-medium">vs {m.opponent || 'Unknown'}</p><p className="text-xs text-muted-foreground">{new Date(m.date || 0).toLocaleDateString()} · {m.season || 'S1'}</p>{typeof m.detailUrl === 'string' && <FullRecord key={m.detailUrl} url={m.detailUrl} label="Full match details" />}</div><div className="flex flex-wrap items-center gap-2"><Badge variant="secondary">{m.goals} goals</Badge><Badge variant="secondary">{m.assists} assists</Badge>{m.cleanSheet && <Badge variant="outline"><Shield className="mr-1 size-3" aria-hidden="true" /> Clean sheet</Badge>}</div></CardContent></Card>)}</div>
+      <div className="flex justify-between gap-2"><Button variant="outline" disabled={pageState.back.length === 0 || loading || !!error} onClick={goPrevious}><ChevronLeft className="size-4" /> Previous</Button><Button variant="outline" disabled={!page.pageInfo.hasNextPage || loading || !!error} onClick={goNext}>Next <ChevronRight className="size-4" /></Button></div>
+    </>}
+  </section>;
 }

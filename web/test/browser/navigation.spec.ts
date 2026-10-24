@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { installLeagueFixture } from './transport';
+import { captureAndAudit } from './checks';
 
 async function openNavigation(page: import('@playwright/test').Page) {
   const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
@@ -54,5 +55,29 @@ test('theme persists across reload and mobile navigation returns focus on Escape
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(menu).toBeFocused();
+});
+
+test('account menu and mobile navigation are accessible and restore focus', async ({ page }, info) => {
+  await installLeagueFixture(page, 'member');
+  await page.goto('/');
+  const account = page.getByRole('button', { name: 'Account menu for Fixture Player', exact: true });
+  await account.click();
+  await expect(page.getByRole('menu')).toBeVisible();
+  await captureAndAudit(page, info, 'account-menu-open');
+  await page.keyboard.press('Escape');
+  await expect(account).toBeFocused();
+  const menu = page.getByRole('button', { name: 'Open navigation', exact: true });
+  if (!await menu.isVisible()) return;
+  await menu.click();
+  const dialog = page.getByRole('dialog');
+  const close = dialog.getByRole('button', { name: 'Close', exact: true });
+  await expect(close).toBeVisible();
+  const bounds = await close.boundingBox();
+  expect(bounds!.width).toBeGreaterThanOrEqual(44);
+  expect(bounds!.height).toBeGreaterThanOrEqual(44);
+  await captureAndAudit(page, info, 'mobile-navigation-open');
+  await close.click();
+  await expect(dialog).toHaveCount(0);
   await expect(menu).toBeFocused();
 });

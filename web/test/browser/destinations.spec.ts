@@ -21,7 +21,26 @@ for (const theme of ['light', 'dark'] as const) {
         await page.goto(`/#${path}`);
         await expect(page.getByRole('main').first()).toContainText(expected);
         await expect(page.getByRole('alert')).toHaveCount(0);
+        if (path === '/matches' && page.viewportSize()!.width < 640) {
+          const details = page.getByRole('button', { name: 'Full match details', exact: true }).first();
+          await expect(details).toBeVisible();
+          expect((await details.boundingBox())!.width, 'match details action must not squeeze into one-letter lines').toBeGreaterThanOrEqual(120);
+          expect((await details.locator('..').boundingBox())!.width).toBeGreaterThanOrEqual(160);
+        }
         await captureAndAudit(page, info, `member-${theme}-${path.replaceAll('/', '-') || 'home'}`);
+        if (path !== '/leaderboard' || page.viewportSize()!.width >= 1024) return;
+        const table = page.getByRole('table', { name: 'Player statistics' });
+        const scroll = page.getByRole('region', { name: 'Player statistics scroll area' });
+        await expect(table.getByRole('button', { name: 'Fixture Player', exact: true })).toBeVisible();
+        await scroll.evaluate(element => { element.scrollLeft = element.scrollWidth; });
+        const left = (await scroll.boundingBox())!.x;
+        const header = table.getByRole('columnheader', { name: 'Player', exact: true });
+        const cell = table.getByRole('button', { name: 'Fixture Player', exact: true }).locator('..');
+        for (const target of [header, cell]) {
+          expect((await target.boundingBox())!.x, 'player identity remains visible while stats scroll').toBeGreaterThanOrEqual(left - 1);
+          expect(await target.evaluate(element => getComputedStyle(element).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+        }
+        await captureAndAudit(page, info, `member-${theme}-leaderboard-scrolled`);
       });
     }
     expect(fixture.unexpected).toEqual([]);

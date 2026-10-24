@@ -8,6 +8,7 @@ test('linked-account editor reads the full Steam URL and preserves the locked St
   fixture.responses.set('/api/accounts/fixture-player/links/steamUrl', () => pageOf([original]));
   await page.goto('/');
   expect(fixture.requests.some(request => request.operation.endsWith('/links/steamUrl'))).toBe(false);
+  await page.getByRole('button', { name: 'My profile', exact: true }).click();
   await page.getByRole('button', { name: 'Edit linked accounts', exact: true }).click();
   const steam = page.getByLabel('Steam profile URL (optional)', { exact: true });
   await expect(steam).toHaveValue(original);

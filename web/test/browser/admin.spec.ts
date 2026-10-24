@@ -17,6 +17,11 @@ for (const theme of ['light', 'dark']) test(`super-admin sections work in ${them
     await test.step(name, async () => {
       await adminSection(page, name);
       await expect(page.getByRole('alert')).toHaveCount(0);
+      if (name === 'Rules' && page.viewportSize()!.width < 640) {
+        const title = page.getByRole('heading', { name: 'Fair play', exact: true });
+        await expect(title).toBeVisible();
+        expect((await title.boundingBox())!.width, 'rule title must have a readable line width').toBeGreaterThanOrEqual(160);
+      }
       await captureAndAudit(page, info, `admin-${theme}-${name}`);
     });
   }

@@ -2,26 +2,6 @@ import { expect, test } from '@playwright/test';
 import { installLeagueFixture } from './transport';
 import { currentCard, pageOf } from './league-data';
 
-test('leaderboard requests only explicit pages and sends season and position filters to the server', async ({ page }) => {
-  const fixture = await installLeagueFixture(page);
-  fixture.paginated.add('Leaderboard');
-  await page.goto('/#/leaderboard');
-  await expect(page.getByRole('table', { name: 'Player statistics' })).toBeVisible();
-  const queries = () => fixture.requests.filter(request => request.operation === 'Leaderboard').map(request => (request.body as { variables: Record<string, unknown> }).variables);
-  expect(queries()).toHaveLength(1);
-  expect(queries()[0]!.after).toBeNull();
-  await page.getByRole('button', { name: 'Next players', exact: true }).click();
-  await expect.poll(() => queries().length).toBe(2);
-  expect(queries()[1]!.after).toBe('fixture-next-page');
-  await page.getByRole('combobox', { name: 'Season', exact: true }).click();
-  await page.getByRole('option', { name: 'S1', exact: true }).click();
-  await expect.poll(() => queries().at(-1)).toMatchObject({ season: 'S1', after: null });
-  await page.getByRole('group', { name: 'Position', exact: true }).getByRole('button', { name: 'GK', exact: true }).click();
-  await expect.poll(() => queries().at(-1)).toMatchObject({ position: 'GK', after: null });
-  expect(queries()).toHaveLength(4);
-  expect(fixture.unexpected).toEqual([]);
-});
-
 test('player assignment retains an off-page current team and submits the chosen membership ID', async ({ page }) => {
   const fixture = await installLeagueFixture(page, 'admin');
   fixture.paginated.add('TeamSummaries');

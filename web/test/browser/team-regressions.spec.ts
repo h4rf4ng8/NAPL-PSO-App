@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { fullTeam, pageOf, teamSummary, opponent, currentCard } from './league-data';
 import { installLeagueFixture } from './transport';
+import { captureAndAudit } from './checks';
 
 const fixtureUrl = (kind: string) => `/test/browser/regression.html?case=${kind}`;
 const seasons = Array.from({ length: 35 }, (_, index) => `CUSTOM${index}`);
@@ -55,7 +56,7 @@ test('team selector retains off-page selection and resets server search cursor',
   expect(fixture.unexpected).toEqual([]);
 });
 
-test('captain editing waits for the complete roster and recovers from a failed last page', async ({ page }) => {
+test('captain editing waits for the complete roster and recovers from a failed last page', async ({ page }, info) => {
   const fixture = await installLeagueFixture(page, 'captain');
   let complete = false;
   fixture.responses.set('TeamPlayers', request => {
@@ -73,6 +74,18 @@ test('captain editing waits for the complete roster and recovers from a failed l
   complete = true;
   await page.getByRole('button', { name: 'Reload team', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit lineup', exact: true })).toBeEnabled();
+  await captureAndAudit(page, info, 'captain-team-roster');
+  await page.getByRole('button', { name: 'Edit lineup', exact: true }).click();
+  await page.getByRole('button', { name: 'Assign GK', exact: true }).click();
+  const picker = page.getByRole('dialog', { name: /Select lineup player/ });
+  await expect(picker).toBeVisible();
+  await captureAndAudit(page, info, 'captain-lineup-picker');
+  await picker.getByRole('option', { name: /Fixture Player/ }).click();
+  await expect(picker).toHaveCount(0);
+  await captureAndAudit(page, info, 'captain-lineup-edit');
+  await page.getByRole('button', { name: 'Save lineup', exact: true }).click();
+  await expect.poll(() => fixture.requests.filter(request => request.method === 'PATCH' && request.operation === '/api/teams/fixture-team').length).toBe(1);
+  expect(fixture.requests.find(request => request.method === 'PATCH' && request.operation === '/api/teams/fixture-team')?.body).toMatchObject({ formation: '2-1-2', lineup: { GK: 'Fixture Player' } });
   expect(fixture.unexpected).toEqual([]);
 });
 

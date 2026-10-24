@@ -17,7 +17,7 @@ Open `http://localhost:5173/test/browser/index.html`. The fixture runs React Str
 
 The temporary original-component comparison and 60-case exact normalized SVG parity script are archived outside the repository in `/private/tmp/napl-component-browser-baseline`, with restoration instructions.
 
-Automated browser checks run with `pnpm --filter @napl/web exec playwright test` after `pnpm --filter @napl/web exec playwright install chromium webkit`. The configuration starts Vite on port 4174 with synthetic public settings. It checks desktop and mobile Chromium and WebKit; artifacts are written to `web/test-results` and `web/playwright-report`.
+Automated browser checks run with `pnpm --filter @napl/web exec playwright test` after `pnpm --filter @napl/web exec playwright install chromium webkit`. The configuration starts Vite on port 4174 with synthetic public settings. It checks Chromium and WebKit at 1440px and 390px, plus destination, administration, navigation, and recovery states at 320px in Chromium. Artifacts are written to `web/test-results` and `web/playwright-report`.
 
 `transport.ts` intercepts the real application's HTTP requests and seeds synthetic visitor/member/captain/admin sessions. It blocks external requests, serves synthetic league data, and records unexpected requests. Default runs use a small placeholder image and system font fallbacks. Set `BROWSER_ASSET_CACHE` to a local directory of the original content-addressed `<sha256>.bin` assets for visual comparison with production artwork and fonts. No credentials or hosted database are needed.
 
@@ -33,9 +33,13 @@ The renderer cases below were moved because React Test Renderer has no browser D
 | `article-editor.test.ts` | `form-regressions.spec.ts`: unchanged expired/protected cover is omitted, removed cover is null, no image import. |
 | `import-payload.test.ts` | `form-regressions.spec.ts`: uploaded-ID lookups only, lookup pagination, off-page manual mapping, long indexed skipped names, one exact import write. |
 | `home-links.test.ts` | `content-regressions.spec.ts`: lazily reads original Steam URL, preserves locked Strikers ID, writes original/replacement URLs; failed refresh after a successful write retries only the read. |
-| `payload-views.test.ts` | `player-regressions.spec.ts`: explicit leaderboard pages and server-side season/position filters. |
+| `payload-views.test.ts` | `pagination.spec.ts`: 50-row leaderboard pages retain server ranking across bounded response chunks, season/position changes reset cursors, and failed/stale continuations retry from a fresh first page. |
 | `public-league.test.ts` | `navigation.spec.ts`, `destinations.spec.ts`, `content-regressions.spec.ts`: exactly six public links, public destinations without private queries, schedule hides retained private records after account removal. |
 | `admin-payload.test.ts` | `settings-regressions.spec.ts`: complete fresh role snapshot only on explicit write, off-page assignments preserved, failed fresh reads block writes, newly protected super-admin cannot be removed. |
 | `dialog.test.ts` (removed in shared layer) | `components.spec.ts`: StrictMode, nested focus/scroll, latest callback, simultaneous unmount, empty mandatory dialog, editor/mandatory/share outside rules, 360px share layout, actual front-facing 960×1530 PNG export. |
 
-`destinations.spec.ts` captures each member/public destination in both browser engines. Member and super-admin suites audit light/dark themes with axe WCAG A/AA checks and page-overflow assertions. These are automated checks; screenshots and keyboard checks complement them rather than establishing complete accessibility compliance.
+`destinations.spec.ts` captures each member/public destination in both browser engines. Member and super-admin suites audit light/dark themes with axe WCAG A/AA checks, page-overflow assertions, and header-title/control overlap checks. The opened account menu, mobile navigation, roster and nested lineup picker, import mapping/confirmation/receipt, and team/match editors receive the same audits.
+
+Additional regressions cover 105 players displayed as 50/50/5 despite 17-row transport chunks, REST player pagination, non-advancing cursors, stale-cursor recovery and keyboard tooltips. `states.spec.ts` exercises loading, failure, retry and empty states, plus successful team writes whose subsequent refresh fails. `seasons.spec.ts` checks stale season metrics disappear and player-card dialogs remain mounted through loading. `settings-followup.spec.ts` checks position and award receipts survive failed refreshes without duplicate writes. Voting success remains visible through Apollo cache reset; delayed team/match reads cannot retarget an editor after a filter change.
+
+These automated checks and visual/keyboard reviews complement each other; they do not establish complete accessibility compliance.

@@ -22,6 +22,7 @@ export default defineConfig({
     { name: 'chromium-mobile', use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 } } },
     { name: 'webkit-desktop', use: { ...devices['Desktop Safari'], viewport: { width: 1440, height: 900 } } },
     { name: 'webkit-mobile', use: { ...devices['iPhone 13'], viewport: { width: 390, height: 844 } } },
+    { name: 'chromium-narrow', testMatch: /(?:destinations|admin|navigation|states)\.spec\.ts/, use: { ...devices['Desktop Chrome'], viewport: { width: 320, height: 740 } } },
   ],
   webServer: {
     command: 'pnpm dev --port 4174',

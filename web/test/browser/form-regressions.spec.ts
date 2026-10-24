@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { article, pageOf } from './league-data';
 import { installLeagueFixture } from './transport';
+import { captureAndAudit } from './checks';
 
 for (const coverImageUrl of ['https://expired.example/old.png', '/api/media/articles/fixture-article/cover?v=1']) test(`article cover unchanged and removed payloads: ${coverImageUrl}`, async ({ page }) => {
   const fixture = await installLeagueFixture(page, 'admin');
@@ -25,7 +26,7 @@ for (const coverImageUrl of ['https://expired.example/old.png', '/api/media/arti
   expect(fixture.unexpected).toEqual([]);
 });
 
-test('match import scopes lookups to uploaded IDs and retains off-page manual mapping', async ({ page }) => {
+test('match import scopes lookups to uploaded IDs and retains off-page manual mapping', async ({ page }, info) => {
   const fixture = await installLeagueFixture(page, 'admin');
   const skippedName = '未登録'.repeat(100);
   fixture.responses.set('ImportAccountMatches', request => {
@@ -33,8 +34,11 @@ test('match import scopes lookups to uploaded IDs and retains off-page manual ma
     return { data: { importAccountMatches: { ...pageOf([{ __typename: 'ImportAccountSummary', username: second ? 'Auto Two' : 'Auto One', strikersId: second ? '102' : '101' }], 'ImportAccountSummaryPage'), pageInfo: { endCursor: second ? null : 'next', hasNextPage: !second } } } };
   });
   fixture.responses.set('/api/accounts', request => {
-    const second = new URL(request.url()).searchParams.has('after');
-    return { ...pageOf([{ id: second ? 'manual' : 'first', username: second ? 'Manual Player' : 'First Choice', position: 'CM' }]), pageInfo: { endCursor: second ? null : 'next', hasNextPage: !second } };
+    const query = new URL(request.url()).searchParams;
+    const start = Number(query.get('after') ?? 0);
+    const end = Math.min(start + Math.min(Number(query.get('first')), 17), 51);
+    const nodes = Array.from({ length: end - start }, (_, index) => ({ id: start + index === 50 ? 'manual' : `choice-${start + index}`, username: start + index === 50 ? 'Manual Player' : `Choice ${start + index}`, position: 'CM' }));
+    return { ...pageOf(nodes), totalCount: 51, pageInfo: { endCursor: String(end), hasNextPage: end < 51 } };
   });
   fixture.responses.set('/api/match-imports', () => ({ ok: true, matchId: 'fixture', updated: 1, alreadyImported: 1, skipped: 1, skippedIndexes: [2], homeTeam: 'Fixture United', awayTeam: 'Harbor Athletic', score: '2 - 0' }));
   await page.goto('/test/browser/regression.html?case=import');
@@ -53,16 +57,22 @@ test('match import scopes lookups to uploaded IDs and retains off-page manual ma
   await page.getByRole('button', { name: /next.*map players/i }).click();
   await expect(page.getByRole('button', { name: 'Map Source One to ASL account', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Map Source Two to ASL account', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Choice 49 · CM', exact: true })).toBeAttached();
+  await captureAndAudit(page, info, 'import-player-picker');
   await page.getByRole('dialog').getByRole('button', { name: 'Next page', exact: true }).click();
   await page.getByRole('option', { name: 'Manual Player · CM', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Map Source Two to ASL account', exact: true })).toContainText('Manual Player');
+  await page.getByLabel('Tackles for Source Two', { exact: true }).fill('7');
   await page.getByRole('button', { name: /next.*confirm/i }).click();
+  await captureAndAudit(page, info, 'import-confirmation');
   await page.getByRole('button', { name: /confirm import.*2 players/i }).click();
   await expect(page.getByText(/import complete/i)).toBeVisible();
   await expect(page.getByRole('main')).toContainText(skippedName);
   await expect(page.getByText(/already imported/i)).toBeVisible();
+  await captureAndAudit(page, info, 'import-success');
   const writes = fixture.requests.filter(request => request.operation === '/api/match-imports');
   expect(writes).toHaveLength(1);
   expect(writes[0]!.body).toHaveProperty('playerMap', { '101': 'Auto One', '102': 'Manual Player', '103': '' });
+  expect(writes[0]!.body).toHaveProperty('tackleOverrides', { '102': '7' });
   expect(fixture.unexpected).toEqual([]);
 });

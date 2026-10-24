@@ -37,6 +37,8 @@ test('home reads start independently of league overview and expose its failure',
   await expect(page.getByRole('button', { name: 'Account menu for Fixture Player' })).toBeVisible();
   await expect.poll(() => fixture.requests.filter(request => request.operation === 'HomeSummary').length).toBe(1);
   await expect.poll(() => fixture.requests.filter(request => request.operation === 'HomeNews').length).toBe(3);
+  await expect.poll(() => fixture.requests.filter(request => request.operation === 'AccountMatches').length).toBe(1);
+  for (const title of ['Your recent matches', 'Latest league match', 'What’s new']) await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
   await expect(page.getByRole('main').first()).toContainText(/loading league/i);
   fixture.failures.add('LeagueOverview');
   pending.resolve();

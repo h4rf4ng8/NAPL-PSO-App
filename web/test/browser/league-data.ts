@@ -28,7 +28,7 @@ export const fullTeam = {
   pendingMembers: [], seasons: ['S1'], formation: '2-1-2', lineup: {}, createdAt: timestamp,
   reviewedAt: timestamp, reviewedBy: 'Fixture Admin', rejectionReason: null,
 };
-export const period = { id: 'fixture-vote', season: 'S1', opensAt: timestamp, closesAt: Date.UTC(2027, 0, 1), status: 'open', eligiblePlayers: ['Fixture Player'], createdAt: timestamp };
+export const period = { id: 'fixture-vote', season: 'S1', opensAt: timestamp, closesAt: Date.now() + 7 * 86_400_000, status: 'open', eligiblePlayers: ['Fixture Player'], createdAt: timestamp };
 export function candidateCards() {
   return ['GK', 'DEF', 'CM', 'ST'].map((position, index) => ({
     ...currentCard('member'), __typename: 'AccountCard', id: `candidate-${position.toLowerCase()}`,

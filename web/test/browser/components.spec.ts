@@ -37,7 +37,7 @@ test('mandatory onboarding ignores Escape and completes explicitly', async ({ pa
 });
 
 test('flipped card exports a front-facing full-resolution PNG', async ({ page }) => {
-  const card = page.locator('.flip-card').first();
+  const card = page.locator('.flip-card').first().getByRole('button');
   await card.focus();
   await page.keyboard.press('Enter');
   await expect(card).toHaveAttribute('aria-pressed', 'true');

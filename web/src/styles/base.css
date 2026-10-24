@@ -3,12 +3,16 @@
   html, body, #root { min-height: 100%; margin: 0; }
   html { color-scheme: light; }
   html[data-theme="dark"] { color-scheme: dark; }
-  body { @apply bg-background font-sans text-base text-foreground antialiased; }
+  body { @apply bg-background font-sans text-base font-medium text-foreground antialiased; }
   button, input, select, textarea { font: inherit; }
   button, a, input, select, textarea, [tabindex] { -webkit-tap-highlight-color: transparent; }
   :focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 3px; }
   select { min-height: 44px; max-width: 100%; border-radius: var(--radius); }
   img { max-width: 100%; }
+}
+
+.asl-workspace {
+  background-image: radial-gradient(ellipse at 100% 0, hsl(var(--primary) / 0.07), transparent 48%), repeating-linear-gradient(115deg, transparent 0 90px, hsl(var(--primary) / 0.015) 90px 180px);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -6,7 +6,6 @@ import { ASL_LOGO_DIAMOND } from '../../assets/asl-logos';
 import { isAdmin } from '../../utils/league';
 import { hashForView } from './navigation';
 import { Button } from '../../components/ui/button';
-import { Avatar, AvatarFallback } from '../../components/ui/avatar';
 import { Badge } from '../../components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../../components/ui/dropdown-menu';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '../../components/ui/sidebar';
@@ -80,10 +79,10 @@ export function AppShell({ title, navigation, toolbar, children }: { title: stri
   return <SidebarProvider>
     <a href="#main-content" onClick={event => { event.preventDefault(); heading.current?.focus(); }} className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:p-3">Skip to content</a>
     {navigation}
-    <SidebarInset className="min-w-0 bg-background">
+    <SidebarInset className="asl-workspace min-w-0 bg-background">
       <header className="sticky top-0 z-20 flex min-h-20 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
         <SidebarTrigger aria-label="Open navigation" className="size-11 lg:hidden" />
-        <h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 flex-1 text-2xl font-semibold tracking-tight outline-none">{title}</h1>
+        <div className="flex min-w-0 flex-1 items-center gap-3"><span aria-label="Alliance Strikers League" className="font-display text-3xl text-primary">ASL</span><span className="h-6 border-l" aria-hidden="true" /><h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 text-2xl font-semibold tracking-tight outline-none">{title}</h1></div>
         <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
       </header>
       <section id="main-content" aria-labelledby="page-heading" className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 lg:p-6">{children}</section>
@@ -98,7 +97,7 @@ export function ThemeButton({ theme, onToggle }: { theme: ThemeMode; onToggle: (
 
 export function AccountMenu({ account, onLogout }: { account: Account; onLogout: () => void }) {
   return <DropdownMenu>
-    <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2" aria-label={`Account menu for ${account.username}`}><Avatar aria-hidden="true" className="size-7"><AvatarFallback>{account.username.slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><span className="hidden max-w-40 truncate sm:inline">{account.username}</span></Button></DropdownMenuTrigger>
+    <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2" aria-label={`Account menu for ${account.username}`}><UserRound aria-hidden="true" className="size-5" /><span className="hidden max-w-40 truncate sm:inline">{account.username}</span></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuLabel className="break-words">{account.username}{isAdmin(account) && <Badge className="ml-2" variant="secondary">Admin</Badge>}</DropdownMenuLabel>
       <DropdownMenuSeparator />

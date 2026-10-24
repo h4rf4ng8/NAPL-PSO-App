@@ -18,6 +18,7 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState<Pick<PositionRequest, 'id' | 'toPos' | 'fromPos'> | null>(null);   // {toPos} if request is already pending
   const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
@@ -35,13 +36,13 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
   }, [account.id]);
 
   const handleSubmit = async () => {
+    if (busy || submitted || pending) return;
     setError(''); setInfo('');
     if (pos === account.position) { onClose(); return; }
     setBusy(true);
     try {
       await accountApi.createPositionRequest({ toPos: pos, reason: reason.trim() });
-      setInfo('✓ Request submitted — an admin will review it shortly.');
-      setTimeout(() => onClose(), 1800);
+      setSubmitted(true);
     } catch (error_) {
       setError('Could not save: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
@@ -60,6 +61,11 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
     }
     setBusy(false);
   };
+
+  if (submitted) return <ModalShell onClose={onClose} title="Change position" maxWidth="max-w-md">
+    <Alert role="status"><AlertTitle>Request submitted</AlertTitle><AlertDescription>An administrator will review your request to change to {pos}. Your current position stays unchanged until it is approved.</AlertDescription></Alert>
+    <Button onClick={onClose}>Done</Button>
+  </ModalShell>;
 
   return <ModalShell onClose={onClose} title="Change position" maxWidth="max-w-md">
     <div className="space-y-5">

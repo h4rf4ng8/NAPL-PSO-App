@@ -32,7 +32,7 @@ export const AwardsManager = ({ onRefresh, currentSeason }: { onRefresh: () => v
   const [season, setSeason] = useState(currentSeason);
   const [awardId, setAwardId] = useState<(typeof AWARD)[keyof typeof AWARD]>(AWARD.STRIKER);
   const [search,setSearch] = useState('');
-  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search));
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search='+encodeURIComponent(search), 50);
   const [selected,setSelected] = useState<AdminPlayer|null>(null);
   const [after,setAfter] = useState<string|null>(null);
   const [previous,setPrevious] = useState<(string|null)[]>([]);

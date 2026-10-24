@@ -40,7 +40,7 @@ export function LeagueNavigation({ account, view, onNavigate, votingOpen = false
     navigated.current = false;
     document.querySelector<HTMLElement>('#page-heading')?.focus();
   }}>
-    <SidebarHeader className="border-b p-4">
+    <SidebarHeader className="border-b p-4 pr-14 lg:pr-4">
       <a href={hashForView(account ? 'home' : 'teams')} onClick={event => { event.preventDefault(); navigate(account ? 'home' : 'teams'); }} className="flex min-h-11 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
         <img src={ASL_LOGO_DIAMOND} alt="" className="h-12 w-12 object-contain" />
         <span><span className="block text-lg font-bold tracking-tight">ASL</span><span className="text-xs text-muted-foreground">Alliance Strikers League</span></span>
@@ -82,7 +82,7 @@ export function AppShell({ title, navigation, toolbar, children }: { title: stri
     <SidebarInset className="asl-workspace min-w-0 bg-background">
       <header className="sticky top-0 z-20 flex min-h-16 flex-wrap items-center gap-3 border-b bg-background/95 px-4 py-3 backdrop-blur lg:px-6">
         <SidebarTrigger aria-label="Open navigation" className="size-11 lg:hidden" />
-        <div className="flex min-w-0 flex-1 basis-32 items-center gap-3">{title !== 'Home' && <><span aria-label="Alliance Strikers League" className="font-display text-3xl text-primary">ASL</span><span className="h-6 border-l" aria-hidden="true" /></>}<h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 truncate text-2xl font-semibold tracking-tight outline-none">{title}</h1></div>
+        <div className="flex min-w-0 flex-1 basis-20 items-center gap-2 sm:gap-3">{title !== 'Home' && <><span aria-label="Alliance Strikers League" className="font-display text-2xl text-primary sm:text-3xl">ASL</span><span className="h-6 border-l" aria-hidden="true" /></>}<h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 truncate text-xl font-semibold sm:text-2xl tracking-tight outline-none">{title}</h1></div>
         <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
       </header>
       <section id="main-content" aria-labelledby="page-heading" className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 lg:p-6">{children}</section>
@@ -96,7 +96,7 @@ export function ThemeButton({ theme, onToggle }: { theme: ThemeMode; onToggle: (
 }
 
 export function AccountMenu({ account, onLogout }: { account: Account; onLogout: () => void }) {
-  return <DropdownMenu>
+  return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild><Button variant="outline" className="gap-2" aria-label={`Account menu for ${account.username}`}><UserRound aria-hidden="true" className="size-5" /><span className="hidden max-w-40 truncate sm:inline">{account.username}</span></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" className="w-56">
       <DropdownMenuLabel className="break-words">{account.username}{isAdmin(account) && <Badge className="ml-2" variant="secondary">Admin</Badge>}</DropdownMenuLabel>

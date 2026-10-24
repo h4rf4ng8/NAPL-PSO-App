@@ -133,7 +133,7 @@ export const SubmitTeamModal = ({ account, onClose, onSave }: { account: Account
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const candidates = useRestPage<Pick<Account, 'id' | 'username' | 'position' | 'strikersId' | 'teamId'>>(`/api/accounts?search=${segment(playerFilter)}`);
+  const candidates = useRestPage<Pick<Account, 'id' | 'username' | 'position' | 'strikersId' | 'teamId'>>(`/api/accounts?search=${segment(playerFilter)}`, 50);
   const candidatePlayers = (candidates.data?.nodes ?? []).filter(player => player.id !== account.id);
 
   const toggleMember = (username: string) => {

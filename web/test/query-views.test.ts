@@ -29,7 +29,7 @@ test('match log renders its cached filtered page through Apollo hooks', () => {
   });
   const html = renderToStaticMarkup(createElement(ApolloProvider, { client },
     createElement(MatchLog, { account, season: 'S2' })));
-  assert.match(html, /VS BLUE/);
+  assert.match(html, /vs blue/i);
   assert.doesNotMatch(html, /Loading match history/);
   assert.equal(fetch.mock.callCount(), 0);
 });

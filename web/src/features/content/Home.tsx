@@ -2,10 +2,10 @@ import { auth } from '../../auth/session';
 import { ASL_LOGO_DIAMOND } from '../../assets/asl-logos';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { accounts as accountApi } from '../accounts/api';
+import { accounts as accountApi, mapAccountMatchPage } from '../accounts/api';
 import type { Account } from '../accounts/models';
 import { useQuery } from '@apollo/client/react';
-import { HomeSummaryDocument, HomeNewsDocument } from '../../api/generated/graphql';
+import { HomeSummaryDocument, HomeNewsDocument, AccountMatchesDocument } from '../../api/generated/graphql';
 import { z } from 'zod';
 import { newsSummarySchema } from './models';
 import { LazyText } from './LazyText';
@@ -13,13 +13,12 @@ import { readText } from '../../api/page';
 import { segment } from '../../api/http';
 import { mediaUrl } from '../../components/MediaImage';
 import type { TeamSummary as Team } from '../teams/models';
-import { QuickStat, ResultRow, Section } from '../../components/Display';
+import { QuickStat, ResultBadge, ResultRow, Section } from '../../components/Display';
 import { COUNTRIES, flagUrl } from '../../utils/league';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../components/ui/accordion';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Alert, AlertDescription } from '../../components/ui/alert';
 import { Badge } from '../../components/ui/badge';
 import { Skeleton } from '../../components/ui/skeleton';
@@ -72,17 +71,42 @@ export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }:
   const summary = useQuery(HomeSummaryDocument);
   const announcementQuery = useQuery(HomeNewsDocument, { variables: { kind: 'announcement', first: 3, after: null } });
   const upcomingQuery = useQuery(HomeNewsDocument, { variables: { kind: 'matchup', first: 3, after: null, upcomingOnly: true } });
-  const resultQuery = useQuery(HomeNewsDocument, { variables: { kind: 'result', first: 3, after: null } });
+  const resultQuery = useQuery(HomeNewsDocument, { variables: { kind: 'result', first: 1, after: null } });
+  const matchQuery = useQuery(AccountMatchesDocument, { variables: { id: account.id, first: 3, after: null, season: null, opponent: null } });
+  const recentMatches = matchQuery.data ? mapAccountMatchPage(matchQuery.data).nodes : [];
   const overview = summary.data ? homeSummarySchema.parse(summary.data.homeSummary) : null;
   const announcements = (announcementQuery.data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
   const upcoming = (upcomingQuery.data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
   const results = (resultQuery.data?.homeNews.nodes ?? []).map(row => newsSummarySchema.parse(row));
   const teamById = (id: string | null | undefined) => allTeams.find(team => team.id === id);
   return <div className="space-y-6">
-    <header className="flex flex-wrap items-center justify-between gap-6 border-b border-primary/20 pb-8 pt-2">
-      <div className="min-w-0 flex-1"><div className="flex items-end gap-4"><p className="font-display text-7xl leading-none text-primary sm:text-8xl">ASL</p><p className="max-w-36 pb-1 text-lg font-semibold uppercase leading-tight">Alliance<br />Strikers League</p></div><h2 className="mt-5 break-words text-2xl font-semibold">Welcome back, {account.username}</h2><p className="mt-1 max-w-2xl text-muted-foreground">{currentSeason ? `Season ${currentSeason}. ` : ''}Your player, your team, your league.</p><div className="mt-5 flex flex-wrap gap-3"><Button onClick={() => onJump('me')}>My player card</Button></div></div>
-      <img src={ASL_LOGO_DIAMOND} alt="" className="hidden w-32 shrink-0 object-contain sm:block xl:w-40" />
+    <header className="flex flex-wrap items-center justify-between gap-5 pb-2 pt-1">
+      <div className="min-w-0 flex-1"><div className="flex items-end gap-4"><p className="font-display text-6xl leading-none text-primary sm:text-7xl">ASL</p><p className="max-w-36 pb-1 text-base font-semibold uppercase leading-tight">Alliance<br />Strikers League</p></div><h2 className="mt-4 break-words text-2xl font-semibold">Welcome back, {account.username}</h2><p className="mt-1 max-w-2xl text-muted-foreground">{currentSeason ? `Season ${currentSeason}. ` : ''}Your player, your team, your league.</p><div className="mt-4 flex flex-wrap gap-3"><Button onClick={() => onJump('me')}>My player card</Button></div></div>
+      <img src={ASL_LOGO_DIAMOND} alt="" className="hidden w-24 shrink-0 object-contain sm:block xl:w-28" />
     </header>
+    <dl aria-label="Your player statistics" className="grid grid-cols-4 gap-3 border-y py-4">
+      {[["Games", account.stats.games], ["Goals", account.stats.goals], ["Assists", account.stats.assists], ["Win rate", `${account.stats.games ? Math.round(account.stats.wins / account.stats.games * 100) : 0}%`]].map(([label, value]) => <div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="text-2xl font-semibold tabular-nums">{value}</dd></div>)}
+    </dl>
+    <div className="grid items-start gap-6 lg:grid-cols-2 lg:gap-8">
+      <Section title="Your recent matches" onMore={() => onJump('matches')}>
+        {matchQuery.loading && <Skeleton className="h-24" aria-label="Loading your recent matches" />}
+        {matchQuery.error && <Alert variant="destructive"><AlertDescription>{matchQuery.error.message} <Button variant="outline" onClick={() => { void matchQuery.refetch().catch(() => {}); }}>Retry your matches</Button></AlertDescription></Alert>}
+        {!matchQuery.loading && !matchQuery.error && recentMatches.length === 0 && <p className="text-sm text-muted-foreground">Your results appear here after a match is imported.</p>}
+        <ol>{recentMatches.map((match, index) => <li key={match.id || index} className="flex items-center gap-3 border-b py-3 last:border-0"><ResultBadge small result={match.result} /><div className="min-w-0 flex-1"><p className="break-words font-medium">vs {match.opponent || 'Unknown opponent'}</p><p className="text-sm text-muted-foreground">{new Date(match.date || 0).toLocaleDateString()}</p></div><p className="shrink-0 text-sm tabular-nums text-muted-foreground">{match.goals} G · {match.assists} A</p></li>)}</ol>
+      </Section>
+      <Section title="Latest league match" onMore={() => onJump('news')}>
+        {resultQuery.loading && <Skeleton className="h-24" aria-label="Loading results" />}
+        {resultQuery.error && <Alert variant="destructive"><AlertDescription>{resultQuery.error.message} <Button variant="outline" onClick={() => { void resultQuery.refetch().catch(() => {}); }}>Retry results</Button></AlertDescription></Alert>}
+        {!resultQuery.loading && !resultQuery.error && results.length === 0 && <p className="text-muted-foreground">No results yet.</p>}
+        <div className="space-y-3">{results.map(item => <ResultRow key={item.id} r={item} home={item.homeTeam ?? teamById(item.homeTeamId)} away={item.awayTeam ?? teamById(item.awayTeamId)} />)}</div>
+      </Section>
+      <div className="lg:col-span-2"><Section title="What’s new" onMore={() => onJump('news')}>
+        {announcementQuery.loading && <Skeleton className="h-24" aria-label="Loading announcements" />}
+        {announcementQuery.error && <Alert variant="destructive"><AlertDescription>{announcementQuery.error.message} <Button variant="outline" onClick={() => { void announcementQuery.refetch().catch(() => {}); }}>Retry announcements</Button></AlertDescription></Alert>}
+        {!announcementQuery.loading && !announcementQuery.error && announcements.length === 0 && <p className="text-muted-foreground">No announcements yet.</p>}
+        <div className="space-y-4">{announcements.map(item => <div key={item.id}><h3 className="break-words font-semibold">{item.title}</h3><LazyText url={item.bodyUrl} label="Read announcement" /></div>)}</div>
+      </Section></div>
+    </div>
     <Accordion type="single" collapsible>
       <AccordionItem value="profile"><AccordionTrigger className="text-base">My profile</AccordionTrigger><AccordionContent className="space-y-4 text-base"><p className="text-sm text-muted-foreground">Your email is private. Discord manages your username and email.</p>
       {receipt && <p role="status" className="text-sm text-success">{receipt}</p>}
@@ -101,37 +125,21 @@ export const HomeView = ({ account, allTeams, currentSeason, onJump, onUpdate }:
         }}>{linksBusy ? 'Loading…' : 'Edit linked accounts'}</Button></>}{linksMsg && <Alert variant="destructive"><AlertDescription>{linksMsg}</AlertDescription></Alert>}</div>
       </div>
       </AccordionContent></AccordionItem>
-      <AccordionItem value="snapshot"><AccordionTrigger className="text-base">League snapshot</AccordionTrigger><AccordionContent className="space-y-4">
+      <AccordionItem value="league"><AccordionTrigger className="text-base">More from the league</AccordionTrigger><AccordionContent className="space-y-6 text-base">
     {summary.error && <Alert variant="destructive"><AlertDescription>League metrics are unavailable: {summary.error.message} <Button variant="outline" onClick={() => { void summary.refetch().catch(() => {}); }}>Try again</Button></AlertDescription></Alert>}
     <div className="grid grid-cols-2 gap-4 md:grid-cols-4"><QuickStat label="Your tier" value={account.ranking.ranked ? account.ranking.tier : 'Unranked'} /><QuickStat label="Games played" value={account.stats.games} /><QuickStat label="League players" value={summary.error ? 'Unavailable' : overview?.playerCount ?? '…'} /><QuickStat label="Active teams" value={summary.error ? 'Unavailable' : overview?.activeTeamCount ?? '…'} /></div>
-      </AccordionContent></AccordionItem>
-    </Accordion>
-    <Tabs defaultValue="announcements" className="space-y-5">
-      <TabsList aria-label="League updates" className="w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">{[["announcements", "News"], ["results", "Results"], ["fixtures", "Fixtures"], ["players", "Players"]].map(([value, label]) => <TabsTrigger key={value} value={value!} className="rounded-none border-b-2 border-transparent bg-transparent px-3 text-base data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none">{label}</TabsTrigger>)}</TabsList>
-      <TabsContent value="announcements"><Section title="Latest from the league" onMore={() => onJump('news')}>
-        {announcementQuery.loading && <Skeleton className="h-24" aria-label="Loading announcements" />}
-        {announcementQuery.error && <Alert variant="destructive"><AlertDescription>{announcementQuery.error.message} <Button variant="outline" onClick={() => { void announcementQuery.refetch().catch(() => {}); }}>Retry announcements</Button></AlertDescription></Alert>}
-        {!announcementQuery.loading && !announcementQuery.error && announcements.length === 0 && <p className="text-muted-foreground">No announcements yet.</p>}
-        <div className="space-y-4">{announcements.map(item => <div key={item.id}><h3 className="break-words font-semibold">{item.title}</h3><LazyText url={item.bodyUrl} label="Read announcement" /></div>)}</div>
-      </Section></TabsContent>
-      <TabsContent value="results"><Section title="Recent results" onMore={() => onJump('news')}>
-        {resultQuery.loading && <Skeleton className="h-24" aria-label="Loading results" />}
-        {resultQuery.error && <Alert variant="destructive"><AlertDescription>{resultQuery.error.message} <Button variant="outline" onClick={() => { void resultQuery.refetch().catch(() => {}); }}>Retry results</Button></AlertDescription></Alert>}
-        {!resultQuery.loading && !resultQuery.error && results.length === 0 && <p className="text-muted-foreground">No results yet.</p>}
-        <div className="space-y-3">{results.map(item => <ResultRow key={item.id} r={item} home={item.homeTeam ?? teamById(item.homeTeamId)} away={item.awayTeam ?? teamById(item.awayTeamId)} />)}</div>
-      </Section></TabsContent>
-      <TabsContent value="fixtures"><Section title="Upcoming fixtures" onMore={() => onJump('schedule')}>
+        <div className="grid items-start gap-6 lg:grid-cols-2"><Section title="Upcoming fixtures" onMore={() => onJump('schedule')}>
         {upcomingQuery.loading && <Skeleton className="h-24" aria-label="Loading fixtures" />}
         {upcomingQuery.error && <Alert variant="destructive"><AlertDescription>{upcomingQuery.error.message} <Button variant="outline" onClick={() => { void upcomingQuery.refetch().catch(() => {}); }}>Retry fixtures</Button></AlertDescription></Alert>}
         {!upcomingQuery.loading && !upcomingQuery.error && upcoming.length === 0 && <p className="text-muted-foreground">No upcoming fixtures.</p>}
         <div className="space-y-3">{upcoming.map(item => <div key={item.id} className="border-b py-3 last:border-0"><p className="text-sm text-muted-foreground">{item.date ? new Date(item.date).toLocaleString() : 'Date to be confirmed'}</p><p className="break-words font-medium">{(item.homeTeam ?? teamById(item.homeTeamId))?.name || 'TBD'} <span className="text-muted-foreground">vs</span> {(item.awayTeam ?? teamById(item.awayTeamId))?.name || 'TBD'}</p></div>)}</div>
-      </Section></TabsContent>
-      <TabsContent value="players"><Section title="Top ranked players" onMore={() => onJump('leaderboard')}>
+      </Section><Section title="Top ranked players" onMore={() => onJump('leaderboard')}>
         {summary.loading && <Skeleton className="h-24" aria-label="Loading ranked players" />}
         {summary.error && <p role="alert">Ranked players are unavailable.</p>}
         {!summary.loading && !summary.error && overview?.topPlayers.length === 0 && <p className="text-muted-foreground">No ranked players yet.</p>}
         <ol className="space-y-3">{overview?.topPlayers.map((player, index) => <li key={player.id} className="flex items-center gap-3 border-b py-3 last:border-0"><span className="text-lg font-semibold tabular-nums text-muted-foreground">{index + 1}</span><div className="min-w-0 flex-1"><p className="break-words font-medium">{player.username}</p><p className="text-sm text-muted-foreground">{player.position} · {player.stats.games} games</p></div><span className="text-xl font-semibold tabular-nums">{player.ranking.score}</span></li>)}</ol>
-      </Section></TabsContent>
-    </Tabs>
+      </Section></div>
+      </AccordionContent></AccordionItem>
+    </Accordion>
   </div>;
 };

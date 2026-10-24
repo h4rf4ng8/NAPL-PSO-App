@@ -1,7 +1,7 @@
 import { mergeSeasonPages } from '../dashboard/season-pages';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Calendar, Plus, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useEffect,useMemo,useState } from 'react';
+import { useEffect,useMemo,useRef,useState } from 'react';
 import { useRestPage } from '../../hooks/use-rest-page';
 import { PageButtons } from '../../components/PageButtons';
 import { readText } from '../../api/page';
@@ -41,6 +41,8 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const [editError, setEditError] = useState('');
   const [editingTeams, setEditingTeams] = useState<MatchTeam[]>([]);
   const [editing, setEditing] = useState<ScheduledMatch | null>(null);
+  const [loadingEditor, setLoadingEditor] = useState(false);
+  const editorRequest = useRef(0);
   const [generating, setGenerating] = useState(false);
   const [adding, setAdding] = useState(false);
   const isAdminUser = isAdmin(account);
@@ -57,13 +59,27 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const filtered = matches;
   const recordStringFor = (record: MatchSummary['homeRecord']) =>
     !account || !record || record.w + record.d + record.l === 0 ? null : `${record.w}W-${record.d}D-${record.l}L`;
+  useEffect(() => {
+    editorRequest.current++;
+    setLoadingEditor(false);
+    setEditing(null);
+    return () => { editorRequest.current++; };
+  }, [season, selectedWeek]);
   const openEdit = async (match: MatchSummary) => {
+    if (loadingEditor || editing || adding || generating) return;
+    const version = ++editorRequest.current;
+    setLoadingEditor(true);
     setEditError('');
     try {
       const [notes, streamUrl] = await Promise.all([readText(match.notesUrl), readText(`/api/schedule/${segment(match.id)}/links/stream-url`)]);
+      if (version !== editorRequest.current) return;
       setEditingTeams([match.homeTeam, match.awayTeam].filter((team): team is MatchTeam => !!team));
       setEditing({ ...match, notes, streamUrl });
-    } catch (error) { setEditError(error instanceof Error ? error.message : 'Could not load saved match.'); }
+    } catch (error) {
+      if (version === editorRequest.current) setEditError(error instanceof Error ? error.message : 'Could not load saved match.');
+    } finally {
+      if (version === editorRequest.current) setLoadingEditor(false);
+    }
   };
 
   // Group by week
@@ -95,9 +111,10 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         <div><h1 className="flex items-center gap-2 text-2xl font-semibold"><Calendar aria-hidden="true" className="size-6" /> Schedule</h1><p className="mt-1 text-sm text-muted-foreground">Fixtures, results, and match times.</p></div>
         <div className="flex flex-wrap gap-2">
           {seasons.length > 0 && <Select value={season} onValueChange={setSeason}><SelectTrigger className="w-full sm:w-44" aria-label="Schedule season"><SelectValue /></SelectTrigger><SelectContent>{seasons.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select>}
-          {isAdminUser && <><Button variant="outline" onClick={() => setAdding(true)}><Plus className="size-4" /> Add match</Button><Button onClick={() => setGenerating(true)}><Plus className="size-4" /> New season</Button></>}
+          {isAdminUser && <><Button variant="outline" disabled={loadingEditor} onClick={() => setAdding(true)}><Plus className="size-4" /> Add match</Button><Button disabled={loadingEditor} onClick={() => setGenerating(true)}><Plus className="size-4" /> New season</Button></>}
         </div>
       </div>
+      {loadingEditor && <p role="status" className="text-sm text-muted-foreground">Loading match editor…</p>}
       {(loadError || editError || seasonQuery.error) && <Alert variant="destructive"><AlertDescription>{loadError || editError || seasonQuery.error?.message}<Button variant="outline" onClick={page.restart}>Restart schedule</Button></AlertDescription></Alert>}
       {weekRange && weekRange.count >= 2 && weekRange.min !== null && weekRange.max !== null && <Card><CardContent className="flex flex-wrap items-center gap-3 p-4"><Label htmlFor="schedule-week">Week</Label><Input id="schedule-week" className="w-32" type="number" min={weekRange.min} max={weekRange.max} placeholder="All weeks" value={selectedWeek ?? ''} onChange={event => setSelectedWeek(event.target.value === '' ? null : Math.max(weekRange.min!, Math.min(weekRange.max!, Math.trunc(Number(event.target.value)))))} /><Button variant={selectedWeek === null ? 'secondary' : 'outline'} onClick={() => setSelectedWeek(null)}>All weeks</Button><div className="ml-auto flex items-center gap-2"><Button variant="outline" size="icon" aria-label="Previous week" disabled={selectedWeek === weekRange.min} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.max(weekRange.min!, w - 1))}><ChevronLeft className="size-4" /></Button><span className="text-sm text-muted-foreground">{selectedWeek === null ? `${weekRange.min}–${weekRange.max}` : `${selectedWeek} / ${weekRange.max}`}</span><Button variant="outline" size="icon" aria-label="Next week" disabled={selectedWeek === weekRange.max} onClick={() => setSelectedWeek(w => w === null ? weekRange.min : Math.min(weekRange.max!, w + 1))}><ChevronRight className="size-4" /></Button></div></CardContent></Card>}
       {(loading || seasonQuery.loading) ? <p role="status" className="py-8 text-center text-muted-foreground">Loading schedule…</p> : (filtered.length === 0 ? <Card><CardContent className="p-8 text-center text-sm text-muted-foreground">No matches scheduled for this season yet. {isAdminUser ? 'Add a match or create a new season to generate a round-robin.' : 'Fixtures will appear here when ready.'}</CardContent></Card> : <div className="space-y-6">{Object.keys(byWeek).map(Number).filter(wkNum => selectedWeek === null || wkNum === selectedWeek).sort((a, b) => a - b).map(wkNum => <section key={wkNum} className="space-y-3"><h2 className="flex items-center gap-2 font-semibold">Week {wkNum}<Badge variant="secondary">{byWeek[wkNum].length} matches</Badge></h2><div className="grid gap-3 xl:grid-cols-2">{byWeek[wkNum].map(m => {
@@ -105,7 +122,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         return <Card key={m.id} className="overflow-hidden"><CardContent className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3"><time className="text-sm text-muted-foreground" dateTime={m.scheduledDate ? new Date(m.scheduledDate).toISOString() : undefined}>{fmtDate(m.scheduledDate)}</time><Badge variant={m.status === 'completed' ? 'default' : 'secondary'}>{m.status === 'completed' ? 'Final' : m.status.charAt(0).toUpperCase() + m.status.slice(1)}</Badge></div>
           <div className="space-y-3 p-4">{[{ team: m.homeTeam, score: m.homeScore, record: m.homeRecord, side: 'Home' }, { team: m.awayTeam, score: m.awayScore, record: m.awayRecord, side: 'Away' }].map(({ team, score, record, side }) => <div key={side} className="flex items-center gap-3"><div className="flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted font-semibold" style={{ borderColor: team?.color || undefined }}>{team?.logoUrl ? <MediaImage src={mediaUrl(team.logoUrl)} alt="" className="size-8 object-contain" /> : team?.tag?.slice(0, 3) || '?'}</div><div className="min-w-0 flex-1"><p className="break-words font-medium">{team?.name || 'TBD'}</p><p className="text-xs text-muted-foreground">{side}{recordStringFor(record) && ` · ${recordStringFor(record)}`}</p></div>{played && <span className="text-2xl font-semibold tabular-nums">{score}</span>}</div>)}</div>
-          <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3"><LazyText url={m.notesUrl} label="Match notes" />{m.streamUrl && <Button asChild size="sm" variant="outline"><a href={mediaUrl(m.streamUrl)} target="_blank" rel="noopener noreferrer">Watch stream</a></Button>}{isAdminUser && <Button className="ml-auto" variant="outline" size="sm" onClick={() => { void openEdit(m); }}>Edit</Button>}</div>
+          <div className="flex flex-wrap items-center gap-2 border-t px-4 py-3"><LazyText url={m.notesUrl} label="Match notes" />{m.streamUrl && <Button asChild size="sm" variant="outline"><a href={mediaUrl(m.streamUrl)} target="_blank" rel="noopener noreferrer">Watch stream</a></Button>}{isAdminUser && <Button className="ml-auto" variant="outline" size="sm" disabled={loadingEditor} onClick={() => { void openEdit(m); }}>Edit</Button>}</div>
         </CardContent></Card>;
       })}</div></section>)}</div>)}
 
@@ -140,6 +157,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
       )}
       {editing && (
         <EditMatchModal
+          key={editing.id}
           match={editing}
           allTeams={editingTeams}
           onClose={() => setEditing(null)}

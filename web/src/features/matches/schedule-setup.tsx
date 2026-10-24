@@ -120,7 +120,7 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
   const teamById = (id: string | null | undefined) => id ? { name: selectedNames[id] ?? id, tag: selectedNames[id] ?? id } : undefined;
 
   return (
-    <ModalShell title="Generate season schedule" onClose={onClose} maxWidth="max-w-2xl">
+    <ModalShell title="Generate season schedule" onClose={busy ? undefined : onClose} maxWidth="max-w-2xl">
       <div className="space-y-5">
         <div className="space-y-2"><Label htmlFor="generation-season">Season name</Label><Input id="generation-season" value={seasonName} onChange={e => setSeasonName(e.target.value)} maxLength={160} /></div>
         <fieldset className="space-y-3">
@@ -210,7 +210,7 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
   };
 
   return (
-    <ModalShell title={`Edit match · Week ${match.week}`} onClose={onClose} maxWidth="max-w-xl">
+    <ModalShell title={`Edit match · Week ${match.week}`} onClose={busy ? undefined : onClose} maxWidth="max-w-xl">
       <div className="space-y-4">
         <p className="rounded-lg bg-muted p-3 text-center font-medium">{home?.name || '?'} vs {away?.name || '?'}</p>
         <div className="space-y-2"><Label htmlFor="match-date">Date & time</Label><Input id="match-date" type="datetime-local" value={dateInput} onChange={e => setDateInput(e.target.value)} /><p className="text-xs text-muted-foreground">Your local time. Leave empty if undecided.</p></div>
@@ -272,7 +272,7 @@ export const AddMatchModal = ({ existingSeasons = [], onClose, onSaved, defaultS
   };
 
   return (
-    <ModalShell title="Add match" onClose={onClose} maxWidth="max-w-xl">
+    <ModalShell title="Add match" onClose={busy ? undefined : onClose} maxWidth="max-w-xl">
       <div className="space-y-4">
         <div className="space-y-2"><Label htmlFor="add-season">Season</Label><Input id="add-season" value={season} onChange={e => setSeason(e.target.value)} list="existing-seasons" placeholder="Season 1" /><datalist id="existing-seasons">{existingSeasons.map(s => <option key={s} value={s} />)}</datalist><p className="text-xs text-muted-foreground">Choose an existing season or enter a new name.</p></div>
         <div className="space-y-2"><Label htmlFor="add-week">Week</Label><Input id="add-week" className="max-w-24" type="number" min="1" max="52" value={week} onChange={e => setWeek(Math.max(1, Number(e.target.value) || 1))} /></div>

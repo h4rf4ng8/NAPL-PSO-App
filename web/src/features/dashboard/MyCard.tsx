@@ -1,12 +1,17 @@
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Activity, Calendar, Edit3, Share2, Shield, Sparkles, Target, TrendingUp, Trophy, User, Zap } from 'lucide-react';
 import { TrophyHistory } from '../accounts/TrophyHistory';
 import type { Account } from '../accounts/models';
 import type { TeamSummary as Team } from '../teams/models';
 import { AWARD_BY_ID, AwardIcon } from '../../components/Icons';
 import { PlayerCard } from '../../components/PlayerCard';
-import { Metric, RecordBox } from '../../components/Display';
-import { C } from '../../theme/theme';
+import { Metric, RecordBox, TeamPill } from '../../components/Display';
+
 import { getStatsForSeason } from '../../utils/rankings';
+import { Button } from '../../components/ui/button';
+
 
 export type CardAction = 'share' | 'image' | 'pos';
 interface Props {
@@ -21,144 +26,52 @@ export function MyCard({ account, season, currentSeason, allSeasons, setSeason, 
   const gpg = games > 0 ? (seasonStats.goals / games).toFixed(2) : '0.00';
   const apg = games > 0 ? (seasonStats.assists / games).toFixed(2) : '0.00';
   const accountForCard = { ...account, stats: seasonStats, _cardSeason: season };
-  return (
-          <div className="space-y-6">
-            {/* SEASON FILTER BANNER */}
-            <div className="rounded-xl p-3 flex items-center justify-between gap-3 flex-wrap" style={{
-              background: `linear-gradient(135deg, ${C.brandNavy} 0%, ${C.navyLight}dd 100%)`,
-              border: `1px solid ${C.navyLight}`,
-              boxShadow: `0 2px 12px ${C.brandNavy}22`,
-            }}>
-              <div className="flex items-center gap-2">
-                <Calendar size={16} style={{ color: C.goldLight }} />
-                <span className="font-mono text-[10px] tracking-[0.25em]" style={{ color: `${C.onColor}99` }}>VIEWING STATS FOR</span>
-                <span className="font-display text-xl tracking-wider" style={{ color: C.goldLight }}>
-                  {season === 'all' ? 'ALL TIME' : `SEASON ${season}`}
-                </span>
-              </div>
-              <div className="flex gap-1 flex-wrap">
-                <button
-                  onClick={() => setSeason('all')}
-                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded transition-all"
-                  style={{
-                    background: season === 'all' ? C.goldLight : `${C.brandNavyDeep}88`,
-                    color: season === 'all' ? C.brandNavy : `${C.onColor}cc`,
-                    border: `1px solid ${season === 'all' ? C.goldLight : C.onColor}33`,
-                  }}
-                >ALL TIME</button>
-                {allSeasons.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setSeason(s)}
-                    className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded transition-all"
-                    style={{
-                      background: season === s ? C.goldLight : `${C.brandNavyDeep}88`,
-                      color: season === s ? C.brandNavy : `${C.onColor}cc`,
-                      border: `1px solid ${season === s ? C.goldLight : C.onColor}33`,
-                    }}
-                  >{s}{s === currentSeason ? ' ●' : ''}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid lg:grid-cols-[auto_1fr] gap-6 items-start">
-              <div className="flex flex-col items-center gap-3">
-                <PlayerCard account={accountForCard} size="lg" team={myTeam} />
-                <div className="flex gap-2 flex-wrap justify-center">
-                  <button
-                    onClick={() => onEdit('share')}
-                    className="px-4 py-2 font-heading tracking-wider text-xs flex items-center gap-2 rounded transition-all hover:scale-105"
-                    style={{
-                      background: C.brandNavy, color: C.onColor,
-                      boxShadow: `0 2px 8px ${C.brandNavy}66`,
-                    }}
-                  ><Share2 size={12} /> SHARE CARD</button>
-                  <button
-                    onClick={() => onEdit('image')}
-                    className="px-4 py-2 font-heading tracking-wider text-xs flex items-center gap-2 rounded transition-all"
-                    style={{
-                      background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
-                    }}
-                  ><User size={12} /> IMAGE</button>
-                  <button
-                    onClick={() => onEdit('pos')}
-                    className="px-4 py-2 font-heading tracking-wider text-xs flex items-center gap-2 rounded transition-all"
-                    style={{
-                      background: `${C.navyLight}66`, color: C.cream, border: `1px solid ${C.navyLight}`,
-                    }}
-                  ><Edit3 size={12} /> POSITION</button>
-                </div>
-                <p className="text-xs" style={{ color: `${C.cream}aa` }}>Your Discord username updates when you sign in.</p>
-                {myTeam && (
-                  <div className="text-center mt-1">
-                    <div className="font-mono text-[9px] tracking-[0.3em]" style={{ color: `${C.cream}66` }}>PLAYS FOR</div>
-                    <div className="font-display text-lg tracking-wider" style={{ color: myTeam.color || C.greenLight }}>{myTeam.name.toUpperCase()}</div>
-                  </div>
-                )}
-                {(account.awards || []).length > 0 && (
-                  <div className="rounded-lg px-3 py-2.5 w-full max-w-[300px]" style={{
-                    background: `linear-gradient(135deg, ${C.gold}11 0%, ${C.white} 100%)`,
-                    border: `1px solid ${C.gold}66`,
-                    boxShadow: `0 2px 8px ${C.gold}33`,
-                  }}>
-                    <div className="font-mono text-[9px] tracking-[0.3em] text-center mb-2" style={{ color: `${C.gold}cc` }}>
-                      TROPHY CABINET
-                    </div>
-                    <div className="space-y-1">
-                      {(account.awards || []).map((aw, i) => {
-                        const a = AWARD_BY_ID[aw.awardId];
-                        return (
-                          <div key={i} className="flex items-center gap-2">
-                            <AwardIcon awardId={aw.awardId} size={20} />
-                            <span className="font-heading text-[11px] tracking-wider flex-1" style={{ color: C.cream }}>
-                              {(a?.name ?? aw.awardId).toUpperCase()}
-                            </span>
-                            <span className="font-mono text-[10px]" style={{ color: C.goldLight }}>{aw.season}</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-display text-2xl tracking-wider mb-3 flex items-center gap-2">
-                    <Sparkles size={16} style={{ color: C.goldLight }} />
-                    CAREER OVERVIEW
-                    {season !== 'all' && (
-                      <span className="font-mono text-[9px] px-2 py-0.5 rounded tracking-wider" style={{
-                        background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}44`,
-                      }}>{season}</span>
-                    )}
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <Metric icon={<Activity />} label="GAMES" value={games} accent={C.greenLight} />
-                    <Metric icon={<TrendingUp />} label="WIN RATE" value={`${wr}%`} accent={C.greenLight} />
-                    <Metric icon={<Target />} label="GOALS" value={seasonStats.goals || 0} accent={C.redLight} />
-                    <Metric icon={<Zap />} label="ASSISTS" value={seasonStats.assists || 0} accent={C.goldLight} />
-                    <Metric icon={<Target />} label="G / GAME" value={gpg} accent={C.redLight} />
-                    <Metric icon={<Zap />} label="A / GAME" value={apg} accent={C.goldLight} />
-                    <Metric icon={<Shield />} label="CLEAN SHEETS" value={seasonStats.cleanSheets || 0} accent={C.greenLight} />
-                    <Metric icon={<Trophy />} label="AWARDS" value={account.awardCount ?? account.awards?.length ?? 0} accent={C.goldLight} />
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="font-display text-2xl tracking-wider mb-3 flex items-center gap-2">
-                    <Trophy size={16} style={{ color: C.goldLight }} /> RECORD
-                  </h3>
-                  <div className="grid grid-cols-3 gap-2">
-                    <RecordBox value={seasonStats.wins || 0} label="WINS" color={C.greenLight} />
-                    <RecordBox value={seasonStats.draws || 0} label="DRAWS" color={C.goldLight} />
-                    <RecordBox value={seasonStats.losses || 0} label="LOSSES" color={C.redLight} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <TrophyHistory accountId={account.id} />
+  return <div className="space-y-6">
+    <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex items-center gap-2 text-sm font-medium"><Calendar className="size-4 text-primary" />Viewing {season === 'all' ? 'all-time statistics' : `season ${season}`}</div>
+      <div className="w-full sm:w-56">
+        <Select value={season} onValueChange={setSeason}>
+          <SelectTrigger aria-label="Card season"><SelectValue /></SelectTrigger>
+          <SelectContent><SelectItem value="all">All time</SelectItem>{allSeasons.map(value => <SelectItem key={value} value={value}>{value}{value === currentSeason ? ' (current)' : ''}</SelectItem>)}</SelectContent>
+        </Select>
+      </div>
+    </Card>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+      <div className="flex min-w-0 flex-col items-center gap-4">
+        <div className="w-full max-w-[320px] [&>.flip-card]:aspect-[320/510] [&>.flip-card]:!h-auto [&>.flip-card]:!w-full [&_.flip-card-face>svg]:size-full"><PlayerCard account={accountForCard} size="lg" team={myTeam} /></div>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={() => onEdit('share')}><Share2 />Share card</Button>
+          <Button variant="outline" onClick={() => onEdit('image')}><User />Image</Button>
+          <Button variant="outline" onClick={() => onEdit('pos')}><Edit3 />Position</Button>
+        </div>
+        <p className="text-center text-xs text-muted-foreground">Your Discord username updates when you sign in.</p>
+        {myTeam && <div className="text-center"><p className="mb-2 text-xs text-muted-foreground">Plays for</p><TeamPill team={myTeam} fallback={null} /></div>}
+        {(account.awards || []).length > 0 && <Card className="w-full space-y-3 p-4">
+          <h3 className="font-semibold">Trophy cabinet</h3>
+          {(account.awards || []).map((award, index) => <div key={index} className="flex items-center gap-2 text-sm"><AwardIcon awardId={award.awardId} size={20} /><span className="min-w-0 flex-1">{AWARD_BY_ID[award.awardId]?.name ?? award.awardId}</span><Badge variant="secondary">{award.season}</Badge></div>)}
+        </Card>}
+      </div>
+      <div className="min-w-0 space-y-6">
+        <section className="space-y-3">
+          <h3 className="flex items-center gap-2 text-lg font-semibold"><Sparkles className="size-5 text-primary" />Career overview{season !== 'all' && <Badge variant="secondary">{season}</Badge>}</h3>
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            <Metric icon={<Activity />} label="Games" value={games} />
+            <Metric icon={<TrendingUp />} label="Win rate" value={`${wr}%`} />
+            <Metric icon={<Target />} label="Goals" value={seasonStats.goals || 0} />
+            <Metric icon={<Zap />} label="Assists" value={seasonStats.assists || 0} />
+            <Metric icon={<Target />} label="Goals / game" value={gpg} />
+            <Metric icon={<Zap />} label="Assists / game" value={apg} />
+            <Metric icon={<Shield />} label="Clean sheets" value={seasonStats.cleanSheets || 0} />
+            <Metric icon={<Trophy />} label="Awards" value={account.awardCount ?? account.awards?.length ?? 0} />
           </div>
-
-  );
+        </section>
+        <section className="space-y-3"><h3 className="text-lg font-semibold">Record</h3><div className="grid grid-cols-3 gap-3">
+          <RecordBox value={seasonStats.wins || 0} label="Wins" color="hsl(var(--success))" />
+          <RecordBox value={seasonStats.draws || 0} label="Draws" color="hsl(var(--warning))" />
+          <RecordBox value={seasonStats.losses || 0} label="Losses" color="hsl(var(--destructive))" />
+        </div></section>
+      </div>
+    </div>
+    <TrophyHistory accountId={account.id} />
+  </div>;
 }

@@ -4,7 +4,11 @@ import type { Account, PositionRequest } from './models';
 import { ModalShell } from '../../components/Dialog';
 import { request } from '../../api/http';
 import type { Page } from '../../api/page';
-import { C } from '../../theme/theme';
+import { Button } from '../../components/ui/button';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
+import { Label } from '../../components/ui/label';
+import { RadioGroup, RadioGroupItem } from '../../components/ui/radio-group';
+import { Textarea } from '../../components/ui/textarea';
 
 import { POSITIONS } from '../../utils/league';
 
@@ -14,6 +18,7 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
   const [reason, setReason] = useState('');
   const [pending, setPending] = useState<Pick<PositionRequest, 'id' | 'toPos' | 'fromPos'> | null>(null);   // {toPos} if request is already pending
   const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
@@ -31,13 +36,13 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
   }, [account.id]);
 
   const handleSubmit = async () => {
+    if (busy || submitted || pending) return;
     setError(''); setInfo('');
     if (pos === account.position) { onClose(); return; }
     setBusy(true);
     try {
       await accountApi.createPositionRequest({ toPos: pos, reason: reason.trim() });
-      setInfo('✓ Request submitted — an admin will review it shortly.');
-      setTimeout(() => onClose(), 1800);
+      setSubmitted(true);
     } catch (error_) {
       setError('Could not save: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
@@ -57,94 +62,38 @@ export const EditPositionModal = ({ account, onClose }: { account: Account; onCl
     setBusy(false);
   };
 
-  return (
-    <ModalShell onClose={onClose} title="POSITION" maxWidth="max-w-sm">
-      {/* Current pending request — show status + withdraw option */}
-      {pending && (
-        <div className="rounded-lg p-3 mb-3" style={{
-          background: `${C.gold}22`, border: `1px solid ${C.gold}66`,
-        }}>
-          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: C.goldLight }}>
-            ◆ PENDING ADMIN REVIEW
-          </div>
-          <div className="font-body text-sm mb-2" style={{ color: C.cream }}>
-            Your request to change from <b>{pending.fromPos}</b> → <b style={{ color: C.goldLight }}>{pending.toPos}</b> is awaiting approval.
-          </div>
-          <button
-            onClick={withdrawRequest}
-            disabled={busy}
-            className="px-3 py-1.5 font-heading tracking-wider text-xs rounded disabled:opacity-50"
-            style={{ background: `${C.red}66`, color: C.cream }}
-          >{busy ? 'WITHDRAWING…' : 'WITHDRAW REQUEST'}</button>
-        </div>
-      )}
+  if (submitted) return <ModalShell onClose={onClose} title="Change position" maxWidth="max-w-md">
+    <Alert role="status"><AlertTitle>Request submitted</AlertTitle><AlertDescription>An administrator will review your request to change to {pos}. Your current position stays unchanged until it is approved.</AlertDescription></Alert>
+    <Button onClick={onClose}>Done</Button>
+  </ModalShell>;
 
-      {/* Approval notice — tells player what will happen */}
-      {!pending && (
-        <div className="rounded-lg p-3 mb-3" style={{
-          background: `${C.brandNavy}44`, border: `1px solid ${C.navyLight}66`,
-        }}>
-          <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: C.goldLight }}>
-            ◆ NEEDS APPROVAL
-          </div>
-          <div className="font-body text-sm" style={{ color: C.cream }}>
-            You're currently <b>{account.position}</b>{games > 0 ? ` with ${games} game${games === 1 ? '' : 's'} played` : ''}.
-            Position changes require admin approval to keep stats consistent and prevent abuse.
-          </div>
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2 mb-2">
-        {POSITIONS.map(p => {
-          const active = pos === p;
-          const disabled = !!pending;
-          return (
-            <button
-              key={p}
-              disabled={disabled}
-              onClick={() => setPos(p)}
-              className="py-4 font-display text-2xl transition-all rounded disabled:opacity-40"
-              style={{
-                background: active ? C.green : `${C.navyDeep}`,
-                color: active ? C.onColor : `${C.cream}88`,
-                border: `1px solid ${active ? C.green : C.navyLight}66`,
-                boxShadow: active ? `0 2px 8px ${C.green}66` : 'none',
-              }}
-            >{p}</button>
-          );
-        })}
-      </div>
-      {/* FLEX hint */}
-      <div className="font-body text-sm mb-3 leading-relaxed px-1" style={{ color: C.cream }}>
-        Select <b style={{ color: C.goldLight }}>FLEX</b> if you regularly play both forward and defense — your stats will be tracked more accurately.
-      </div>
-
-      {/* Reason field — shown whenever a change is being prepared */}
-      {!pending && pos !== account.position && (
-        <textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value.slice(0, 200))}
-          placeholder="Optional: why do you want to change position? (max 200 chars)"
-          className="w-full px-3 py-2 font-body text-sm rounded mb-3"
-          style={{ background: C.white, border: `1px solid ${C.navyLight}`, color: C.brandNavy, resize: 'vertical', minHeight: 60 }}
-        />
-      )}
-
-      {error && <div className="font-mono text-xs mb-2 px-3 py-2 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
-      {info && <div className="font-mono text-xs mb-2 px-3 py-2 rounded" style={{ background: `${C.green}22`, color: C.greenLight }}>{info}</div>}
-
-      {!pending && (
-        <button
-          onClick={handleSubmit}
-          disabled={busy || pos === account.position}
-          className="w-full py-3 font-display tracking-widest text-lg rounded disabled:opacity-50"
-          style={{
-            background: `linear-gradient(135deg, ${C.green} 0%, ${C.greenLight} 100%)`,
-            color: C.onColor,
-            boxShadow: `0 4px 16px ${C.green}66`,
-          }}
-        >{busy ? 'SAVING…' : 'SUBMIT REQUEST'}</button>
-      )}
-    </ModalShell>
-  );
+  return <ModalShell onClose={onClose} title="Change position" maxWidth="max-w-md">
+    <div className="space-y-5">
+      <Alert>
+        <AlertTitle>{pending ? 'Pending admin review' : 'Admin approval required'}</AlertTitle>
+        <AlertDescription>
+          {pending ? <>Your request from <strong>{pending.fromPos}</strong> to <strong>{pending.toPos}</strong> is awaiting approval.</> :
+            <>Your current position is <strong>{account.position}</strong>{games > 0 ? ` with ${games} games played` : ''}. Every position change is reviewed to keep player statistics consistent.</>}
+        </AlertDescription>
+        {pending && <Button className="mt-3" variant="outline" disabled={busy} onClick={withdrawRequest}>{busy ? 'Withdrawing…' : 'Withdraw request'}</Button>}
+      </Alert>
+      <fieldset className="space-y-3" disabled={!!pending || busy}>
+        <legend className="mb-3 text-sm font-medium">Requested position</legend>
+        <RadioGroup aria-label="Requested position" value={pos} onValueChange={setPos} disabled={!!pending || busy} className="grid grid-cols-2 gap-2">
+          {POSITIONS.map(position => <Label key={position} htmlFor={`position-${position}`} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-accent">
+            <RadioGroupItem id={`position-${position}`} value={position} />{position}
+          </Label>)}
+        </RadioGroup>
+        <p className="text-sm text-muted-foreground">Choose FLEX if you regularly play both forward and defense.</p>
+      </fieldset>
+      {!pending && pos !== account.position && <div className="space-y-2">
+        <Label htmlFor="position-reason">Reason <span className="font-normal text-muted-foreground">(optional)</span></Label>
+        <Textarea id="position-reason" value={reason} maxLength={200} disabled={busy} onChange={event => setReason(event.target.value.slice(0, 200))} placeholder="Why would you like to change position?" />
+        <p className="text-xs text-muted-foreground">{reason.length}/200 characters</p>
+      </div>}
+      {error && <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>}
+      {info && <Alert role="status"><AlertDescription>{info}</AlertDescription></Alert>}
+      {!pending && <Button className="w-full" onClick={handleSubmit} disabled={busy || pos === account.position}>{busy ? 'Submitting…' : 'Submit request'}</Button>}
+    </div>
+  </ModalShell>;
 };

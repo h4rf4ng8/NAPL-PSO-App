@@ -1,4 +1,5 @@
 import { useId, type ReactNode } from 'react';
+import { Star } from 'lucide-react';
 import { POS } from '@napl/contracts/league';
 import { AWARD } from '@napl/contracts/accounts';
 
@@ -136,20 +137,15 @@ export const AwardIcon = ({ awardId, size = 20 }: { awardId: string; size?: numb
   return awardId === AWARD.PLAYMAKER ? <GoldStar size={size} /> : null;
 };
 
-// A tiny reusable star badge for anywhere a captain's name appears in HTML/JSX
-// (as opposed to the SVG card which draws it inline). Black star, thin white
-// outline via text-shadow so it's visible on any bg.
+// Captain badge uses explicit SVG colors so it also exports without CSS or emoji fonts.
 export const CaptainStar = ({ size = 12, title = 'Team Captain' }: { size?: number; title?: string }) => (
-  <span
-    title={title}
+  <Star
+    size={size}
+    role="img"
     aria-label={title}
-    style={{
-      display: 'inline-block',
-      color: '#000',
-      fontSize: size,
-      lineHeight: 1,
-      textShadow: '0 0 2px #fff, 0 0 1px #fff, 1px 1px 0 rgba(255,255,255,0.6), -1px -1px 0 rgba(255,255,255,0.6)',
-      marginRight: 2,
-    }}
-  >★</span>
+    fill="#000"
+    stroke="#fff"
+    strokeWidth={1}
+    style={{ display: 'inline-block', marginRight: 2 }}
+  ><title>{title}</title></Star>
 );

@@ -3,7 +3,7 @@ import type { Account, TeamSummary as Team } from '../../api/models';
 import { cardTier } from '../../utils/rankings';
 import { cardDimensions, cardPalette, cardPath, MetallicDefs, MetallicSurface, CardOutline } from './artwork';
 
-import { AWARD_BY_ID } from '../Icons';
+import { AWARD_BY_ID, ChampionTrophy } from '../Icons';
 export const CardBack = ({ account, team, size }: { account: Account; team: Team | null; size: string }) => {
   const tier = cardTier(account.ranking.tier);
   const palette = cardPalette(tier.name);
@@ -49,10 +49,12 @@ export const CardBack = ({ account, team, size }: { account: Account; team: Team
       ) : cabinetItems.map((item, i) => {
         const y = 130 + i * 22;
         if (item.kind === 'champ') {
-          const label = item.placement === 'runner_up' ? 'RUNNER-UP' : 'CHAMPION';
+          const { label, tone } = item.placement === 'runner_up'
+            ? { label: 'RUNNER-UP', tone: 'silver' }
+            : { label: 'CHAMPION', tone: 'gold' };
           return (
             <g key={`item-${i}`} transform={`translate(22 ${y})`}>
-              <text x="0" y="0" fontSize="14" fill={palette.awardText}>🏆</text>
+              <g transform="translate(0 -16)"><ChampionTrophy size={14} tone={tone} /></g>
               <text x="22" y="0" fontFamily="Barlow Condensed, sans-serif" fontWeight="700" fontSize="13" fill={palette.text}>{label}</text>
               {item.season && (
                 <text x="276" y="0" fontFamily="Russo One, sans-serif" fontSize="10" fill={palette.text} opacity="0.8" textAnchor="end">{item.season}</text>

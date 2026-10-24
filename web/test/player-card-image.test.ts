@@ -107,7 +107,8 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
     act(()=>{view=create(React.createElement(ShareableCardContent,{account,onClose(){}}),{
       createNodeMock:element=>element.props.className?.includes('flip-card') ? {querySelector:()=>new Svg()} : null,
     });});
-    const share = view!.root.findAllByType('button')[0]!;
+    const actionButtons = () => view!.root.findAllByType('button').filter(button => !button.props['aria-label']);
+    const share = actionButtons()[0]!;
     await act(async()=>{await share.props.onClick();});
     assert.equal(rasterizations,1);
     assert.equal(downloads,1);
@@ -122,12 +123,12 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
     assert.equal(share.props.disabled, false);
     assert.doesNotMatch(JSON.stringify(view!.toJSON()), /Could not share/);
     canvasAvailable = false;
-    await act(async()=>{await view!.root.findAllByType('button')[1]!.props.onClick();});
+    await act(async()=>{await actionButtons()[1]!.props.onClick();});
     assert.equal(share.props.disabled, false);
     assert.match(JSON.stringify(view!.toJSON()), /Canvas is unavailable/);
     canvasAvailable = true;
     exportAvailable = false;
-    await act(async()=>{await view!.root.findAllByType('button')[1]!.props.onClick();});
+    await act(async()=>{await actionButtons()[1]!.props.onClick();});
     assert.equal(share.props.disabled, false);
     assert.match(JSON.stringify(view!.toJSON()), /Export failed/);
     exportAvailable = true;
@@ -142,7 +143,7 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
         oldClearTimeout(timer);
       }) as typeof clearTimeout},
     });
-    await act(async()=>{await view!.root.findAllByType('button')[2]!.props.onClick();});
+    await act(async()=>{await actionButtons()[2]!.props.onClick();});
     assert.ok(copiedTimer);
     assert.match(JSON.stringify(view!.toJSON()), /Copied/);
     const drawsBeforeClose = rasterizations;
@@ -150,8 +151,8 @@ test('native share fallback rasterizes once, downloads the same PNG at 960 by 15
     let pending: Promise<void>;
     act(() => { pending = share.props.onClick(); });
     await act(async () => { await Promise.resolve(); });
-    assert.equal(view!.root.findAllByType('button')[0]!.props.disabled, true);
-    act(() => view!.root.findAllByType('button').at(-1)!.props.onClick());
+    assert.equal(actionButtons()[0]!.props.disabled, true);
+    act(() => actionButtons().at(-1)!.props.onClick());
     await act(async () => { await pending!; });
     assert.equal(rasterizations, drawsBeforeClose);
     assert.equal(downloads, 1);

@@ -28,7 +28,7 @@ export const AdminsManager = () => {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<AdminPlayer | null>(null);
   const [removing, setRemoving] = useState<RoleAssignment | null>(null);
-  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search=' + encodeURIComponent(search));
+  const playerPage = useRestPage<AdminPlayer>('/api/accounts?search=' + encodeURIComponent(search), 50);
   const adminIds = new Set(dynamicAdmins.map(admin => admin.userId));
   const candidates = (playerPage.data?.nodes ?? []).filter(player => !adminIds.has(player.id));
 

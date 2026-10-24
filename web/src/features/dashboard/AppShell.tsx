@@ -86,7 +86,7 @@ export function AppShell({ title, navigation, toolbar, children }: { title: stri
         <h1 id="page-heading" ref={heading} tabIndex={-1} className="min-w-0 flex-1 text-2xl font-semibold tracking-tight outline-none">{title}</h1>
         <div className="flex max-w-full flex-wrap items-center justify-end gap-2">{toolbar}</div>
       </header>
-      <main id="main-content" className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 lg:p-6">{children}</main>
+      <section id="main-content" aria-labelledby="page-heading" className="mx-auto w-full min-w-0 max-w-7xl space-y-6 p-4 lg:p-6">{children}</section>
     </SidebarInset>
   </SidebarProvider>;
 }

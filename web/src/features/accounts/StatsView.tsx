@@ -34,7 +34,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   // grows past 50 players.
   const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
-    sortBy, sortDir, first: 50,
+    sortBy, sortDir, first: 50, after: null,
   } });
   // Keep calling fetchMore while there's another page. Apollo's updateQuery
   // concatenates nodes into the cached first-page result, so `data.leaderboard.nodes`

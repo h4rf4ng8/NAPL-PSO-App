@@ -55,8 +55,11 @@ test('captain lineup editing waits for every selected-team roster page to auto-l
  // First page arrives with hasNextPage: true. Auto-pagination fires the next call.
  await act(async()=>{first.resolve({teamPlayers:graphPage([card('captain')],true)});await tick();});
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
- // Second (final) page arrives — now the full roster is in and captain controls activate.
- await act(async()=>{second.resolve({teamPlayers:graphPage([card('captain'),card('other')])});await tick();});
+ // Second (final) page arrives with only the NEW rows (cursor-pagination
+ // semantics). The client-side merge concatenates nodes, so the merged roster
+ // becomes [captain, other]. Apollo + React need several microtasks to settle
+ // the fetchMore result before isCaptain flips to true.
+ await act(async()=>{second.resolve({teamPlayers:graphPage([card('other')])});await tick();await tick();await tick();});
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,true);
  assert.equal(view!.root.findByType(TeamRosterFormation).props.allPlayers.length,2);
  // The "Load more roster cards" button is gone with the new auto-pagination.

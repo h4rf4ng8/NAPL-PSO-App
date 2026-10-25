@@ -40,17 +40,24 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
     variables: { scope, search, status: scope ? null : 'approved', first: 50 },
   });
   useEffect(() => {
-    if (!data?.teamSummaries.pageInfo.hasNextPage) return;
+    const page = data?.teamSummaries;
+    const endCursor = page?.pageInfo?.endCursor;
+    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
     void fetchMore({
-      variables: { after: data.teamSummaries.pageInfo.endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => ({
-        teamSummaries: {
-          ...fetchMoreResult.teamSummaries,
-          nodes: [...previous.teamSummaries.nodes, ...fetchMoreResult.teamSummaries.nodes],
-        },
-      }),
+      variables: { after: endCursor },
+      updateQuery: (previous, { fetchMoreResult }) => {
+        const previousBoard = previous.teamSummaries;
+        const nextBoard = fetchMoreResult.teamSummaries;
+        if (!nextBoard) return previous;
+        return {
+          teamSummaries: {
+            ...nextBoard,
+            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
+          },
+        };
+      },
     }).catch((loadError: unknown) => { console.error('team fetchMore failed:', loadError); });
-  }, [data?.teamSummaries.pageInfo.endCursor, data?.teamSummaries.pageInfo.hasNextPage, fetchMore]);
+  }, [data?.teamSummaries?.pageInfo?.endCursor, data?.teamSummaries?.pageInfo?.hasNextPage, fetchMore]);
   const refreshed = async () => { const me = account ? await auth.getCurrent() : null; if (me) onUpdate?.(me); await refetch(); };
   const invitation = async (id: string, accept: boolean) => {
     setActionError(''); try { await teamApi.respondInvitation(id, accept); await refreshed(); } catch (error) { setActionError(error instanceof Error ? error.message : 'Could not respond to invitation.'); }
@@ -63,14 +70,14 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
     {loading && <p role="status">Loading teams…</p>}
     {error && <p role="alert">{error.message}<button onClick={() => { void refetch().catch(() => {}); }}>Restart teams</button></p>}
     {actionError && <p role="alert">{actionError}</p>}
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{data?.teamSummaries.nodes.map(team => <section key={team.id} className="asl-team-card border rounded-xl p-4">
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{data?.teamSummaries?.nodes?.map(team => <section key={team.id} className="asl-team-card border rounded-xl p-4">
       {team.logoUrl && <MediaImage src={team.logoUrl} alt={`${team.name} logo`} className="w-20 h-20 object-contain" />}
       <h4 className="font-display text-2xl">{team.name} [{team.tag}]</h4><p>{team.memberCount} players · {team.status}</p><p>Captain: {team.ownerUsername}</p>
       <button onClick={() => setSelected(team.id)}>View roster and team</button>
       {team.viewerInvitation === 'pending' && <div><p>You are invited to this team.</p><button onClick={() => { void invitation(team.id, true); }}>Accept</button><button onClick={() => { void invitation(team.id, false); }}>Decline</button></div>}
     </section>)}</div>
-    {data?.teamSummaries.totalCount === 0 && <p>No teams match this view.</p>}
-    {data?.teamSummaries.pageInfo.hasNextPage && <p role="status">Loading more teams…</p>}
+    {data?.teamSummaries?.totalCount === 0 && <p>No teams match this view.</p>}
+    {data?.teamSummaries?.pageInfo?.hasNextPage && <p role="status">Loading more teams…</p>}
     {account && <TeamStandings />}
     {showSubmit && account && <SubmitTeamModal account={account} onClose={() => setShowSubmit(false)} onSave={() => { void refreshed(); }} />}
     {selected && <TeamDetails key={selected} id={selected} account={account} onClose={() => setSelected(null)} onChanged={refreshed} />}
@@ -88,18 +95,25 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
   // for a manual "Load more" click.
   const roster = useQuery(TeamPlayersDocument, { variables: { teamId: id, first: 50, after: null } });
   useEffect(() => {
-    if (!roster.data?.teamPlayers.pageInfo.hasNextPage) return;
+    const page = roster.data?.teamPlayers;
+    const endCursor = page?.pageInfo?.endCursor;
+    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
     void roster.fetchMore({
-      variables: { after: roster.data.teamPlayers.pageInfo.endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => ({
-        teamPlayers: {
-          ...fetchMoreResult.teamPlayers,
-          nodes: [...previous.teamPlayers.nodes, ...fetchMoreResult.teamPlayers.nodes],
-        },
-      }),
+      variables: { after: endCursor },
+      updateQuery: (previous, { fetchMoreResult }) => {
+        const previousBoard = previous.teamPlayers;
+        const nextBoard = fetchMoreResult.teamPlayers;
+        if (!nextBoard) return previous;
+        return {
+          teamPlayers: {
+            ...nextBoard,
+            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
+          },
+        };
+      },
     }).catch((loadError: unknown) => { console.error('roster fetchMore failed:', loadError); });
-  }, [roster.data?.teamPlayers.pageInfo.endCursor, roster.data?.teamPlayers.pageInfo.hasNextPage, roster.fetchMore]);
-  const players = (roster.data?.teamPlayers.nodes ?? []).map(mapCardAccount);
+  }, [roster.data?.teamPlayers?.pageInfo?.endCursor, roster.data?.teamPlayers?.pageInfo?.hasNextPage, roster.fetchMore]);
+  const players = (roster.data?.teamPlayers?.nodes ?? []).map(mapCardAccount);
   const [selected, setSelected] = useState<PlayerSelection | null>(null);
   const [error, setError] = useState('');
   const team = detail.data;
@@ -119,12 +133,12 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
       {team.status === 'rejected' && team.rejectionReasonUrl && <LazyText url={team.rejectionReasonUrl} label="Read review reason" />}
       {team.status === 'rejected' && account?.username === team.ownerUsername && <button onClick={() => { void dismiss(); }}>Dismiss and resubmit</button>}
       {account?.teamId === id && account.username !== team.ownerUsername && <button onClick={() => { void leave(); }}>Leave team</button>}
-      <h4>ROSTER ({roster.data?.teamPlayers.totalCount ?? '…'})</h4>
-      {roster.data?.teamPlayers.pageInfo.hasNextPage && <p role="status">Loading more roster cards…</p>}
+      <h4>ROSTER ({roster.data?.teamPlayers?.totalCount ?? '…'})</h4>
+      {roster.data?.teamPlayers?.pageInfo?.hasNextPage && <p role="status">Loading more roster cards…</p>}
       {/* isCaptain stays guarded on roster being fully loaded + error-free so
           captains don't edit lineups against a partial roster, but the auto-
           fetch above means that state resolves without any manual click. */}
-      <TeamRosterFormation team={team} allPlayers={players} onCardClick={player => setSelected({ id: player.id })} isCaptain={isTeamCaptain(account, team) && !!roster.data && !roster.loading && !roster.error && !error && !roster.data.teamPlayers.pageInfo.hasNextPage} onLineupSaved={() => { void detail.reload(); }} />
+      <TeamRosterFormation team={team} allPlayers={players} onCardClick={player => setSelected({ id: player.id })} isCaptain={isTeamCaptain(account, team) && !!roster.data && !roster.loading && !roster.error && !error && !roster.data.teamPlayers?.pageInfo?.hasNextPage} onLineupSaved={() => { void detail.reload(); }} />
     </>}
     {selected && <SelectedPlayerCard selection={selected} teams={team ? [team] : []} onClose={() => setSelected(null)} />}
   </ModalShell>;

@@ -7,6 +7,7 @@ import { HttpError } from '../../plugins/auth/identity.js';
 import type { Database, Prisma } from '../../plugins/db/client.js';
 import { string, object } from '../../plugins/db/records.js';
 import { getSetting, settingKey, readSetting, saveSetting, championshipTeam, lockChampionshipAccounts, saveChampionships } from './queries.js';
+import { settingDto } from './dto.js';
 import { fieldPage, fieldValue } from '../payload/details.js';
 
 const championsInput = z.record(z.string().min(1).max(160), z.strictObject({
@@ -49,11 +50,14 @@ export function registerSettings(app: FastifyInstance, { db }: Dependencies): vo
         const key = settingKey.parse(parameters(request).key);
         const value = await getSetting(db, key);
         // Fastify sends raw strings as text/plain by default, which breaks the
-        // frontend's response.json() parser. Serialize current_season explicitly
-        // so the body is a valid JSON string ("S1") with the correct type header.
-        return key === 'current_season'
-            ? reply.type('application/json').send(JSON.stringify(value))
-            : fieldPage(value, `/api/settings/${key}`, request);
+        // frontend's response.json() parser. Serialize current_season through
+        // settingDto (which guarantees a string via the 'S1' default) and send
+        // as valid JSON so the client's response.json() succeeds.
+        if (key === 'current_season') {
+            const season = settingDto(key, typeof value === 'string' ? value : null) as string;
+            return reply.type('application/json').send(JSON.stringify(season));
+        }
+        return fieldPage(value, `/api/settings/${key}`, request);
     });
     app.get('/api/settings/:key/fields/:field', { config: { public: true } }, async request => {
         const key = settingKey.parse(parameters(request).key);

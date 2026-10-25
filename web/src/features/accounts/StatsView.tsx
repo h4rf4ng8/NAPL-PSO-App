@@ -1,4 +1,5 @@
 import { mergeSeasonPages } from '../dashboard/season-pages';
+import { mergeLeaderboardPages } from './leaderboard-pages';
 import { BarChart3 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@apollo/client/react';
@@ -40,27 +41,22 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   // grows until it holds every row. Changing any filter (season, position,
   // sortBy, sortDir) refetches the first page and this effect restarts.
   useEffect(() => {
-    const page = data?.leaderboard;
-    const endCursor = page?.pageInfo?.endCursor;
-    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
+    if (!data?.leaderboard?.pageInfo?.hasNextPage || !data.leaderboard.pageInfo.endCursor) return;
     void fetchMore({
-      variables: { after: endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => {
-        const previousBoard = previous.leaderboard;
-        const nextBoard = fetchMoreResult.leaderboard;
-        if (!nextBoard) return previous;
-        return {
-          leaderboard: {
-            ...nextBoard,
-            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
-          },
-        };
-      },
+      variables: { after: data.leaderboard.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ leaderboard: mergeLeaderboardPages(before.leaderboard, fetchMoreResult.leaderboard) }),
     }).catch((loadError: unknown) => { console.error('leaderboard fetchMore failed:', loadError); });
   }, [data?.leaderboard?.pageInfo?.endCursor, data?.leaderboard?.pageInfo?.hasNextPage, fetchMore]);
   const sorted = useMemo(() => (data?.leaderboard?.nodes ?? []).map(player => {
     const s = accountStatsSchema.parse(player.stats);
-    return { player, team: player.team ?? allTeams.find(team => team.id === player.teamId),
+    // Normalize identity fields up front so render code doesn't have to
+    // defensively optional-chain through Apollo's masked types. Any missing
+    // field becomes an empty string / zero rather than undefined.
+    const id = player.id ?? '';
+    const username = player.username ?? '';
+    const position = player.position ?? '';
+    return { player, id, username, position,
+      team: player.team ?? allTeams.find(team => team.id === player.teamId),
       ovr: player.ranking?.score ?? 0, gp: s.games, g: s.goals, a: s.assists,
       pts: s.goals + s.assists, motm: s.motm, tkl: s.tackles, pass: s.passes,
       cs: s.cleanSheets, dfl: s.deflects, catches: s.catches, w: s.wins, d: s.draws, l: s.losses };
@@ -196,8 +192,8 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           <tbody>
             {sorted.map((row, i) => (
               <tr
-                key={row.player.username}
-                onClick={() => onPlayerClick?.({ id: row.player.id, season: seasonFilter })}
+                key={row.username}
+                onClick={() => onPlayerClick?.({ id: row.id, season: seasonFilter })}
                 className="cursor-pointer transition-colors hover:opacity-90"
                 style={{
                   background: i % 2 === 0 ? `${C.navyDeep}44` : 'transparent',
@@ -207,14 +203,14 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
                 <td className="px-2 py-2 text-center font-mono text-sm" style={{ color: `${C.cream}66` }}>{i + 1}</td>
                 <td className="px-3 py-2 font-heading tracking-wider text-sm" style={{ color: C.cream }}>
                   <div className="flex items-center gap-1.5">
-                    {row.team && row.team.ownerUsername.toLowerCase() === row.player.username.toLowerCase() && <CaptainStar size={11} />}
-                    {row.player.username}
+                    {(row.team?.ownerUsername ?? '').toLowerCase() === row.username.toLowerCase() && <CaptainStar size={11} />}
+                    {row.username}
                   </div>
                 </td>
                 <td className="px-2 py-2 font-mono text-xs" style={{ color: row.team ? (row.team.color || C.greenLight) : `${C.cream}44` }}>
                   {row.team?.tag || 'FA'}
                 </td>
-                <td className="px-2 py-2 text-center font-mono text-xs" style={{ color: `${C.cream}99` }}>{row.player.position}</td>
+                <td className="px-2 py-2 text-center font-mono text-xs" style={{ color: `${C.cream}99` }}>{row.position}</td>
                 {cols.map(c => (
                   <td
                     key={c.field}

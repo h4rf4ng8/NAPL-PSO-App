@@ -7,6 +7,7 @@ import { useResource } from '../../hooks/use-resource';
 import { z } from 'zod';
 import type { Account } from '../accounts/models';
 import type { Team, TeamSummary } from './models';
+import { mergeTeamSummaryPages, mergeTeamPlayerPages } from './team-pages';
 import { auth } from '../../auth/session';
 import { teams as teamApi } from './api';
 import { SubmitTeamModal } from './team-forms';
@@ -40,22 +41,10 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
     variables: { scope, search, status: scope ? null : 'approved', first: 50 },
   });
   useEffect(() => {
-    const page = data?.teamSummaries;
-    const endCursor = page?.pageInfo?.endCursor;
-    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
+    if (!data?.teamSummaries?.pageInfo?.hasNextPage || !data.teamSummaries.pageInfo.endCursor) return;
     void fetchMore({
-      variables: { after: endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => {
-        const previousBoard = previous.teamSummaries;
-        const nextBoard = fetchMoreResult.teamSummaries;
-        if (!nextBoard) return previous;
-        return {
-          teamSummaries: {
-            ...nextBoard,
-            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
-          },
-        };
-      },
+      variables: { after: data.teamSummaries.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ teamSummaries: mergeTeamSummaryPages(before.teamSummaries, fetchMoreResult.teamSummaries) }),
     }).catch((loadError: unknown) => { console.error('team fetchMore failed:', loadError); });
   }, [data?.teamSummaries?.pageInfo?.endCursor, data?.teamSummaries?.pageInfo?.hasNextPage, fetchMore]);
   const refreshed = async () => { const me = account ? await auth.getCurrent() : null; if (me) onUpdate?.(me); await refetch(); };
@@ -70,12 +59,17 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
     {loading && <p role="status">Loading teams…</p>}
     {error && <p role="alert">{error.message}<button onClick={() => { void refetch().catch(() => {}); }}>Restart teams</button></p>}
     {actionError && <p role="alert">{actionError}</p>}
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{data?.teamSummaries?.nodes?.map(team => <section key={team.id} className="asl-team-card border rounded-xl p-4">
+    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{(data?.teamSummaries?.nodes ?? []).map(team => {
+      // Normalize team.id up front so the strict TS checker in CI treats it
+      // as a plain string (not string | undefined) across every callback below.
+      const teamId = team.id ?? '';
+      return <section key={teamId} className="asl-team-card border rounded-xl p-4">
       {team.logoUrl && <MediaImage src={team.logoUrl} alt={`${team.name} logo`} className="w-20 h-20 object-contain" />}
       <h4 className="font-display text-2xl">{team.name} [{team.tag}]</h4><p>{team.memberCount} players · {team.status}</p><p>Captain: {team.ownerUsername}</p>
-      <button onClick={() => setSelected(team.id)}>View roster and team</button>
-      {team.viewerInvitation === 'pending' && <div><p>You are invited to this team.</p><button onClick={() => { void invitation(team.id, true); }}>Accept</button><button onClick={() => { void invitation(team.id, false); }}>Decline</button></div>}
-    </section>)}</div>
+      <button onClick={() => setSelected(teamId)}>View roster and team</button>
+      {team.viewerInvitation === 'pending' && <div><p>You are invited to this team.</p><button onClick={() => { void invitation(teamId, true); }}>Accept</button><button onClick={() => { void invitation(teamId, false); }}>Decline</button></div>}
+    </section>;
+    })}</div>
     {data?.teamSummaries?.totalCount === 0 && <p>No teams match this view.</p>}
     {data?.teamSummaries?.pageInfo?.hasNextPage && <p role="status">Loading more teams…</p>}
     {account && <TeamStandings />}
@@ -95,22 +89,10 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
   // for a manual "Load more" click.
   const roster = useQuery(TeamPlayersDocument, { variables: { teamId: id, first: 50, after: null } });
   useEffect(() => {
-    const page = roster.data?.teamPlayers;
-    const endCursor = page?.pageInfo?.endCursor;
-    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
+    if (!roster.data?.teamPlayers?.pageInfo?.hasNextPage || !roster.data.teamPlayers.pageInfo.endCursor) return;
     void roster.fetchMore({
-      variables: { after: endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => {
-        const previousBoard = previous.teamPlayers;
-        const nextBoard = fetchMoreResult.teamPlayers;
-        if (!nextBoard) return previous;
-        return {
-          teamPlayers: {
-            ...nextBoard,
-            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
-          },
-        };
-      },
+      variables: { after: roster.data.teamPlayers.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ teamPlayers: mergeTeamPlayerPages(before.teamPlayers, fetchMoreResult.teamPlayers) }),
     }).catch((loadError: unknown) => { console.error('roster fetchMore failed:', loadError); });
   }, [roster.data?.teamPlayers?.pageInfo?.endCursor, roster.data?.teamPlayers?.pageInfo?.hasNextPage, roster.fetchMore]);
   const players = (roster.data?.teamPlayers?.nodes ?? []).map(mapCardAccount);

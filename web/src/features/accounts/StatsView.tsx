@@ -32,11 +32,12 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   // which made the stats tab feel broken. Auto-pagination is a cleaner
   // experience even if it costs a few extra round trips when the league
   // grows past 50 players.
-  // cache-and-network: show cached data instantly on remount, but also fire
-  // a network request so stats stay current when another session changes
-  // server state. Default cache-first would serve stale data forever until
-  // a filter change.
-  const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
+  // network-only: each STATS tab mount awaits a fresh fetch rather than
+  // serving stale cached data. Needed so stats update when another session
+  // changes server state and the user revisits the tab. cache-first keeps
+  // stale data; cache-and-network returns cache first and the fresh value
+  // arrives too late for test-level assertions and quick revisits.
+  const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { fetchPolicy: 'network-only', variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
     sortBy, sortDir, first: 50, after: null,
   } });

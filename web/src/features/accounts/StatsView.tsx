@@ -32,7 +32,11 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   // which made the stats tab feel broken. Auto-pagination is a cleaner
   // experience even if it costs a few extra round trips when the league
   // grows past 50 players.
-  const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { variables: {
+  // cache-and-network: show cached data instantly on remount, but also fire
+  // a network request so stats stay current when another session changes
+  // server state. Default cache-first would serve stale data forever until
+  // a filter change.
+  const { data, loading, error, fetchMore, refetch } = useQuery(LeaderboardDocument, { fetchPolicy: 'cache-and-network', variables: {
     season: seasonFilter, position: posFilter === 'ALL' ? null : posFilter,
     sortBy, sortDir, first: 50, after: null,
   } });

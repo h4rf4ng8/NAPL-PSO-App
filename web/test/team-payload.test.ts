@@ -24,8 +24,11 @@ const stats=Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key=>[k
 const card=(id:string)=>({__typename:'AccountCard',id,username:id==='captain'?'Captain':'Other',position:'CM',teamId:info.id,team:{...info,__typename:'TeamIdentity'},imageUrl:null,country:null,stats,season:'all',ranking:{__typename:'AccountRanking',score:0,percentile:0,ranked:false,gamesPlayed:0,tier:'BRONZE'},cardStats:Array.from({length:6},()=>({__typename:'AccountCardStatCell',label:'Goals',value:'0'})),totwUntil:null,cheater:false,strikersId:'123',steamUrl:null,createdAt:1,awardCount:0,championshipCount:0,awardPreview:[],championshipPreview:[],previewHasMore:false});
 const graphPage=<T>(nodes:T[],more=false)=>({...page(nodes),__typename:'AccountCardPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:more?'next':null,hasNextPage:more}});
 
-test('captain lineup editing waits for every selected-team roster page and recovers from a stale last page',async()=>{
- const first=Promise.withResolvers<unknown>(),last=Promise.withResolvers<unknown>();let rosterCalls=0;
+test('captain lineup editing waits for every selected-team roster page to auto-load',async()=>{
+ // The roster now auto-paginates — the first page returns hasNextPage: true,
+ // the client fires fetchMore itself, and the captain's edit controls appear
+ // once every page has arrived. No manual "Load more" button is involved.
+ const first=Promise.withResolvers<unknown>(),second=Promise.withResolvers<unknown>();let rosterCalls=0;
  const client=new ApolloClient({cache:new InMemoryCache(),link:new ApolloLink(operation=>new Observable(observer=>{
   let result:unknown;
   switch(operation.operationName){
@@ -35,7 +38,7 @@ test('captain lineup editing waits for every selected-team roster page and recov
   }
   case 'TeamStandings': {result={standings:{...graphPage([]),__typename:'JsonPage'}};break;
   }
-  default: {rosterCalls++;const pending=rosterCalls===1?first.promise:(rosterCalls===2?last.promise:Promise.resolve({teamPlayers:graphPage([card('captain'),card('other')])}));let active=true;void pending.then(data=>{if (!active) {
+  default: {rosterCalls++;const pending=rosterCalls===1?first.promise:second.promise;let active=true;void pending.then(data=>{if (!active) {
     return;
   }
 
@@ -47,13 +50,17 @@ test('captain lineup editing waits for every selected-team roster page and recov
  await act(async()=>{view=create(React.createElement(ApolloProvider,{client},React.createElement(TeamsView,{account:{id:'captain',username:'Captain',teamId:info.id} as Account})));await tick();});
  const button=(label:string)=>view!.root.findAllByType('button').find(node=>node.children.join('')===label)!;
  await act(async()=>{button('View roster and team').props.onClick();await tick();});
+ // Before any roster page returns, captain mode is off (roster is still loading).
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
+ // First page arrives with hasNextPage: true. Auto-pagination fires the next call.
  await act(async()=>{first.resolve({teamPlayers:graphPage([card('captain')],true)});await tick();});
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
- await act(async()=>{button('Load more roster cards').props.onClick();await tick();last.reject(new Error('stale_cursor'));await tick();});
- assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
- await act(async()=>{button('Reload team').props.onClick();await tick();});
- assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,true);assert.equal(view!.root.findByType(TeamRosterFormation).props.allPlayers.length,2);
+ // Second (final) page arrives — now the full roster is in and captain controls activate.
+ await act(async()=>{second.resolve({teamPlayers:graphPage([card('captain'),card('other')])});await tick();});
+ assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,true);
+ assert.equal(view!.root.findByType(TeamRosterFormation).props.allPlayers.length,2);
+ // The "Load more roster cards" button is gone with the new auto-pagination.
+ assert.equal(view!.root.findAllByType('button').find(node=>node.children.join('')==='Load more roster cards'),undefined);
  act(()=>view!.unmount());client.stop();
 });
 

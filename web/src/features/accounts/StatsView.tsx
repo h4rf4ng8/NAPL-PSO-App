@@ -40,21 +40,28 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
   // grows until it holds every row. Changing any filter (season, position,
   // sortBy, sortDir) refetches the first page and this effect restarts.
   useEffect(() => {
-    if (!data?.leaderboard.pageInfo.hasNextPage) return;
+    const page = data?.leaderboard;
+    const endCursor = page?.pageInfo?.endCursor;
+    if (!endCursor || !page?.pageInfo?.hasNextPage) return;
     void fetchMore({
-      variables: { after: data.leaderboard.pageInfo.endCursor },
-      updateQuery: (previous, { fetchMoreResult }) => ({
-        leaderboard: {
-          ...fetchMoreResult.leaderboard,
-          nodes: [...previous.leaderboard.nodes, ...fetchMoreResult.leaderboard.nodes],
-        },
-      }),
+      variables: { after: endCursor },
+      updateQuery: (previous, { fetchMoreResult }) => {
+        const previousBoard = previous.leaderboard;
+        const nextBoard = fetchMoreResult.leaderboard;
+        if (!nextBoard) return previous;
+        return {
+          leaderboard: {
+            ...nextBoard,
+            nodes: [...(previousBoard?.nodes ?? []), ...(nextBoard.nodes ?? [])],
+          },
+        };
+      },
     }).catch((loadError: unknown) => { console.error('leaderboard fetchMore failed:', loadError); });
-  }, [data?.leaderboard.pageInfo.endCursor, data?.leaderboard.pageInfo.hasNextPage, fetchMore]);
-  const sorted = useMemo(() => (data?.leaderboard.nodes ?? []).map(player => {
+  }, [data?.leaderboard?.pageInfo?.endCursor, data?.leaderboard?.pageInfo?.hasNextPage, fetchMore]);
+  const sorted = useMemo(() => (data?.leaderboard?.nodes ?? []).map(player => {
     const s = accountStatsSchema.parse(player.stats);
     return { player, team: player.team ?? allTeams.find(team => team.id === player.teamId),
-      ovr: player.ranking.score, gp: s.games, g: s.goals, a: s.assists,
+      ovr: player.ranking?.score ?? 0, gp: s.games, g: s.goals, a: s.assists,
       pts: s.goals + s.assists, motm: s.motm, tkl: s.tackles, pass: s.passes,
       cs: s.cleanSheets, dfl: s.deflects, catches: s.catches, w: s.wins, d: s.draws, l: s.losses };
   }), [data, allTeams]);
@@ -230,7 +237,7 @@ export const StatsView = ({ allTeams = [], onPlayerClick }: { allTeams?: Team[];
           </tbody>
         </table>
       </div>
-      {data?.leaderboard.pageInfo.hasNextPage && (
+      {data?.leaderboard?.pageInfo?.hasNextPage && (
         <p className="font-mono text-[10px] mt-3 tracking-wider" style={{ color: `${C.cream}66` }}>
           Loading more players…
         </p>

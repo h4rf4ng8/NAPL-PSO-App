@@ -38,7 +38,7 @@ export function TeamsView({ account, onUpdate }: { account: Account | null; onUp
   // old UI had Previous/Next team buttons that hid teams past page 10 from
   // view; now every approved team shows at once as users scroll.
   const { data, loading, error, fetchMore, refetch } = useQuery(TeamSummariesDocument, {
-    variables: { scope, search, status: scope ? null : 'approved', first: 50 },
+    variables: { scope, search, status: scope ? null : 'approved', first: 50, after: null },
   });
   useEffect(() => {
     if (!data?.teamSummaries?.pageInfo?.hasNextPage || !data.teamSummaries.pageInfo.endCursor) return;

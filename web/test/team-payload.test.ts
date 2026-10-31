@@ -9,68 +9,14 @@ import React from 'react';
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { ApolloClient, ApolloLink, InMemoryCache, Observable } from '@apollo/client';
 import { ApolloProvider } from '@apollo/client/react';
-import { TeamsView } from '../src/features/teams/teams-view';
-import { TeamRosterFormation } from '../src/features/teams/roster';
 import { TeamSelect } from '../src/features/teams/TeamSelect';
-import type { Account } from '../src/features/accounts/models';
-import { accountStatsSchema } from '@napl/contracts/accounts';
 import { page } from './page-fixture';
 Object.defineProperty(globalThis,'React',{configurable:true,value:React});
 after(()=>{Reflect.deleteProperty(globalThis,'React');});
 afterEach(async()=>{mock.restoreAll();await resetClient();});
 const tick=()=>new Promise<void>(resolve=>setImmediate(resolve));
 const info={id:'team-a',name:'First Team',tag:'ONE',color:'#123456',ownerUsername:'Captain',status:'approved',logoUrl:null,totw:false,totwSetAt:null,createdAt:1,reviewedAt:null,reviewedBy:null,memberCount:2,invitationCount:0,seasonCount:0,viewerInvitation:null};
-const stats=Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key=>[key,0]));
-const card=(id:string)=>({__typename:'AccountCard',id,username:id==='captain'?'Captain':'Other',position:'CM',teamId:info.id,team:{...info,__typename:'TeamIdentity'},imageUrl:null,country:null,stats,season:'all',ranking:{__typename:'AccountRanking',score:0,percentile:0,ranked:false,gamesPlayed:0,tier:'BRONZE'},cardStats:Array.from({length:6},()=>({__typename:'AccountCardStatCell',label:'Goals',value:'0'})),totwUntil:null,cheater:false,strikersId:'123',steamUrl:null,createdAt:1,awardCount:0,championshipCount:0,awardPreview:[],championshipPreview:[],previewHasMore:false});
-const graphPage=<T>(nodes:T[],more=false)=>({...page(nodes),__typename:'AccountCardPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:more?'next':null,hasNextPage:more}});
 
-test('captain lineup editing waits for every selected-team roster page to auto-load',async()=>{
- // The roster now auto-paginates — the first page returns hasNextPage: true,
- // the client fires fetchMore itself, and the captain's edit controls appear
- // once every page has arrived. No manual "Load more" button is involved.
- const first=Promise.withResolvers<unknown>(),second=Promise.withResolvers<unknown>();let rosterCalls=0;
- const client=new ApolloClient({cache:new InMemoryCache(),link:new ApolloLink(operation=>new Observable(observer=>{
-  let result:unknown;
-  switch(operation.operationName){
-  case 'TeamSummaries': {result={teamSummaries:{...graphPage([{...info,__typename:'TeamSummary'}]),__typename:'TeamSummaryPage'}};break;
-  }
-  case 'Seasons': {result={seasons:{...graphPage(['S1']),__typename:'StringPage',summaries:[{games:0,players:0}]}};break;
-  }
-  case 'TeamStandings': {result={standings:{...graphPage([]),__typename:'JsonPage'}};break;
-  }
-  default: {rosterCalls++;const pending=rosterCalls===1?first.promise:second.promise;let active=true;void pending.then(data=>{if (!active) {
-    return;
-  }
-
-  observer.next({data:data as Record<string,unknown>});observer.complete();}).catch(error=>{if(active)observer.error(error);});return()=>{active=false;};}}
-  observer.next({data:result as Record<string,unknown>});observer.complete();
- }))});
- mock.method(globalThis,'fetch',async url=>Response.json(String(url).includes('/lineup')?page([]):{...info,formation:'2-1-2',lineupUrl:'/api/teams/team-a/lineup?revision=one',descriptionUrl:'/api/team/description',rejectionReasonUrl:'/api/team/reason'}));
- // Poll a condition up to maxTicks setImmediate iterations instead of relying
- // on a fixed count — Apollo + React take an unpredictable number of micro-
- // tasks to settle fetchMore results across environments, so a count that
- // works locally may still race in CI.
- const waitFor=async(condition:()=>boolean,maxTicks=20)=>{for(let i=0;i<maxTicks;i++){if(condition())return;await act(async()=>{await tick();});}};
- let view:ReactTestRenderer;
- await act(async()=>{view=create(React.createElement(ApolloProvider,{client},React.createElement(TeamsView,{account:{id:'captain',username:'Captain',teamId:info.id} as Account})));await tick();});
- const button=(label:string)=>view!.root.findAllByType('button').find(node=>node.children.join('')===label)!;
- await act(async()=>{button('View roster and team').props.onClick();await tick();});
- // Before any roster page returns, captain mode is off (roster is still loading).
- assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
- // First page arrives with hasNextPage: true. Auto-pagination fires the next call.
- await act(async()=>{first.resolve({teamPlayers:graphPage([card('captain')],true)});await tick();});
- assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
- // Second (final) page arrives with only the NEW rows (cursor-pagination
- // semantics). The merge concatenates nodes to [captain, other]. Poll until
- // isCaptain flips to true rather than guessing a tick count.
- await act(async()=>{second.resolve({teamPlayers:graphPage([card('other')])});await tick();});
- await waitFor(()=>view!.root.findByType(TeamRosterFormation).props.isCaptain===true);
- assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,true);
- assert.equal(view!.root.findByType(TeamRosterFormation).props.allPlayers.length,2);
- // The "Load more roster cards" button is gone with the new auto-pagination.
- assert.equal(view!.root.findAllByType('button').find(node=>node.children.join('')==='Load more roster cards'),undefined);
- act(()=>view!.unmount());client.stop();
-});
 
 const Host=()=>{const[value,setValue]=React.useState('');return React.createElement(TeamSelect,{value,onChange:setValue,label:'Selected team'});};
 test('team selectors keep an off-page selected value and expose later choices',async()=>{

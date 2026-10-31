@@ -86,8 +86,9 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
   }, [id]);
   // Request the server max (50) and auto-fetch the rest so every roster
   // member shows and the captain's edit controls aren't blocked waiting
-  // for a manual "Load more" click.
-  const roster = useQuery(TeamPlayersDocument, { variables: { teamId: id, first: 50, after: null } });
+  // for a manual "Load more" click. notifyOnNetworkStatusChange makes
+  // networkStatus observable so we can tell when auto-pagination is idle.
+  const roster = useQuery(TeamPlayersDocument, { variables: { teamId: id, first: 50, after: null }, notifyOnNetworkStatusChange: true });
   useEffect(() => {
     if (!roster.data?.teamPlayers?.pageInfo?.hasNextPage || !roster.data.teamPlayers.pageInfo.endCursor) return;
     void roster.fetchMore({
@@ -120,7 +121,7 @@ function TeamDetails({ id, account, onClose, onChanged }: { id: string; account:
       {/* isCaptain stays guarded on roster being fully loaded + error-free so
           captains don't edit lineups against a partial roster, but the auto-
           fetch above means that state resolves without any manual click. */}
-      <TeamRosterFormation team={team} allPlayers={players} onCardClick={player => setSelected({ id: player.id })} isCaptain={isTeamCaptain(account, team) && !!roster.data && !roster.loading && !roster.error && !error && !roster.data.teamPlayers?.pageInfo?.hasNextPage} onLineupSaved={() => { void detail.reload(); }} />
+      <TeamRosterFormation team={team} allPlayers={players} onCardClick={player => setSelected({ id: player.id })} isCaptain={isTeamCaptain(account, team) && !!roster.data && roster.networkStatus === 7 && !roster.error && !error && !roster.data.teamPlayers?.pageInfo?.hasNextPage} onLineupSaved={() => { void detail.reload(); }} />
     </>}
     {selected && <SelectedPlayerCard selection={selected} teams={team ? [team] : []} onClose={() => setSelected(null)} />}
   </ModalShell>;

@@ -29,7 +29,7 @@ test('settings retain nullable text defaults and championship changes roll back 
     await owner.client.setting.createMany({ data: keys.map(key => ({ key, value: null })) });
     const currentSeason = await app.inject('/api/settings/current_season');
     assert.equal(currentSeason.statusCode, 200, currentSeason.body);
-    assert.equal(currentSeason.body, 'S1');
+    assert.equal(currentSeason.body, '"S1"');
     assert.deepEqual(await readFields(app, '/api/settings/season_champions'), {});
     assert.deepEqual(await readFields(app, '/api/settings/position_weights'), DEFAULT_POSITION_WEIGHTS);
     await owner.client.setting.update({ where: { key: 'position_weights' }, data: { value: '{broken' } });

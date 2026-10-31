@@ -18,6 +18,7 @@ after(()=>{Reflect.deleteProperty(globalThis,'React');});
 afterEach(async()=>{mock.restoreAll();await resetClient();});
 const tick=()=>new Promise<void>(resolve=>setImmediate(resolve));
 const info={id:'team-a',name:'First Team',tag:'ONE',color:'#123456',ownerUsername:'Captain',status:'approved',logoUrl:null,totw:false,totwSetAt:null,createdAt:1,reviewedAt:null,reviewedBy:null,memberCount:2,invitationCount:0,seasonCount:0,viewerInvitation:null};
+const graphPage=<T>(nodes:T[])=>({...page(nodes),__typename:'AccountCardPage',pageInfo:{__typename:'PayloadPageInfo',endCursor:null,hasNextPage:false}});
 
 
 const Host=()=>{const[value,setValue]=React.useState('');return React.createElement(TeamSelect,{value,onChange:setValue,label:'Selected team'});};

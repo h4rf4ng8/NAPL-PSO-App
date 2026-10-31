@@ -46,6 +46,11 @@ test('captain lineup editing waits for every selected-team roster page to auto-l
   observer.next({data:result as Record<string,unknown>});observer.complete();
  }))});
  mock.method(globalThis,'fetch',async url=>Response.json(String(url).includes('/lineup')?page([]):{...info,formation:'2-1-2',lineupUrl:'/api/teams/team-a/lineup?revision=one',descriptionUrl:'/api/team/description',rejectionReasonUrl:'/api/team/reason'}));
+ // Poll a condition up to maxTicks setImmediate iterations instead of relying
+ // on a fixed count — Apollo + React take an unpredictable number of micro-
+ // tasks to settle fetchMore results across environments, so a count that
+ // works locally may still race in CI.
+ const waitFor=async(condition:()=>boolean,maxTicks=20)=>{for(let i=0;i<maxTicks;i++){if(condition())return;await act(async()=>{await tick();});}};
  let view:ReactTestRenderer;
  await act(async()=>{view=create(React.createElement(ApolloProvider,{client},React.createElement(TeamsView,{account:{id:'captain',username:'Captain',teamId:info.id} as Account})));await tick();});
  const button=(label:string)=>view!.root.findAllByType('button').find(node=>node.children.join('')===label)!;
@@ -56,10 +61,10 @@ test('captain lineup editing waits for every selected-team roster page to auto-l
  await act(async()=>{first.resolve({teamPlayers:graphPage([card('captain')],true)});await tick();});
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,false);
  // Second (final) page arrives with only the NEW rows (cursor-pagination
- // semantics). The client-side merge concatenates nodes, so the merged roster
- // becomes [captain, other]. Apollo + React need several microtasks to settle
- // the fetchMore result before isCaptain flips to true.
- await act(async()=>{second.resolve({teamPlayers:graphPage([card('other')])});await tick();await tick();await tick();});
+ // semantics). The merge concatenates nodes to [captain, other]. Poll until
+ // isCaptain flips to true rather than guessing a tick count.
+ await act(async()=>{second.resolve({teamPlayers:graphPage([card('other')])});await tick();});
+ await waitFor(()=>view!.root.findByType(TeamRosterFormation).props.isCaptain===true);
  assert.equal(view!.root.findByType(TeamRosterFormation).props.isCaptain,true);
  assert.equal(view!.root.findByType(TeamRosterFormation).props.allPlayers.length,2);
  // The "Load more roster cards" button is gone with the new auto-pagination.

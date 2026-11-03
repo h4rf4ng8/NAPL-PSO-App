@@ -36,6 +36,25 @@ export async function saveSetting(database: Database, key: SettingKey, value: st
   });
 }
 
+export async function deleteSeason(database: Database, id: string): Promise<void> {
+  await database.transaction(async tx => {
+    const existing = await tx.client.season.findUnique({ where: { id } });
+    if (!existing) throw new HttpError(404, 'not_found');
+    // Refuse to delete the active season — admins must switch first.
+    const current = await tx.client.setting.findUnique({ where: { key: 'current_season' } });
+    if (current?.value === id) throw new HttpError(409, 'season_is_current');
+    // Refuse if the season has scheduled matches or transfers so admins
+    // don't accidentally orphan real data by nuking a stale-looking entry.
+    const scheduled = await tx.client.scheduledMatch.count({ where: { season_id: id } });
+    if (scheduled > 0) throw new HttpError(409, 'season_has_scheduled_matches');
+    const transfers = await tx.client.transfer.count({ where: { season_id: id } });
+    if (transfers > 0) throw new HttpError(409, 'season_has_transfers');
+    // Safe to remove: team-season rows are just visibility flags, no data.
+    await tx.client.teamSeason.deleteMany({ where: { season_id: id } });
+    await tx.client.season.delete({ where: { id } });
+  });
+}
+
 export async function championshipTeam(database: Database, id: string): Promise<Team> {
   const team = await database.client.team.findUnique({ where: { id } });
   if (!team) throw new HttpError(404, 'not_found');

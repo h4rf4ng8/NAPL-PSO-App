@@ -128,6 +128,7 @@ export const SeasonManager = ({ account: _account, currentSeason, onRefresh }: {
         </h4>
         {seasons.loading && <p role="status">Loading season history…</p>}
         {seasons.error && <p role="alert">{seasons.error.message}</p>}
+        {error && <p role="alert" className="font-mono text-xs mb-2" style={{ color: C.redLight }}>{error}</p>}
         <PageButtons loading={seasons.loading} canPrevious={previous.length > 0} hasNextPage={seasons.data?.seasons.pageInfo.hasNextPage ?? false}
           previous={()=>{setAfter(previous.at(-1) ?? null);setPrevious(previous.slice(0,-1));}}
           next={()=>{setPrevious([...previous,after]);setAfter(seasons.data?.seasons.pageInfo.endCursor ?? null);}} />
@@ -155,15 +156,34 @@ export const SeasonManager = ({ account: _account, currentSeason, onRefresh }: {
                     </div>
                   </div>
                   {!isActive && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm(`Re-activate ${s.season}? New matches will be tagged with this season again.`)) return;
-                        await adminApi.setSeason(s.season);
-                        onRefresh();
-                      }}
-                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded"
-                      style={{ background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
-                    >RE-ACTIVATE</button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Re-activate ${s.season}? New matches will be tagged with this season again.`)) return;
+                          await adminApi.setSeason(s.season);
+                          onRefresh();
+                        }}
+                        className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded"
+                        style={{ background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
+                      >RE-ACTIVATE</button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Delete ${s.season}?\n\nThis only works if the season has no scheduled matches or transfers.`)) return;
+                          try {
+                            await adminApi.deleteSeason(s.season);
+                            setError('');
+                            onRefresh();
+                          } catch (deleteError) {
+                            // Surface the real reason so admins know whether it's an
+                            // orphan-check block, auth problem, or something else.
+                            const detail = deleteError instanceof Error ? deleteError.message : String(deleteError);
+                            setError(`Could not delete ${s.season}: ${detail}`);
+                          }
+                        }}
+                        className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded"
+                        style={{ background: `${C.red}22`, color: C.redLight, border: `1px solid ${C.red}66` }}
+                      >DELETE</button>
+                    </div>
                   )}
                 </div>
               );

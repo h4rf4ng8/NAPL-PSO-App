@@ -1,10 +1,11 @@
 import { readFields, readValue, pagePath, type Page } from '../../api/page';
 import { sessionVersion } from '../../auth/client';
-import { ApiError, request } from '../../api/http';
+import { ApiError, request, segment } from '../../api/http';
 import type { Champions, RoleAssignment, Weightings } from './models';
 export const settings={
  getSeason:()=>request<string>('/api/settings/current_season'),
  setSeason:(value:string)=>request<void>('/api/settings/current_season','PUT',{value}),
+ deleteSeason:(id:string)=>request<void>(`/api/seasons/${segment(id)}`,'DELETE'),
  getChampions:async()=>await readFields('/api/settings/season_champions') as Champions,
  setChampions:(value:Champions)=>request<void>('/api/settings/season_champions','PUT',{value}),
  getWeightings:async()=>await readValue('/api/settings/position_weights') as Weightings|null,

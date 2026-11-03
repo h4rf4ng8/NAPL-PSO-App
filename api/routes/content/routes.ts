@@ -117,7 +117,7 @@ export function registerContent(app: FastifyInstance, { db, webhookUrl, storage 
         const { season } = query(request);
         const { week } = z.object({ week: z.coerce.number().int().min(1).max(10_000).optional() }).parse(request.query);
         const [rows, teams, records] = await Promise.all([queries.listSchedule(db, season), listTeams(db, { id: request.identity?.id, admin: isAdmin(request) }), request.identity ? loadTeamRecords(db) : []]);
-        const byId = new Map(teams.map(team => [team.id, { id: team.id, name: team.name, tag: team.tag, color: team.color }]));
+        const byId = new Map(teams.map(team => [team.id, { id: team.id, name: team.name, tag: team.tag, color: team.color, logoUrl: team.logo_url }]));
         const recordById = new Map(records.filter(row => row.season === 'all').map(row => [row.teamId, { w: row.w, d: row.d, l: row.l }]));
         const weeks = new Set(rows.map(row => row.week));
         const result = page(rows.filter(row => !week || row.week === week).map(value => { const { notes: _notes, streamUrl, ...summary } = scheduleDto(value); return { ...summary,

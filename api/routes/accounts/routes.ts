@@ -110,9 +110,16 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
                 input.imageUrl = await prepareImage(storage, input.imageUrl, existing.image_url, { ...target, public: true });
                 images.push(input.imageUrl);
             }
+            // Username rename: reject collisions with other accounts up front
+            // so the duplicate error surfaces as a clear 409 instead of a 500.
+            if (input.username !== undefined && input.username !== existing.username) {
+                const clash = await tx.client.account.findUnique({ where: { username_lower: input.username.toLowerCase() } });
+                if (clash && clash.id !== id) throw new HttpError(409, 'username_taken');
+            }
             const data = {
                 country: input.country, steam_url: input.steamUrl, pending_image_url: input.pendingImageUrl,
                 strikers_id: input.strikersId, position: input.position,
+                ...('username' in input && { username: input.username }),
                 ...('imageUrl' in input && { image_url: input.imageUrl }),
                 ...('stats' in input && { stats: input.stats }), ...('matches' in input && { matches: input.matches === undefined ? undefined : JSON.parse(JSON.stringify(input.matches)) }),
                 ...('championships' in input && { championships: input.championships === undefined ? undefined : JSON.parse(JSON.stringify(input.championships)) }),

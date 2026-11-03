@@ -160,7 +160,7 @@ export const AdminsManager = () => {
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search for a player..."
               className="w-full rounded px-3 py-2 mb-2 text-sm focus:outline-none"
-              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+              style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
             />
             {candidates.length === 0 ? (
               <div className="font-mono text-xs tracking-wider text-center py-4" style={{ color: `${C.brandNavy}66` }}>

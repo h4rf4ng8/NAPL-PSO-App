@@ -82,8 +82,11 @@ export const AdminPanel = ({ account }: { account: Account }) => {
     try {
       await teamApi.deleteTeam(team.id);
       await refresh();
-    } catch {
-      setLoadError(`Could not delete ${team.name}.`);
+    } catch (deleteError) {
+      // Surface the real reason the delete failed (auth, server error, etc)
+      // instead of a generic "Could not delete" message that reveals nothing.
+      const detail = deleteError instanceof Error ? deleteError.message : String(deleteError);
+      setLoadError(`Could not delete ${team.name}: ${detail}`);
     }
   };
 

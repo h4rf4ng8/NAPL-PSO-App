@@ -1,6 +1,7 @@
 import { useRestPage } from '../../hooks/use-rest-page';
 import { useResource } from '../../hooks/use-resource';
 import { PageButtons } from '../../components/PageButtons';
+import { ModalShell } from '../../components/Dialog';
 import { request } from '../../api/http';
 import { z } from 'zod';
 import type { AdminPlayer } from '../accounts/models';
@@ -8,7 +9,7 @@ import { Check, Trophy } from 'lucide-react';
 import { useState } from 'react';
 import { VOTE_FIELDS, VOTE_POSITIONS } from '@napl/contracts/league';
 import { voting as votingApi } from './api';
-import type { VotingPeriod } from './models';
+import type { Vote, VotingPeriod } from './models';
 import { C } from '../../theme/theme';
 
 type PeriodSummary = Omit<VotingPeriod,'eligiblePlayers'|'winners'> & {eligiblePlayerCount:number;winnerCount:number};
@@ -36,6 +37,13 @@ export const TotwManager = ({ onRefresh }: { onRefresh: () => void }) => {
 
   const currentPeriod = openPage.data?.nodes.find(period=>period.status==='open');
   const pastPeriods = periods.filter(period=>period.status!=='open');
+  // Which past period's votes are being viewed. Null = modal closed.
+  const [votesViewing, setVotesViewing] = useState<PeriodSummary | null>(null);
+  const votesResource = useResource(async (): Promise<Vote[]> => {
+    if (!votesViewing) return [];
+    const result = await votingApi.periodVotes(votesViewing.id);
+    return result.nodes;
+  }, [votesViewing?.id]);
   const tallyResource = useResource(async()=>currentPeriod
     ? tallySchema.parse(await request(`/api/voting/periods/${encodeURIComponent(currentPeriod.id)}/tally`))
     : {totalVotes:0,positions:{GK:[],DEF:[],CM:[],ST:[]}},[currentPeriod?.id]);
@@ -264,6 +272,11 @@ export const TotwManager = ({ onRefresh }: { onRefresh: () => void }) => {
                   </div>
                 </div>
                 <button
+                  onClick={() => setVotesViewing(p)}
+                  className="px-2 py-1 font-mono text-[9px] rounded"
+                  style={{ background: `${C.navyLight}44`, color: C.cream, border: `1px solid ${C.navyLight}` }}
+                >VIEW VOTES</button>
+                <button
                   onClick={() => handleDelete(p.id)}
                   className="px-2 py-1 font-mono text-[9px] rounded"
                   style={{ background: `${C.red}33`, color: C.redLight, border: `1px solid ${C.red}55` }}
@@ -272,6 +285,44 @@ export const TotwManager = ({ onRefresh }: { onRefresh: () => void }) => {
             ))}
           </div>
         </div>
+      )}
+      {votesViewing && (
+        <ModalShell onClose={() => setVotesViewing(null)} title={`Votes · ${new Date(votesViewing.opensAt).toLocaleDateString()}`}>
+          <div className="font-mono text-[10px] mb-3 tracking-wider" style={{ color: `${C.cream}99` }}>
+            {votesViewing.status.toUpperCase()} · {(votesResource.data ?? []).length} VOTES
+          </div>
+          {votesResource.loading && <p role="status" className="font-mono text-xs" style={{ color: `${C.cream}aa` }}>Loading votes…</p>}
+          {votesResource.error && <p role="alert" className="font-mono text-xs" style={{ color: C.redLight }}>Could not load votes: {votesResource.error}</p>}
+          {votesResource.data && votesResource.data.length === 0 && !votesResource.loading && (
+            <p className="font-mono text-xs" style={{ color: `${C.cream}aa` }}>No votes were cast in this period.</p>
+          )}
+          {votesResource.data && votesResource.data.length > 0 && (
+            <div className="space-y-3">
+              {VOTE_POSITIONS.map(pos => {
+                const posVotes = votesResource.data!.filter(vote => vote.position === pos);
+                return (
+                  <div key={pos}>
+                    <div className="font-mono text-[10px] tracking-widest mb-1" style={{ color: C.goldLight }}>
+                      {pos} · {posVotes.length} VOTE{posVotes.length === 1 ? '' : 'S'}
+                    </div>
+                    {posVotes.length === 0 ? (
+                      <div className="font-mono text-[11px] px-2 py-1" style={{ color: `${C.cream}55` }}>No votes</div>
+                    ) : (
+                      <div className="space-y-0.5">
+                        {posVotes.map(vote => (
+                          <div key={vote.id} className="flex items-center justify-between px-2 py-1 rounded" style={{ background: C.navyDeep }}>
+                            <span className="font-mono text-[11px]" style={{ color: C.cream }}>{vote.voterUsername}</span>
+                            <span className="font-mono text-[11px]" style={{ color: C.goldLight }}>→ {vote.votedForUsername}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ModalShell>
       )}
     </div>
   );

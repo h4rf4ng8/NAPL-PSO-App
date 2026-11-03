@@ -4,13 +4,13 @@ import { cardTier } from '../../utils/rankings';
 import { cardDimensions, cardPalette, cardPath, MetallicDefs, MetallicSurface, CardOutline } from './artwork';
 
 import { AWARD_BY_ID } from '../Icons';
-export const CardBack = ({ account, team, size }: { account: Account; team: Team | null; size: string }) => {
+export const CardBack = ({ account, team: _team, size }: { account: Account; team: Team | null; size: string }) => {
   const tier = cardTier(account.ranking.tier);
   const palette = cardPalette(tier.name);
   const dims = cardDimensions(size);
   const uid = React.useId().replaceAll(':', '');
   const displayOverall = account.ranking.ranked ? account.ranking.score : 'NR';
-  const isTotw = !!team?.totw;
+  const isTotw = !!account.totwUntil && account.totwUntil > Date.now();
   const joinDate = account.createdAt
     ? new Date(account.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
     : 'Unknown';

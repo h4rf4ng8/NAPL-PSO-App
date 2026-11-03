@@ -1,7 +1,9 @@
 import { request,segment } from '../../api/http';
+import type { Page } from '../../api/page';
 import type { Vote, VotingPeriod } from './models';
 export const voting={
  myTotwVotes:(id:string)=>request<Vote[]>(`/api/voting/periods/${segment(id)}/votes/me`),
+ periodVotes:(id:string)=>request<Page<Vote>>(`/api/voting/periods/${segment(id)}/votes`),
  createTotwPeriod:({closesAt,eligiblePlayers}:Pick<VotingPeriod,'closesAt'|'eligiblePlayers'>)=>request<void>('/api/voting/periods','POST',{closesAt,eligiblePlayers}),
  updateTotwPeriod:(id:string,fields:Partial<VotingPeriod>)=>request<void>(`/api/voting/periods/${segment(id)}`,'PATCH',fields),
  deleteTotwPeriod:(id:string)=>request<void>(`/api/voting/periods/${segment(id)}`,'DELETE'),

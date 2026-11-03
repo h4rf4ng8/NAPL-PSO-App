@@ -156,7 +156,7 @@ export const WeightingsManager = ({ onRefresh }: { onRefresh: () => void }) => {
                       value={weights[pos][stat]}
                       onChange={(e) => setStat(pos, stat, e.target.value)}
                       className="w-20 rounded text-center font-display text-lg py-1.5"
-                      style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.brandNavy }}
+                      style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }}
                     />
                     <span className="font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>%</span>
                   </div>

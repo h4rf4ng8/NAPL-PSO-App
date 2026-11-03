@@ -48,7 +48,7 @@ export const imageUrl = z.union([httpUrl, z.string().max(MAX_IMAGE_DATA_URL_LENG
 export const jsonObject = z.record(z.string(), z.json());
 export const stats = z.record(z.string(), z.number().nonnegative());
 export const profilePatch = z.strictObject({
-    country: z.string().max(80).nullable().optional(), steamUrl: z.union([httpUrl, z.literal('')]).nullable().optional(), imageUrl: z.null().optional(), pendingImageUrl: imageUrl.optional(), strikersId: z.string().max(100).nullable().optional(), position: position.optional()
+    country: z.string().max(80).nullable().optional(), steamUrl: z.union([httpUrl, z.literal('')]).nullable().optional(), imageUrl: z.null().optional(), pendingImageUrl: imageUrl.optional(), strikersId: z.string().max(100).nullable().optional(), position: position.optional(), username: username.optional()
 });
 export const adminAccountPatch = profilePatch.extend({
     position: position.optional(), imageUrl: imageUrl.optional(), stats: stats.optional(), matches: z.array(matchSchema).max(10_000).optional(), championships: z.array(championshipSchema).max(1000).optional(), totwUntil: z.number().nullable().optional(), cheater: z.boolean().optional()

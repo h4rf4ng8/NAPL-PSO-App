@@ -6,7 +6,7 @@ import { params as parameters } from '../../plugins/request.js';
 import { HttpError } from '../../plugins/auth/identity.js';
 import type { Database, Prisma } from '../../plugins/db/client.js';
 import { string, object } from '../../plugins/db/records.js';
-import { getSetting, settingKey, readSetting, saveSetting, championshipTeam, lockChampionshipAccounts, saveChampionships } from './queries.js';
+import { getSetting, settingKey, readSetting, saveSetting, deleteSeason, championshipTeam, lockChampionshipAccounts, saveChampionships } from './queries.js';
 import { settingDto } from './dto.js';
 import { fieldPage, fieldValue } from '../payload/details.js';
 
@@ -62,6 +62,11 @@ export function registerSettings(app: FastifyInstance, { db }: Dependencies): vo
     app.get('/api/settings/:key/fields/:field', { config: { public: true } }, async request => {
         const key = settingKey.parse(parameters(request).key);
         return fieldValue(await getSetting(db, key), parameters(request).field!, `setting:${key}`, request);
+    });
+    app.delete('/api/seasons/:id', { config: { role: 'admin' } }, async (request) => {
+        const season = id.parse(parameters(request).id);
+        await deleteSeason(db, season);
+        return { ok: true };
     });
     app.put('/api/settings/:key', { config: { role: 'admin' } }, async (request) => {
         const key = settingKey.parse(parameters(request).key);

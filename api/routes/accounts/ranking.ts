@@ -37,14 +37,28 @@ function statValues(stats: AccountStats): Record<string, number> {
   };
 }
 
-function percentile(values: number[], value: number): number {
-  let below = 0;
-  let equal = 0;
-  for (const entry of values) {
-    if (entry < value) below++;
-    else if (entry === value) equal++;
+// Each stat's benchmark is the league-wide maximum per-game value for that
+// stat. A player's contribution to that stat = (their value / benchmark) *
+// weight, capped at the weight itself. This makes OVR strictly monotonic in
+// absolute stats within a position — more of a weighted stat always means
+// more OVR — while still being comparable across positions, since every
+// stat is scored on the same 0-100%-of-league-leader scale.
+const STAT_KEYS = ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame', 'deflectsPerGame', 'catchesPerGame', 'cleanSheetPct'] as const;
+type StatKey = typeof STAT_KEYS[number];
+
+function leagueBenchmarks(accounts: Row[]): Record<StatKey, number> {
+  const parsed = accounts.map(account => parsedStats(account.stats));
+  const perGame = parsed.filter(stats => stats.games >= 1).map(stats => statValues(stats));
+  const bench = {} as Record<StatKey, number>;
+  for (const key of STAT_KEYS) {
+    let max = 0;
+    for (const row of perGame) if (row[key] > max) max = row[key];
+    // Floor at a tiny positive number so (value / bench) stays finite when
+    // no one has recorded that stat yet. OVR will just be 0 for everyone
+    // on that component rather than NaN.
+    bench[key] = max > 0 ? max : 1;
   }
-  return values.length > 0 ? (below + equal / 2) / values.length : 0.5;
+  return bench;
 }
 
 export function calculateRankings(accounts: Row[], customWeights: unknown): Map<string, AccountRanking> {
@@ -52,13 +66,11 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
   if (parsed && !parsed.success) throw new HttpError(503, 'invalid_position_weights');
   const weightsByPos: Record<string, Record<string, number>> = parsed?.data ?? DEFAULT_POSITION_WEIGHTS;
   const result = new Map<string, AccountRanking>();
+  const benchmarks = leagueBenchmarks(accounts);
   for (const position of POSITIONS) {
     const players = accounts.filter(account => account.position === position);
     const weights = weightsByPos[position] ?? DEFAULT_POSITION_WEIGHTS[position];
     const statsByPlayer = new Map(players.map(account => [account, parsedStats(account.stats)]));
-    const eligible = players.filter(account => statsByPlayer.get(account)!.games >= 1);
-    const values = new Map(eligible.map(account => [account, statValues(statsByPlayer.get(account)!)]));
-    const statPools = new Map(Object.keys(weights).map(key => [key, eligible.map(account => values.get(account)![key] ?? 0)]));
     const scored: Array<{ username: string; score: number; percentile: number; games: number }> = [];
     for (const account of players) {
       const username = String(account.username ?? '').toLowerCase();
@@ -68,13 +80,19 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         result.set(username, { score: 0, percentile: 0, ranked: false, gamesPlayed: games, tier: 'BRONZE' });
         continue;
       }
-      const playerValues = values.get(account) ?? statValues(stats);
-      let score = 0;
+      const playerValues = statValues(stats);
+      let rawScore = 0;
       for (const [key, weight] of Object.entries(weights)) {
-        score += percentile(statPools.get(key) ?? [], playerValues[key] ?? 0) * weight;
+        const benchmark = benchmarks[key as StatKey] ?? 1;
+        // Capped at weight: having 2x the league leader (impossible normally
+        // but possible transiently) does not grant OVR beyond the full weight.
+        rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }
-      scored.push({ username, score: Math.round(50 + score * 50), percentile: score, games });
+      scored.push({ username, score: Math.round(50 + rawScore * 50), percentile: rawScore, games });
     }
+    // Tier is still percentile-based within position so the DIAMOND/GOLD/
+    // SILVER/BRONZE breakdown remains a clean "top 10% / 20% / 30% / rest"
+    // split per position regardless of absolute OVR values.
     scored.sort((left, right) => right.score - left.score);
     const count = scored.length;
     const diamond = Math.max(1, Math.ceil(count * 0.1));

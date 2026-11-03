@@ -9,7 +9,7 @@ import { C } from '../../theme/theme';
 import { useTheme } from '../../theme/use-theme';
 import { isAdmin } from '../../utils/league';
 import { getStatsForSeason } from '../../utils/rankings';
-import { EditPositionModal, OnboardingModal, StatsView, UploadImageModal } from '../accounts';
+import { EditNameModal, EditPositionModal, OnboardingModal, StatsView, UploadImageModal } from '../accounts';
 import { AdminPanel } from '../admin';
 import { HallOfFameView, HomeView, NewsHub, RulesView } from '../content';
 import { ScheduleView, StandingsView } from '../matches';
@@ -30,12 +30,7 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
-  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season }, fetchPolicy: 'cache-and-network' });
-  const previousView = useRef(view);
-  useEffect(() => {
-    if (view === 'me' && previousView.current !== view) void refetch().catch(() => { /* Apollo renders refetch errors below. */ });
-    previousView.current = view;
-  }, [view, refetch]);
+  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season } });
   const data = useMemo(() => result?.leagueOverview.me ? { me: mapCurrentCard(result.leagueOverview.me), currentSeason: result.leagueOverview.season, tickerNews: result.leagueOverview.tickerNews, period: result.leagueOverview.activeVotingPeriod } : undefined, [result]);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const updateRef = useRef(onUpdate);
@@ -85,6 +80,7 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         {view === 'admin' && (isAdmin(account) ? <AdminPanel account={account} /> : <p role="alert">Administrator access is required.</p>)}
       </main>
       {modal === 'pos' && <EditPositionModal account={account} onClose={closeModal} />}
+      {modal === 'name' && <EditNameModal account={account} onClose={closeModal} onSaved={savedAccount} />}
       {modal === 'image' && <UploadImageModal account={account} onClose={closeModal} onSave={savedAccount} />}
       {data && modal === 'share' && <ShareableCardModal account={cardAccount} team={myTeam} onClose={closeModal} />}
       {selectedPlayer && <SelectedPlayerCard selection={selectedPlayer} teams={teams} onClose={() => setSelectedPlayer(null)} />}

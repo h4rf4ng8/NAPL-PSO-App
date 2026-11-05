@@ -30,7 +30,13 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
   const { theme, toggleTheme } = useTheme();
-  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, { variables: { season } });
+  // no-cache: every initial mount and every refetch goes straight to the
+  // network. Combined with notifyOnNetworkStatusChange, the component also
+  // re-renders when the refetch completes so the fresh stats appear within
+  // the same test-level tick instead of after the next micro-task boundary.
+  const { data: result, loading, error, refetch } = useQuery(LeagueOverviewDocument, {
+    variables: { season }, fetchPolicy: 'no-cache', notifyOnNetworkStatusChange: true,
+  });
   const data = useMemo(() => result?.leagueOverview.me ? { me: mapCurrentCard(result.leagueOverview.me), currentSeason: result.leagueOverview.season, tickerNews: result.leagueOverview.tickerNews, period: result.leagueOverview.activeVotingPeriod } : undefined, [result]);
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const updateRef = useRef(onUpdate);

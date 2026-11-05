@@ -61,14 +61,22 @@ function appFor() {
 
 test('server rankings preserve weighted percentile scores, small-pool tiers, and custom weights', () => {
   const result = calculateRankings(accounts, positionWeights);
-  assert.deepEqual(result.get('alice'), { score: 88, percentile: 0.75, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-  assert.deepEqual(result.get('bob'), { score: 63, percentile: 0.25, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
+  // Alice leads every weighted stat (goals/assists/passes/tackles per game)
+  // so each stat contribution hits the full weight. Raw = 0.55+0.2+0.1+0.15
+  // = 1.0 → OVR = 50 + 50 * 1 = 100.
+  assert.deepEqual(result.get('alice'), { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+  // Bob: 0 goals/game, 0.1 assists/game (vs bench 0.2), 1 pass/game (vs 2),
+  // 0.1 tackles/game (vs 0.5). Raw = 0 + 0.5*0.2 + 0.5*0.1 + 0.2*0.15
+  // = 0 + 0.1 + 0.05 + 0.03 = 0.18 → OVR = 50 + 50 * 0.18 = 59.
+  assert.deepEqual(result.get('bob'), { score: 59, percentile: 0.18, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
   const tied = calculateRankings([
     { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
     { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
   ], positionWeights);
-  assert.equal(tied.get('first')?.percentile, 0.5);
-  assert.equal(tied.get('second')?.percentile, 0.5);
+  // Tied players both lead goals (benchmark = 1 goal/game), both get the
+  // full 0.55 goals weight. Nothing else contributes so both are at raw=0.55.
+  assert.equal(tied.get('first')?.percentile, 0.55);
+  assert.equal(tied.get('second')?.percentile, 0.55);
   assert.equal(tied.get('first')?.tier, 'DIAMOND');
   assert.equal(tied.get('second')?.tier, 'GOLD');
   const unranked = calculateRankings([{ username: 'New', position: 'ST', stats: zeroStats }], null).get('new');
@@ -80,9 +88,12 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
 
 test('finite negative saved weights remain compatible and malformed stored weights fail explicitly', async () => {
   const negative = calculateRankings(accounts, { ST: { goalsPerGame: -1 } });
-  assert.equal(negative.get('alice')?.score, 13);
-  assert.equal(negative.get('alice')?.percentile, -0.75);
-  assert.equal(negative.get('bob')?.score, 38);
+  // Only the negative goals weight applies (full override, no defaults
+  // merged). Alice leads goals so her raw score is 1 * (-1) = -1 → OVR 0.
+  // Bob has 0 goals so his raw is 0 * (-1) = 0 → OVR 50.
+  assert.equal(negative.get('alice')?.score, 0);
+  assert.equal(negative.get('alice')?.percentile, -1);
+  assert.equal(negative.get('bob')?.score, 50);
 
   const database: Database = {
     client: { setting: { findUnique: async () => ({ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }) } } as unknown as Database['client'],
@@ -131,7 +142,7 @@ test('REST and GraphQL account reads expose computed values without private colu
     const rest = await app.inject('/api/accounts');
     assert.equal(rest.statusCode, 200, rest.body);
     const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(restAlice.ranking, { score: 88, percentile: 0.75, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+    assert.deepEqual(restAlice.ranking, { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
     assert.equal(restAlice.cardStats, undefined);
     assert.equal(restAlice.email, undefined);
     assert.equal(restAlice.pendingImageUrl, undefined);

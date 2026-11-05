@@ -65,10 +65,9 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
   // so each stat contribution hits the full weight. Raw = 0.55+0.2+0.1+0.15
   // = 1.0 → OVR = 50 + 50 * 1 = 100.
   assert.deepEqual(result.get('alice'), { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-  // Bob: 0 goals/game, 0.1 assists/game (vs bench 0.2), 1 pass/game (vs 2),
-  // 0.1 tackles/game (vs 0.5). Raw = 0 + 0.5*0.2 + 0.5*0.1 + 0.2*0.15
-  // = 0 + 0.1 + 0.05 + 0.03 = 0.18 → OVR = 50 + 50 * 0.18 = 59.
-  assert.deepEqual(result.get('bob'), { score: 59, percentile: 0.18, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
+  // Bob: 0 goals/game. With the test's goals-only weight ({ goalsPerGame: 1 }),
+  // the only contribution is 0 * 1 = 0 → raw 0 → OVR = 50 + 50 * 0 = 50.
+  assert.deepEqual(result.get('bob'), { score: 50, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
   const tied = calculateRankings([
     { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
     { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },

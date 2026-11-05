@@ -88,12 +88,25 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         // but possible transiently) does not grant OVR beyond the full weight.
         rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }
-      scored.push({ username, score: Math.round(50 + rawScore * 50), percentile: rawScore, games });
+      scored.push({ username, score: rawScore, percentile: rawScore, games });
     }
-    // Tier is still percentile-based within position so the DIAMOND/GOLD/
-    // SILVER/BRONZE breakdown remains a clean "top 10% / 20% / 30% / rest"
-    // split per position regardless of absolute OVR values.
+    // Per-position normalization: the strongest raw score at this position
+    // anchors to OVR 100. Everyone else scales down from there, keeping
+    // within-position comparisons strictly monotonic (more weighted stats =
+    // more OVR) while ensuring top players actually reach the 90s and 100s
+    // instead of plateauing in the 80s because nobody leads in every stat.
     scored.sort((left, right) => right.score - left.score);
+    const topRaw = scored.length > 0 ? scored[0]!.score : 0;
+    for (const player of scored) {
+      if (topRaw <= 0) {
+        // Degenerate case: nobody has any positive weighted contribution
+        // (empty league, or every weight is <=0). Fall back to a flat
+        // midpoint OVR instead of dividing by a tiny or negative number.
+        player.score = 50;
+      } else {
+        player.score = Math.max(0, Math.min(100, Math.round(50 + 50 * (player.score / topRaw))));
+      }
+    }
     const count = scored.length;
     const diamond = Math.max(1, Math.ceil(count * 0.1));
     const gold = count > 1 ? Math.max(1, Math.ceil(count * 0.2)) : 0;

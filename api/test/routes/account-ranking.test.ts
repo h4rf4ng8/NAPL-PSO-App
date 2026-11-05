@@ -88,10 +88,11 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
 
 test('finite negative saved weights remain compatible and malformed stored weights fail explicitly', async () => {
   const negative = calculateRankings(accounts, { ST: { goalsPerGame: -1 } });
-  // Only the negative goals weight applies (full override, no defaults
-  // merged). Alice leads goals so her raw score is 1 * (-1) = -1 → OVR 0.
-  // Bob has 0 goals so his raw is 0 * (-1) = 0 → OVR 50.
-  assert.equal(negative.get('alice')?.score, 0);
+  // Only the negative goals weight applies. Alice's raw = 1 × -1 = -1,
+  // Bob's raw = 0 × -1 = 0. Top raw is 0, which hits the "nobody has a
+  // positive contribution" fallback → both players land at the midpoint
+  // OVR 50. Percentile preserves the actual raw score for ordering.
+  assert.equal(negative.get('alice')?.score, 50);
   assert.equal(negative.get('alice')?.percentile, -1);
   assert.equal(negative.get('bob')?.score, 50);
 

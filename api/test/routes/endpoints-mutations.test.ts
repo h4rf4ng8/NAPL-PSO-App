@@ -102,7 +102,11 @@ test('all remaining application mutations complete successful contract exchanges
   await write('PUT','/api/voting/periods/{id}/votes/me',`/api/voting/periods/${period.id}/votes/me`,{gk:captain.username,def:defender.username,cm:midfielder.username,st:striker.username});
   await write('PATCH','/api/voting/periods/{id}',`/api/voting/periods/${period.id}`,{status:'closed'});
   await write('DELETE','/api/voting/periods/{id}',`/api/voting/periods/${period.id}`);
+  // DELETE /api/seasons/{id} — refuses while schedule/transfer rows reference
+  // the season; scheduled matches and transfers for this season were already
+  // cleared by earlier DELETE calls, so this succeeds.
+  await write('DELETE','/api/seasons/{id}',`/api/seasons/${season}`);
   const expected = applicationOperations(c.registered).filter(key=>!key.startsWith('GET ')&&key!=='POST /api/graphql'&&!content.test(key.slice(key.indexOf(' ')+1)));
-  assert.equal(expected.length,35);
+  assert.equal(expected.length,36);
   assert.deepEqual([...c.covered].toSorted((a,b)=>a.localeCompare(b)),expected,'Every non-content mutation needs a successful contract exchange');
 });

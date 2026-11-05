@@ -72,10 +72,11 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
     { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
     { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
   ], positionWeights);
-  // Tied players both lead goals (benchmark = 1 goal/game), both get the
-  // full 0.55 goals weight. Nothing else contributes so both are at raw=0.55.
-  assert.equal(tied.get('first')?.percentile, 0.55);
-  assert.equal(tied.get('second')?.percentile, 0.55);
+  // Tied players both hit max goals (benchmark = 1), both receive the full
+  // custom weight of 1, so both end up at raw = 1. Tier split stays 1-player
+  // DIAMOND then 1-player GOLD by sort order.
+  assert.equal(tied.get('first')?.percentile, 1);
+  assert.equal(tied.get('second')?.percentile, 1);
   assert.equal(tied.get('first')?.tier, 'DIAMOND');
   assert.equal(tied.get('second')?.tier, 'GOLD');
   const unranked = calculateRankings([{ username: 'New', position: 'ST', stats: zeroStats }], null).get('new');

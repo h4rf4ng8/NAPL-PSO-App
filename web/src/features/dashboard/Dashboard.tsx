@@ -36,6 +36,16 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
   const updateRef = useRef(onUpdate);
   updateRef.current = onUpdate;
   useEffect(() => { if (data?.me.id === account.id) updateRef.current(data.me); }, [data, account.id]);
+  // Whenever the user navigates TO MY CARD from another view, refetch so
+  // the stats shown reflect any server-side changes made elsewhere (another
+  // session, admin edit, etc). Skipping the first render — the useQuery's
+  // own initial fetch covers that case.
+  const previousView = useRef(view);
+  useEffect(() => {
+    const changed = previousView.current !== view;
+    previousView.current = view;
+    if (changed && view === 'me') void refetch().catch(() => { /* subscribers see the error */ });
+  }, [view, refetch]);
 
   const teams = data?.me._team ? [data.me._team] : [];
   const currentSeason = data?.currentSeason ?? 'S1';

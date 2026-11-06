@@ -88,6 +88,11 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         // but possible transiently) does not grant OVR beyond the full weight.
         rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }
+      // Games-played confidence: a 1-game sub still gets most of their
+      // deserved credit but can't quite top a proven 3+ game player.
+      // 1 game = 70%, 2 games = 85%, 3+ games = 100%.
+      const confidence = Math.min(1, 0.55 + games * 0.15);
+      rawScore *= confidence;
       scored.push({ username, score: rawScore, percentile: rawScore, games });
     }
     // Per-position normalization: the strongest raw score at this position
@@ -104,7 +109,7 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         // midpoint OVR instead of dividing by a tiny or negative number.
         player.score = 50;
       } else {
-        player.score = Math.max(0, Math.min(100, Math.round(50 + 50 * (player.score / topRaw))));
+        player.score = Math.max(0, Math.min(100, Math.round(50 + 45 * (player.score / topRaw))));
       }
     }
     const count = scored.length;

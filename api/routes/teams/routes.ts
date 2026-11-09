@@ -274,6 +274,21 @@ export function registerTeams(app: FastifyInstance, { db, webhookUrl, storage }:
         await notify(webhookUrl, parameters(request).id!, request);
         return {...accountDto(saved, true), ...((actor(request).id === userId) && {roles:request.userRoles})};
     });
+    app.post('/api/teams/:id/owner', { config: { role: 'admin' } }, async (request) => {
+        const input = z.strictObject({ username: z.string() }).parse(request.body);
+        return db.transaction(async (tx) => {
+            const team = await needTeam(tx, parameters(request).id!, true);
+            const newOwner = await findAccount(tx, input.username.toLowerCase(), true);
+            if (!newOwner) throw new HttpError(404, 'account_not_found');
+            // New captain must currently be a member of this team — otherwise
+            // we'd end up with a captain who isn't on the roster.
+            if (newOwner.team_id !== team.id) throw new HttpError(409, 'new_owner_not_on_team');
+            if (team.owner_account_id === newOwner.id) throw new HttpError(409, 'already_owner');
+            request.resource = { type: 'team', id: team.id };
+            await updateTeam(tx, team.id, { owner_account_id: newOwner.id });
+            return teamDto(await needTeam(tx, team.id));
+        });
+    });
     app.post('/api/teams/:id/invitation', async (request) => {
         const { accept } = z.strictObject({
             accept: z.boolean()

@@ -11,6 +11,7 @@ export const teams={
  reviewTeam:(id:string,status:'approved'|'rejected',reason='')=>request<void>(`/api/teams/${segment(id)}/review`,'POST',{status,reason}),
  respondInvitation:(id:string,accept:boolean)=>request<void>(`/api/teams/${segment(id)}/invitation`,'POST',{accept}),
  changeMembership:(id:string,action:'join'|'leave',accountId?:string)=>request<void>(`/api/teams/${segment(id)}/membership`,'POST',{action,accountId}),
+ changeOwner:(id:string,username:string)=>request<void>(`/api/teams/${segment(id)}/owner`,'POST',{username}),
  saveTransfer:(tx:Transfer)=>request<void>(`/api/transfers/${segment(tx.id)}`,'PATCH',{windowType:tx.windowType}),
  deleteTransfer:(id:string)=>request<void>(`/api/transfers/${segment(id)}`,'DELETE'),
 };

@@ -109,7 +109,13 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         // midpoint OVR instead of dividing by a tiny or negative number.
         player.score = 50;
       } else {
-        player.score = Math.max(0, Math.min(100, Math.round(50 + 45 * (player.score / topRaw))));
+        const normalized = Math.max(0, Math.min(100, Math.round(50 + 45 * (player.score / topRaw))));
+        // Hard cap by games played: no matter how dominant the raw score,
+        // a 1-game player can't show more than 70 OVR, a 2-game player 80.
+        // Prevents a sub from leading the leaderboard just because the
+        // rest of their position pool has weak stats.
+        const gamesCap = player.games >= 3 ? 100 : 60 + player.games * 10;
+        player.score = Math.min(normalized, gamesCap);
       }
     }
     const count = scored.length;

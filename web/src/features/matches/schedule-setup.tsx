@@ -357,6 +357,32 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
           </div>
         </div>
 
+        {status === 'forfeit' && (
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>WHICH TEAM WON?</label>
+            <div className="grid grid-cols-2 gap-1 mb-2">
+              <button
+                type="button"
+                onClick={() => { setHomeScore(3); setAwayScore(0); }}
+                className="py-2 font-mono text-[10px] tracking-widest rounded uppercase"
+                style={homeScore === 3 && awayScore === 0
+                  ? { background: C.green, color: C.onColor }
+                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
+                }
+              >{home?.tag || 'HOME'} (3-0)</button>
+              <button
+                type="button"
+                onClick={() => { setHomeScore(0); setAwayScore(3); }}
+                className="py-2 font-mono text-[10px] tracking-widest rounded uppercase"
+                style={homeScore === 0 && awayScore === 3
+                  ? { background: C.green, color: C.onColor }
+                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
+                }
+              >{away?.tag || 'AWAY'} (3-0)</button>
+            </div>
+            <p className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>Forfeit wins are recorded as 3-0 in standings. Pick which team won.</p>
+          </div>
+        )}
         {status === 'completed' && (
           <div className="grid grid-cols-2 gap-2">
             <div>

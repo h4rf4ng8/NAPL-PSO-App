@@ -27,10 +27,31 @@ export async function loadTeamRecords(database: Database): Promise<TeamRecord[]>
     FROM match_rows
   ), unique_matches AS (
     SELECT * FROM first_records WHERE first_record=1
+  ), forfeit_rows AS (
+    -- Forfeited scheduled matches don't generate player match records (nobody
+    -- played), but the team W/L still counts toward standings. Emit one row
+    -- per team per forfeit so the UNION below sums W/L/GF/GA correctly.
+    SELECT sm.home_team_id AS "teamId", sm.season_id AS season,
+      CASE WHEN COALESCE(sm.home_score,0) > COALESCE(sm.away_score,0) THEN 'W'
+           WHEN COALESCE(sm.home_score,0) < COALESCE(sm.away_score,0) THEN 'L'
+           ELSE 'D' END AS result,
+      COALESCE(sm.home_score,0)::numeric AS gf, COALESCE(sm.away_score,0)::numeric AS ga
+    FROM asl.scheduled_matches sm WHERE sm.status = 'forfeit'
+    UNION ALL
+    SELECT sm.away_team_id AS "teamId", sm.season_id AS season,
+      CASE WHEN COALESCE(sm.away_score,0) > COALESCE(sm.home_score,0) THEN 'W'
+           WHEN COALESCE(sm.away_score,0) < COALESCE(sm.home_score,0) THEN 'L'
+           ELSE 'D' END AS result,
+      COALESCE(sm.away_score,0)::numeric AS gf, COALESCE(sm.home_score,0)::numeric AS ga
+    FROM asl.scheduled_matches sm WHERE sm.status = 'forfeit'
   ), selected AS (
     SELECT "teamId", season, result, gf, ga FROM unique_matches
     UNION ALL
     SELECT "teamId", 'all' AS season, result, gf, ga FROM unique_matches
+    UNION ALL
+    SELECT "teamId", season, result, gf, ga FROM forfeit_rows
+    UNION ALL
+    SELECT "teamId", 'all' AS season, result, gf, ga FROM forfeit_rows
   )
   SELECT "teamId", season, count(*)::int AS played,
     count(*) FILTER (WHERE result='W')::int AS w,

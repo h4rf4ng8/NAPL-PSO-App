@@ -68,6 +68,8 @@ test('all remaining application mutations complete successful contract exchanges
   await write('POST','/api/teams/{id}/review',`/api/teams/${home}/review`,{status:'approved'});
   await write('POST','/api/teams/{id}/membership',`/api/teams/${home}/membership`,{action:'leave'},striker.id);
   await write('POST','/api/teams/{id}/membership',`/api/teams/${home}/membership`,{action:'join'},striker.id);
+  // POST /api/teams/{id}/owner — transfer captaincy to striker (who's now a member).
+  await write('POST','/api/teams/{id}/owner',`/api/teams/${home}/owner`,{username:striker.username});
   await write('POST','/api/teams','/api/teams',{id:away,name:`Contract Away ${prefix}`,tag:'CAW'},defender.id);
   await write('POST','/api/teams/{id}/review',`/api/teams/${away}/review`,{status:'approved'});
   await write('POST','/api/teams','/api/teams',{id:spare,name:`Contract Spare ${prefix}`,tag:'CSP'},midfielder.id);
@@ -107,6 +109,6 @@ test('all remaining application mutations complete successful contract exchanges
   // cleared by earlier DELETE calls, so this succeeds.
   await write('DELETE','/api/seasons/{id}',`/api/seasons/${season}`);
   const expected = applicationOperations(c.registered).filter(key=>!key.startsWith('GET ')&&key!=='POST /api/graphql'&&!content.test(key.slice(key.indexOf(' ')+1)));
-  assert.equal(expected.length,36);
+  assert.equal(expected.length,37);
   assert.deepEqual([...c.covered].toSorted((a,b)=>a.localeCompare(b)),expected,'Every non-content mutation needs a successful contract exchange');
 });

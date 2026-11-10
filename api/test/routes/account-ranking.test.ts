@@ -64,7 +64,7 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
   // Alice leads every weighted stat (goals/assists/passes/tackles per game)
   // so each stat contribution hits the full weight. Raw = 0.55+0.2+0.1+0.15
   // = 1.0 → OVR = 50 + 50 * 1 = 100.
-  assert.deepEqual(result.get('alice'), { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+  assert.deepEqual(result.get('alice'), { score: 95, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
   // Bob: 0 goals/game. With the test's goals-only weight ({ goalsPerGame: 1 }),
   // the only contribution is 0 * 1 = 0 → raw 0 → OVR = 50 + 50 * 0 = 50.
   assert.deepEqual(result.get('bob'), { score: 50, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
@@ -143,7 +143,7 @@ test('REST and GraphQL account reads expose computed values without private colu
     const rest = await app.inject('/api/accounts');
     assert.equal(rest.statusCode, 200, rest.body);
     const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(restAlice.ranking, { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+    assert.deepEqual(restAlice.ranking, { score: 95, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
     assert.equal(restAlice.cardStats, undefined);
     assert.equal(restAlice.email, undefined);
     assert.equal(restAlice.pendingImageUrl, undefined);

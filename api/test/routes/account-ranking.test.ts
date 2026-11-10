@@ -69,8 +69,8 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
   // the only contribution is 0 * 1 = 0 → raw 0 → OVR = 50 + 50 * 0 = 50.
   assert.deepEqual(result.get('bob'), { score: 50, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
   const tied = calculateRankings([
-    { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
-    { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
+    { username: 'First', position: 'ST', stats: { ...zeroStats, games: 3, goals: 3 } },
+    { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 3, goals: 3 } },
   ], positionWeights);
   // Tied players both hit max goals (benchmark = 1), both receive the full
   // custom weight of 1, so both end up at raw = 1. Tier split stays 1-player

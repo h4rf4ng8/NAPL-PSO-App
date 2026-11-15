@@ -48,6 +48,71 @@ export function savePlayerMatches(database: Database, id: string, data: { matche
   // Existing match JSON can contain undefined after legacy record normalization.
   return database.client.account.update({ where: { id }, data: { ...data, matches: JSON.parse(JSON.stringify(data.matches)) as Prisma.InputJsonValue } });
 }
+
+// Row the UI needs for the VIEW MATCH modal: each player who was in a match
+// identified by its strikersMatchId, with their stats pulled from the match
+// entry on their own account record.
+export type MatchParticipant = {
+  username: string; position: string;
+  teamId: string | null; opponent: string | null; result: string;
+  goals: number; assists: number; passes: number; tackles: number;
+  deflects: number; catches: number; cleanSheet: boolean;
+  goalsFor: number | null; goalsAgainst: number | null;
+  date: number | null; season: string | null;
+};
+
+// Find every player's stats from a specific match. The match is identified by
+// its strikersMatchId (game-provided match id, shared across all participants).
+export async function findMatchParticipants(database: Database, matchId: string): Promise<MatchParticipant[]> {
+  const rows = await database.query<MatchParticipant>(Prisma.sql`
+    SELECT
+      COALESCE(a.username, '') AS username,
+      COALESCE(a.position, '') AS position,
+      m.value->>'ownTeamId' AS "teamId",
+      m.value->>'opponent' AS opponent,
+      COALESCE(m.value->>'result', '') AS result,
+      COALESCE((m.value->>'goals')::numeric, 0) AS goals,
+      COALESCE((m.value->>'assists')::numeric, 0) AS assists,
+      COALESCE((m.value->>'passes')::numeric, 0) AS passes,
+      COALESCE((m.value->>'tackles')::numeric, 0) AS tackles,
+      COALESCE((m.value->>'deflects')::numeric, 0) AS deflects,
+      COALESCE((m.value->>'catches')::numeric, 0) AS catches,
+      COALESCE((m.value->>'cleanSheet')::boolean, false) AS "cleanSheet",
+      CASE WHEN jsonb_typeof(m.value->'goalsFor')='number' THEN (m.value->>'goalsFor')::numeric ELSE NULL END AS "goalsFor",
+      CASE WHEN jsonb_typeof(m.value->'goalsAgainst')='number' THEN (m.value->>'goalsAgainst')::numeric ELSE NULL END AS "goalsAgainst",
+      CASE WHEN jsonb_typeof(m.value->'date')='number' THEN (m.value->>'date')::numeric ELSE NULL END AS date,
+      m.value->>'season' AS season
+    FROM asl.accounts a CROSS JOIN LATERAL jsonb_array_elements(
+      CASE WHEN jsonb_typeof(a.matches)='array' THEN a.matches ELSE '[]'::jsonb END
+    ) AS m(value)
+    WHERE m.value->>'strikersMatchId' = ${matchId}
+    ORDER BY a.username`);
+  return rows.map(row => ({
+    ...row,
+    goals: Number(row.goals), assists: Number(row.assists), passes: Number(row.passes), tackles: Number(row.tackles),
+    deflects: Number(row.deflects), catches: Number(row.catches),
+    goalsFor: row.goalsFor === null ? null : Number(row.goalsFor),
+    goalsAgainst: row.goalsAgainst === null ? null : Number(row.goalsAgainst),
+    date: row.date === null ? null : Number(row.date),
+  }));
+}
+
+// Remove a match from every player's record. Admin-only — for erasing a
+// mis-entered match entirely. Updates every account that had the match on
+// their matches array, filtering out the entry whose strikersMatchId matches.
+export async function deleteMatchFromAllPlayers(database: Database, matchId: string): Promise<number> {
+  const result = await database.query<{ id: string }>(Prisma.sql`
+    UPDATE asl.accounts SET matches = (
+      SELECT COALESCE(jsonb_agg(m.value), '[]'::jsonb)
+      FROM jsonb_array_elements(
+        CASE WHEN jsonb_typeof(matches)='array' THEN matches ELSE '[]'::jsonb END
+      ) AS m(value)
+      WHERE m.value->>'strikersMatchId' IS DISTINCT FROM ${matchId}
+    )
+    WHERE jsonb_typeof(matches)='array' AND matches @> jsonb_build_array(jsonb_build_object('strikersMatchId', ${matchId}::text))
+    RETURNING id`);
+  return result.length;
+}
 export async function saveResultNews(database: Database, id: string, data: Omit<Prisma.NewsCreateInput, 'id'>) {
   // Retain the old upsert lock against simultaneous news edits.
   const rows = await database.query<{ id: string }>(Prisma.sql`SELECT id FROM asl.news WHERE id=${id} FOR UPDATE`);

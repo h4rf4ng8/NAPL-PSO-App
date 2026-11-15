@@ -1,4 +1,4 @@
-import { Activity, ChevronLeft, ChevronRight, Shield } from 'lucide-react';
+import { Activity, ChevronLeft, ChevronRight, Eye, Shield } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { Account } from '../accounts/models';
 import { EmptyState, ResultBadge } from '../../components/Display';
@@ -7,6 +7,7 @@ import { useQuery } from '@apollo/client/react';
 import { AccountMatchesDocument } from '../../api/generated/graphql';
 import { FullRecord } from '../../components/FullRecord';
 import { mapAccountMatchPage } from '../accounts/api';
+import { MatchDetailsModal } from '../matches/MatchDetailsModal';
 
 export function MatchLog({ account, season }: { account: Account; season: string }) {
   const filterKey = `${account.id}:${season}`;
@@ -29,6 +30,7 @@ export function MatchLog({ account, season }: { account: Account; season: string
     const currentPage = current.key === filterKey ? current : { key: filterKey, cursor: null, back: [] };
     return { ...currentPage, cursor: currentPage.back.at(-1) ?? null, back: currentPage.back.slice(0, -1) };
   });
+  const [viewMatchId, setViewMatchId] = useState<string | null>(null);
 
   return <div>
     <div className="flex items-center gap-2 mb-4">
@@ -56,6 +58,14 @@ export function MatchLog({ account, season }: { account: Account; season: string
                 <span><span style={{ color: C.greenLight }}>{m.goals}</span>G</span>
                 <span><span style={{ color: C.goldLight }}>{m.assists}</span>A</span>
                 {m.cleanSheet && <Shield size={14} style={{ color: C.greenLight }} />}
+                {typeof m.strikersMatchId === 'string' && m.strikersMatchId.length > 0 && (
+                  <button
+                    onClick={() => setViewMatchId(m.strikersMatchId!)}
+                    aria-label="View full match"
+                    className="p-1.5 rounded flex items-center justify-center transition-colors"
+                    style={{ background: `${C.navyLight}55`, color: C.cream, border: `1px solid ${C.navyLight}` }}
+                  ><Eye size={14} /></button>
+                )}
               </div>
             </div>
           ))}
@@ -65,6 +75,14 @@ export function MatchLog({ account, season }: { account: Account; season: string
           <button disabled={!page?.pageInfo.hasNextPage || loading || !!error} onClick={goNext} className="px-3 py-2 flex items-center gap-1 disabled:opacity-40">Next <ChevronRight size={16} /></button>
         </div>
       </>
+    )}
+    {viewMatchId && (
+      <MatchDetailsModal
+        matchId={viewMatchId}
+        account={account}
+        onClose={() => setViewMatchId(null)}
+        onDeleted={() => { void refetch(); }}
+      />
     )}
   </div>;
 }

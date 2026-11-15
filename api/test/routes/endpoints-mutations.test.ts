@@ -99,6 +99,9 @@ test('all remaining application mutations complete successful contract exchanges
     homeTeamId:home,awayTeamId:away,season,playerMap:{one:captain.username},tackleOverrides:{},
     matchData:{match_id:prefix,score:{home:1,away:0},players:[{player_id:'one',username:captain.username,team:'home',stats:{goals:1}}]},
   });
+  // DELETE /api/matches/{id} — admin removes a mis-entered match from every
+  // player's record. Uses the match id the match-imports call just created.
+  await write('DELETE','/api/matches/{id}',`/api/matches/${prefix}`);
   const period = (await write('POST','/api/voting/periods','/api/voting/periods',{closesAt:Date.now()+3_600_000,eligiblePlayers:[captain.username,striker.username,defender.username,midfielder.username]})).json();
   await owner.execute(Prisma.sql`UPDATE asl.totw_voting_periods SET opens_at=clock_timestamp()-interval '1 minute',closes_at=clock_timestamp()+interval '1 hour' WHERE id=${period.id}::uuid`);
   await write('PUT','/api/voting/periods/{id}/votes/me',`/api/voting/periods/${period.id}/votes/me`,{gk:captain.username,def:defender.username,cm:midfielder.username,st:striker.username});
@@ -109,6 +112,6 @@ test('all remaining application mutations complete successful contract exchanges
   // cleared by earlier DELETE calls, so this succeeds.
   await write('DELETE','/api/seasons/{id}',`/api/seasons/${season}`);
   const expected = applicationOperations(c.registered).filter(key=>!key.startsWith('GET ')&&key!=='POST /api/graphql'&&!content.test(key.slice(key.indexOf(' ')+1)));
-  assert.equal(expected.length,37);
+  assert.equal(expected.length,38);
   assert.deepEqual([...c.covered].toSorted((a,b)=>a.localeCompare(b)),expected,'Every non-content mutation needs a successful contract exchange');
 });

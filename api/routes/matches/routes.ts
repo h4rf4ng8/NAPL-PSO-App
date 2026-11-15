@@ -7,7 +7,7 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import { type Row } from '../../plugins/db/client.js';
 import { object, array } from '../../plugins/db/records.js';
 import { submissionDto } from './dto.js';
-import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews } from './queries.js';
+import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews, findMatchParticipants, deleteMatchFromAllPlayers } from './queries.js';
 import { pathSegment, detailUrl, page, pageInput } from '../payload/page.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
@@ -199,5 +199,21 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 ok: true, matchId: md.match_id, updated, skipped, alreadyImported, skippedIndexes, homeTeam: home.name, awayTeam: away.name, score: `${md.score.home} - ${md.score.away}`
             };
         });
+    });
+    // GET /api/matches/:id — return every player's stats for a specific match.
+    // Public: match results are already visible on each player's own match log.
+    app.get('/api/matches/:id', { config: { public: true } }, async (request) => {
+        const matchId = parameters(request).id!;
+        const participants = await findMatchParticipants(db, matchId);
+        if (participants.length === 0) throw new HttpError(404, 'match_not_found');
+        return { id: matchId, participants };
+    });
+    // DELETE /api/matches/:id — admin-only. Removes the match entry from every
+    // account that recorded it, for admins who want to erase a mis-entered match.
+    app.delete('/api/matches/:id', { config: { role: 'admin' } }, async (request) => {
+        const matchId = parameters(request).id!;
+        const removed = await deleteMatchFromAllPlayers(db, matchId);
+        if (removed === 0) throw new HttpError(404, 'match_not_found');
+        return { ok: true, removedFrom: removed };
     });
 }

@@ -64,6 +64,7 @@ export async function accountMatches(database: Database, args: {
     return { id: match.id, date: match.date, season: String(match.season).slice(0, 160), opponent: String(match.opponent).slice(0, 160),
       result: String(match.result ?? '').slice(0, 40), goals: match.goals, assists: match.assists, passes: match.passes, tackles: match.tackles,
       deflects: match.deflects, catches: match.catches, cleanSheet: match.cleanSheet, motm: match.motm,
+      strikersMatchId: typeof match.strikersMatchId === 'string' ? match.strikersMatchId : undefined,
       ownTeamId: match.ownTeamId, opponentTeamId: match.opponentTeamId,
       previewTruncated: String(match.season).length > 160 || String(match.opponent).length > 160 || String(match.result ?? '').length > 40,
       detailUrl: detailUrl(`/api/accounts/${id}/history/matches/${Number(row.ordinality) - 1}`, row.raw_match ?? row.match),

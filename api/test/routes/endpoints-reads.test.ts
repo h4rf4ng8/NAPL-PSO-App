@@ -39,9 +39,9 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   const match = await get('/api/accounts/{id}/history/{collection}/{ordinal}', history.nodes[0].detailUrl + '&first=50');
   await get('/api/accounts/{id}/history/{collection}/{ordinal}/fields/{field}', match.nodes.find((field: ResponseBody) => field.valueUrl).valueUrl);
   // GET /api/matches/{id} — look up every player's stats in a specific match
-  // by its strikersMatchId. 404 is fine; the test only needs the route to be
-  // covered (exercised through the client), not to return data for a fixture.
-  await c.exchange('GET', '/api/matches/{id}', '/api/matches/nonexistent-match-id', { headers }, 404);
+  // by its strikersMatchId. The fixture returns data for any id, so a 200 is
+  // fine; the test only needs the route to be covered.
+  await get('/api/matches/{id}', '/api/matches/any-match-id');
   for (const [route, url, fieldRoute] of [
     ['/api/accounts/{id}/stats', `/api/accounts/${id}/stats`, '/api/accounts/{id}/stats/fields/{field}'],
     ['/api/submissions/{id}/detail', documents.get('/api/submissions').nodes[0].detailUrl, '/api/submissions/{id}/detail/fields/{field}'],

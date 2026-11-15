@@ -9,7 +9,19 @@ export const matches={
  replaceScheduledSeason:(season:string,rows:(Pick<ScheduledMatch,'id'|'week'|'homeTeamId'|'awayTeamId'> & Partial<Omit<ScheduledMatch,'season'|'createdAt'|'updatedAt'>>)[])=>request<void>(`/api/schedule/season/${segment(season)}`,'PUT',{matches:rows.map(scheduleFields)}),
  deleteScheduledMatch:(id:string)=>request<void>(`/api/schedule/${segment(id)}`,'DELETE'),
  importMatch:(body:unknown)=>request<ImportResult>('/api/match-imports','POST',body),
+ fetchMatchDetails:(matchId:string)=>request<MatchDetails>(`/api/matches/${segment(matchId)}`,'GET'),
+ deleteMatch:(matchId:string)=>request<{ok:boolean,removedFrom:number}>(`/api/matches/${segment(matchId)}`,'DELETE'),
 };
+
+export interface MatchParticipant {
+  username: string; position: string;
+  teamId: string | null; opponent: string | null; result: string;
+  goals: number; assists: number; passes: number; tackles: number;
+  deflects: number; catches: number; cleanSheet: boolean;
+  goalsFor: number | null; goalsAgainst: number | null;
+  date: number | null; season: string | null;
+}
+export interface MatchDetails { id: string; participants: MatchParticipant[]; }
 
 export function mapTeamRecords(data: TeamRecordsQuery) {
   const parsed = z.object({ nodes: teamRecordsSchema, pageInfo: z.object({ endCursor: z.string().nullable(), hasNextPage: z.boolean() }), totalCount: z.number() }).safeParse(data.teamRecords);

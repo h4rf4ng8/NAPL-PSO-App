@@ -429,6 +429,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         <EditMatchModal
           match={editing}
           allTeams={editingTeams}
+          account={account}
           onClose={() => setEditing(null)}
           onSaved={() => { void reload(); }}
         />

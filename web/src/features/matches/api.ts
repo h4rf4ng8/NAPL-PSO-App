@@ -11,6 +11,7 @@ export const matches={
  importMatch:(body:unknown)=>request<ImportResult>('/api/match-imports','POST',body),
  fetchMatchDetails:(matchId:string)=>request<MatchDetails>(`/api/matches/${segment(matchId)}`,'GET'),
  deleteMatch:(matchId:string)=>request<{ok:boolean,removedFrom:number}>(`/api/matches/${segment(matchId)}`,'DELETE'),
+ updateMatchStats:(matchId:string,username:string,stats:Partial<Pick<MatchParticipant,'goals'|'assists'|'passes'|'tackles'|'deflects'|'catches'|'cleanSheet'>>)=>request<{ok:boolean}>(`/api/matches/${segment(matchId)}/players/${segment(username)}`,'PATCH',stats),
 };
 
 export interface MatchParticipant {

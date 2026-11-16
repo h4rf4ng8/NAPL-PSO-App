@@ -7,7 +7,7 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import { type Row } from '../../plugins/db/client.js';
 import { object, array } from '../../plugins/db/records.js';
 import { submissionDto } from './dto.js';
-import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews, findMatchParticipants, deleteMatchFromAllPlayers } from './queries.js';
+import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews, findMatchParticipants, deleteMatchFromAllPlayers, findPlayerMatch } from './queries.js';
 import { pathSegment, detailUrl, page, pageInput } from '../payload/page.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
@@ -215,5 +215,30 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
         const removed = await deleteMatchFromAllPlayers(db, matchId);
         if (removed === 0) throw new HttpError(404, 'match_not_found');
         return { ok: true, removedFrom: removed };
+    });
+    // PATCH /api/matches/:id/players/:username — admin-only. Overwrites the
+    // numeric stats for one player within a single recorded match. The rest
+    // of the match entry (opponent, teammates, result, date) is preserved.
+    // The player's aggregate stats are recomputed across all their matches
+    // so season totals stay consistent with the edited numbers.
+    const editableStats = z.strictObject({
+        goals: stat.optional(), assists: stat.optional(), passes: stat.optional(),
+        tackles: stat.optional(), deflects: stat.optional(), catches: stat.optional(),
+        cleanSheet: z.boolean().optional(),
+    });
+    app.patch('/api/matches/:id/players/:username', { config: { role: 'admin' } }, async (request) => {
+        const input = editableStats.parse(request.body);
+        const { id: matchId, username: targetUsername } = parameters(request);
+        return db.transaction(async (tx) => {
+            const found = await findPlayerMatch(tx, matchId!, targetUsername!);
+            if (!found) throw new HttpError(404, 'match_or_player_not_found');
+            const currentMatches = found.account.matches as Row[];
+            const existing = object(currentMatches[found.matchIndex]);
+            const nextMatches = [...currentMatches];
+            nextMatches[found.matchIndex] = { ...existing, ...input };
+            await savePlayerMatches(tx, found.account.id, { matches: nextMatches, stats: aggregate(nextMatches) });
+            request.resource = { type: 'account', id: found.account.id };
+            return { ok: true };
+        });
     });
 }

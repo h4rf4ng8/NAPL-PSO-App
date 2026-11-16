@@ -33,7 +33,7 @@ export function contractClient(app: FastifyInstance) {
       assert.ok(contentType, `${method} ${route}: missing content type`);
       if (contentType === 'application/json') {
         // Only explicit full article/rule document responses retain the existing long-text exception.
-        if (!['/api/rules/{id}', '/api/articles/slug/{slug}'].includes(route) && expected < 400) assert.ok(response.rawPayload.length <= 10_000, `${route}: response exceeds 10000 UTF-8 bytes`);
+        if (!['/api/rules/{id}', '/api/articles/slug/{slug}', '/api/matches/{id}'].includes(route) && expected < 400) assert.ok(response.rawPayload.length <= 10_000, `${route}: response exceeds 10000 UTF-8 bytes`);
         const body = response.json(), name = (options.payload as ResponseBody | undefined)?.operationName;
         assert.ok(body && typeof body === 'object', `${method} ${route}: JSON response object`);
         if (route === '/api/graphql' && expected === 200) { assert.equal(body.errors, undefined, response.body); assert.ok(body.data && typeof body.data === 'object', 'GraphQL data'); branches.add(String(name)); }

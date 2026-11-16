@@ -27,6 +27,7 @@ import { PicturesManager } from './PicturesManager';
 import { WeightingsManager } from './WeightingsManager';
 import { IntegrationsManager } from './IntegrationsManager';
 import { AdminsManager } from './AdminsManager';
+import { ChangeCaptainModal } from './ChangeCaptainModal';
 // AdminPanel
 export const AdminPanel = ({ account }: { account: Account }) => {
   const [section, setSection] = useState('teams');
@@ -35,6 +36,7 @@ export const AdminPanel = ({ account }: { account: Account }) => {
   const [tab, setTab] = useState('pending');
   const [currentSeason, setCurrentSeason] = useState('S1');
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [captainTeam, setCaptainTeam] = useState<Team | null>(null);
   const cursor = usePageCursor(tab);
   const teamQuery = useQuery(TeamSummariesDocument, { variables: { scope: null, status: tab, search: null, after: cursor.after }, skip: section !== 'teams' });
   const teamPage = { data: teamQuery.data && { ...teamQuery.data.teamSummaries, nodes: teamQuery.data.teamSummaries.nodes.map(team => ({ ...team, color: team.color ?? '', createdAt: team.createdAt ?? 0 })) }, loading: teamQuery.loading, error: teamQuery.error?.message,
@@ -251,6 +253,9 @@ export const AdminPanel = ({ account }: { account: Account }) => {
                           <button onClick={() => { void loadTeamForEdit(t.id).then(setEditingTeam).catch(()=>setLoadError('Could not load team editor.')); }} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded" style={{
                             background: `${C.navyLight}88`, color: C.cream, border: `1px solid ${C.navyLight}`,
                           }}>EDIT</button>
+                          <button onClick={() => { void loadTeamForEdit(t.id).then(setCaptainTeam).catch(()=>setLoadError('Could not load team roster.')); }} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1" style={{
+                            background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}66`,
+                          }}><Crown size={12} /> CAPTAIN</button>
                           <button onClick={() => removeTeam(t)} className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded" style={{
                             background: `${C.red}33`, color: C.redLight, border: `1px solid ${C.red}66`,
                           }}>DELETE</button>
@@ -275,6 +280,13 @@ export const AdminPanel = ({ account }: { account: Account }) => {
           team={editingTeam}
           onClose={() => setEditingTeam(null)}
           onSaved={() => { setEditingTeam(null); refresh(); }}
+        />
+      )}
+      {captainTeam && (
+        <ChangeCaptainModal
+          team={captainTeam}
+          onClose={() => setCaptainTeam(null)}
+          onSaved={() => { setCaptainTeam(null); refresh(); }}
         />
       )}
     </div>

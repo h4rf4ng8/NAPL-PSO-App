@@ -28,7 +28,7 @@ export async function loadTeamRecords(database: Database): Promise<TeamRecord[]>
   ), unique_matches AS (
     SELECT * FROM first_records WHERE first_record=1
   ), forfeit_rows AS (
-    -- Forfeited scheduled matches don't generate player match records (nobody
+    -- Forfeited scheduled matches don't produce player match records (nobody
     -- played), but the team W/L still counts toward standings. Emit one row
     -- per team per forfeit so the UNION below sums W/L/GF/GA correctly.
     SELECT sm.home_team_id AS "teamId", sm.season_id AS season,

@@ -38,6 +38,8 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
   const [sidEditing, setSidEditing] = useState<AdminPlayer | null>(null); // account whose Strikers ID is being changed
   const [newSid, setNewSid] = useState('');
   const [posEditing, setPosEditing] = useState<AdminPlayer | null>(null); // account whose position is being changed
+  const [nameEditing, setNameEditing] = useState<AdminPlayer | null>(null); // account whose username is being changed
+  const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
@@ -95,6 +97,25 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
       refresh();
     } catch (error_) {
       setError('Could not toggle cheater: ' + (error_ instanceof Error ? error_.message : String(error_)));
+    }
+    setBusy(false);
+  };
+
+  const changeName = async (player: AdminPlayer) => {
+    setError('');
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === player.username) { setNameEditing(null); setNewName(''); return; }
+    if (trimmed.length < 2 || trimmed.length > 64) { setError('Name must be 2-64 characters.'); return; }
+    if (!/^[\p{L}\p{N}_. -]+$/u.test(trimmed)) { setError('Only letters, numbers, spaces, dots, hyphens, and underscores.'); return; }
+    setBusy(true);
+    try {
+      await accountApi.patchAccount(player.id, { username: trimmed });
+      setInfo(`✓ Renamed ${player.username} → ${trimmed}`);
+      setNameEditing(null); setNewName('');
+      refresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (renameError) {
+      setError('Could not rename: ' + (renameError instanceof Error ? renameError.message : String(renameError)));
     }
     setBusy(false);
   };
@@ -292,6 +313,36 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
                   style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
                 >CANCEL</button>
               </div>
+            ); if (nameEditing && (nameEditing.id === p.id)) return (
+              <div className="space-y-2">
+                <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
+                  RENAME {p.username.toUpperCase()}
+                </div>
+                <input
+                  autoFocus
+                  type="text"
+                  value={newName}
+                  maxLength={64}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="New username"
+                  className="w-full rounded px-3 py-2 font-mono text-sm"
+                  style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.brandNavy }}
+                />
+                <div className="flex gap-1.5">
+                  <button
+                    disabled={busy || !newName.trim() || newName.trim() === p.username}
+                    onClick={() => { void changeName(p); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded disabled:opacity-50"
+                    style={{ background: C.green, color: C.onColor }}
+                  >{busy ? 'SAVING…' : 'SAVE'}</button>
+                  <button
+                    onClick={() => { setNameEditing(null); setNewName(''); setError(''); }}
+                    className="px-3 py-1.5 font-heading tracking-wider text-[11px] rounded"
+                    style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                  >CANCEL</button>
+                </div>
+                {error && <div className="font-mono text-[11px] px-2 py-1 rounded" style={{ background: `${C.red}22`, color: C.red }}>{error}</div>}
+              </div>
             ); if (posEditing && (posEditing.id === p.id)) return (
               <div className="space-y-2">
                 <div className="font-mono text-[10px] tracking-[0.2em]" style={{ color: `${C.brandNavy}77` }}>
@@ -363,6 +414,11 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
                       : <span style={{ color: C.red }}> • NO SC ID</span>}
                   </div>
                 </div>
+                <button
+                  onClick={() => { setNameEditing(p); setNewName(p.username); setPosEditing(null); setTeamEditing(null); setSidEditing(null); setError(''); }}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"
+                  style={{ background: `${C.navyLight}66`, color: C.brandNavy }}
+                >NAME</button>
                 <button
                   onClick={() => { setPosEditing(p); setTeamEditing(null); setSidEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"

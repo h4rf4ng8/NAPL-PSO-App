@@ -29,11 +29,15 @@ import { C } from '../../theme/theme';
 // Unmatched players (no ASL account exists yet): logged but skipped. If the
 // player later signs up, admin can retroactively add these stats from the
 // Skipped Log tab.
-export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh }: { account: Account; currentSeason: string; onRefresh: () => void }) => {
+// initialHomeTeamId/initialAwayTeamId pre-select the two teams and let the
+// import skip the team-picker step (step 2). Scheduled matches come with the
+// teams already decided, so passing them here avoids a redundant re-pick.
+export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh, initialHomeTeamId, initialAwayTeamId }: { account: Account; currentSeason: string; onRefresh: () => void; initialHomeTeamId?: string; initialAwayTeamId?: string }) => {
+  const teamsPreset = Boolean(initialHomeTeamId && initialAwayTeamId);
   const [step, setStep] = useState(1); // 1=upload, 2=teams, 3=map, 4=confirm
   const [matchData, setMatchData] = useState<ImportedMatch | null>(null); // parsed JSON
-  const [homeTeamId, setHomeTeamId] = useState('');
-  const [awayTeamId, setAwayTeamId] = useState('');
+  const [homeTeamId, setHomeTeamId] = useState(initialHomeTeamId ?? '');
+  const [awayTeamId, setAwayTeamId] = useState(initialAwayTeamId ?? '');
   // For each strikers player_id → ASL username picked (or '' for skip)
   const [playerMap, setPlayerMap] = useState<Record<string,string>>({});
   // Manual tackle override — admin can type the correct value from the game
@@ -93,7 +97,9 @@ export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh
       const byId = Object.fromEntries(matched);
       setAutoMatches(byId);
       setPlayerMap(Object.fromEntries(data.players.map(player => [player.player_id, byId[String(player.player_id)]?.username ?? ''])));
-      setStep(2);
+      // Teams come pre-set when importing from a scheduled match — skip the
+      // team-picker step and go straight to player mapping (step 3).
+      setStep(teamsPreset ? 3 : 2);
     } catch (error_) {
       setError('Could not parse file: ' + (error_ instanceof Error ? error_.message : String(error_)));
     }
@@ -335,7 +341,7 @@ export const ImportMatchManager = ({ account: _account, currentSeason, onRefresh
           </div>
 
           <div className="flex gap-2">
-            <button onClick={() => setStep(2)} className="px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: `${C.navyLight}33`, color: `${C.cream}88` }}>← BACK</button>
+            {!teamsPreset && <button onClick={() => setStep(2)} className="px-4 py-2 rounded font-heading text-xs tracking-wider" style={{ background: `${C.navyLight}33`, color: `${C.cream}88` }}>← BACK</button>}
             <button
               onClick={() => setStep(4)}
               className="flex-1 px-4 py-2 rounded font-heading text-xs tracking-wider"

@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react';
 import { ModalShell } from '../../components/Dialog';
 import { matches as matchesApi, type MatchDetails, type MatchParticipant } from './api';
 import { C } from '../../theme/theme';
-import { Shield, Trash2 } from 'lucide-react';
+import { Edit3, Shield, Trash2 } from 'lucide-react';
 import { ResultBadge } from '../../components/Display';
 import type { Account } from '../accounts/models';
 import { isAdmin as hasAdminRole } from '../../utils/league';
+
+// Stats an admin can edit for one player in one match. cleanSheet is a
+// defender/GK flag; the aggregate uses it to recount clean sheets.
+type EditableStats = Pick<MatchParticipant, 'goals' | 'assists' | 'passes' | 'tackles' | 'deflects' | 'catches' | 'cleanSheet'>;
 
 // Group participants by the team they played on (via ownTeamId on the match
 // record). Players whose team isn't recorded fall into the 'unknown' bucket.
@@ -26,6 +30,34 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
   const [loadError, setLoadError] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [editingUsername, setEditingUsername] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<EditableStats | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const openEdit = (player: MatchParticipant) => {
+    setEditingUsername(player.username);
+    setEditDraft({
+      goals: player.goals, assists: player.assists, passes: player.passes, tackles: player.tackles,
+      deflects: player.deflects, catches: player.catches, cleanSheet: player.cleanSheet,
+    });
+    setEditError('');
+  };
+  const cancelEdit = () => { setEditingUsername(null); setEditDraft(null); setEditError(''); };
+  const saveEdit = async () => {
+    if (!editingUsername || !editDraft) return;
+    setSavingEdit(true); setEditError('');
+    try {
+      await matchesApi.updateMatchStats(matchId, editingUsername, editDraft);
+      // Re-fetch so the modal reflects the new numbers without closing.
+      const refreshed = await matchesApi.fetchMatchDetails(matchId);
+      setDetails(refreshed);
+      cancelEdit();
+    } catch (saveError) {
+      setEditError(saveError instanceof Error ? saveError.message : 'Could not save edit.');
+    }
+    setSavingEdit(false);
+  };
 
   useEffect(() => {
     let abandoned = false;
@@ -80,7 +112,35 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
                 {teamKey === 'unknown' ? 'UNASSIGNED' : (players[0]?.opponent ? `vs ${players[0].opponent.toUpperCase()}` : teamKey)}
               </h4>
               <div className="space-y-1">
-                {players.map(player => (
+                {players.map(player => editDraft && editingUsername === player.username ? (
+                  <div key={player.username} className="rounded px-2 py-2 font-mono text-xs space-y-2" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.gold}66` }}>
+                    <div className="font-heading tracking-wider" style={{ color: C.goldLight }}>EDIT {player.username.toUpperCase()}</div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['goals', 'assists', 'passes', 'tackles', 'deflects', 'catches'] as const).map(field => (
+                        <label key={field} className="flex flex-col">
+                          <span className="uppercase tracking-wider text-[9px]" style={{ color: `${C.cream}88` }}>{field}</span>
+                          <input type="number" min={0} value={editDraft[field]}
+                            onChange={event => setEditDraft({ ...editDraft, [field]: Number(event.target.value) })}
+                            className="w-full px-2 py-1 rounded" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }} />
+                        </label>
+                      ))}
+                    </div>
+                    <label className="flex items-center gap-2 text-xs" style={{ color: C.cream }}>
+                      <input type="checkbox" checked={editDraft.cleanSheet}
+                        onChange={event => setEditDraft({ ...editDraft, cleanSheet: event.target.checked })} />
+                      Clean sheet
+                    </label>
+                    {editError && <p role="alert" style={{ color: C.redLight }}>{editError}</p>}
+                    <div className="flex gap-2">
+                      <button onClick={() => { void saveEdit(); }} disabled={savingEdit}
+                        className="flex-1 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                        style={{ background: C.green, color: C.onColor }}>{savingEdit ? 'SAVING…' : 'SAVE'}</button>
+                      <button onClick={cancelEdit} disabled={savingEdit}
+                        className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                        style={{ background: `${C.navyLight}66`, color: C.cream }}>CANCEL</button>
+                    </div>
+                  </div>
+                ) : (
                   <div key={player.username} className="rounded px-2 py-1.5 flex items-center gap-2 font-mono text-xs" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}44` }}>
                     <ResultBadge result={player.result} />
                     <span className="flex-1 truncate" style={{ color: C.cream }}>{player.username} <span style={{ color: `${C.cream}66` }}>({player.position})</span></span>
@@ -89,6 +149,12 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
                     <span><span style={{ color: `${C.cream}88` }}>{player.passes}</span>P</span>
                     <span><span style={{ color: `${C.cream}88` }}>{player.tackles}</span>T</span>
                     {player.cleanSheet && <Shield size={12} style={{ color: C.greenLight }} />}
+                    {canDelete && (
+                      <button onClick={() => openEdit(player)} aria-label={`Edit ${player.username}`}
+                        className="p-1 rounded" style={{ background: `${C.navyLight}55`, color: C.goldLight }}>
+                        <Edit3 size={12} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

@@ -119,7 +119,11 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
             const data = {
                 country: input.country, steam_url: input.steamUrl, pending_image_url: input.pendingImageUrl,
                 strikers_id: input.strikersId, position: input.position,
-                ...('username' in input && { username: input.username }),
+                // Rename: write username AND username_lower together. The DB
+                // generates username_lower on INSERT only, so without this
+                // explicit update renames leave the lowered copy stale, which
+                // breaks sign-ins and the username_lower-based lookup below.
+                ...(input.username !== undefined && { username: input.username, username_lower: input.username.toLowerCase() }),
                 ...('imageUrl' in input && { image_url: input.imageUrl }),
                 ...('stats' in input && { stats: input.stats }), ...('matches' in input && { matches: input.matches === undefined ? undefined : JSON.parse(JSON.stringify(input.matches)) }),
                 ...('championships' in input && { championships: input.championships === undefined ? undefined : JSON.parse(JSON.stringify(input.championships)) }),

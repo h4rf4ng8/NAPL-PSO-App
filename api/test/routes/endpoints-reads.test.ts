@@ -71,7 +71,7 @@ test('all read operations and every trusted GraphQL branch satisfy the wire cont
   const expected = applicationOperations(c.registered).filter(key => key.startsWith('GET ') || key === 'POST /api/graphql');
   assert.deepEqual([...c.covered].toSorted((a, b) => a.localeCompare(b)), expected);
   assert.deepEqual([...c.branches].toSorted((a, b) => a.localeCompare(b)), [...graphqlOperationNames].toSorted((a, b) => a.localeCompare(b)));
-  assert.equal(c.heads.size, 51);
+  assert.equal(c.heads.size, 52);
 });
 
 test('public team projections omit moderation descriptors and GraphQL envelopes retain optional identity', async t => {

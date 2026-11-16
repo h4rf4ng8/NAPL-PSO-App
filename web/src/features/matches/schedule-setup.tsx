@@ -2,7 +2,7 @@ import { usePageCursor } from '../../hooks/use-page-cursor';
 import type { TeamSummary as Team } from '../teams/models';
 import { useQuery } from '@apollo/client/react';
 import { TeamSummariesDocument } from '../../api/generated/graphql';
-import { Check } from 'lucide-react';
+import { Check, Upload } from 'lucide-react';
 import { useState } from 'react';
 import { MAX_SCHEDULE_MATCHES } from '@napl/contracts/league';
 import { PageButtons } from '../../components/PageButtons';
@@ -10,9 +10,11 @@ import { TeamSelect } from '../teams/TeamSelect';
 import { matches as matchApi } from './api';
 
 import type { ScheduledMatch } from './models';
+import type { Account } from '../accounts/models';
 import { ModalShell } from '../../components/Dialog';
 import { C } from '../../theme/theme';
 import { generateRoundRobinSchedule } from '../../utils/league';
+import { ImportMatchManager } from './match-import';
 
 // ============ SCHEDULE: GENERATE MODAL ============
 // Admin picks the season name + the teams to include, then this generates
@@ -262,7 +264,7 @@ export const GenerateScheduleModal = ({ existingSeasons = [], onClose, onGenerat
 // ============ SCHEDULE: EDIT MATCH MODAL ============
 // Admin opens this on any individual match to set the date/time, enter a
 // score, mark postponed/forfeit, add a stream link, etc.
-export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { match: ScheduledMatch; allTeams?: Pick<Team, 'id' | 'name' | 'tag'>[]; onClose: () => void; onSaved: () => void }) => {
+export const EditMatchModal = ({ match, allTeams = [], account = null, onClose, onSaved }: { match: ScheduledMatch; allTeams?: Pick<Team, 'id' | 'name' | 'tag'>[]; account?: Account | null; onClose: () => void; onSaved: () => void }) => {
   const home = allTeams.find(t => t.id === match.homeTeamId);
   const away = allTeams.find(t => t.id === match.awayTeamId);
   // Convert epoch ms → local 'YYYY-MM-DDTHH:MM' for the datetime-local input
@@ -280,6 +282,7 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
   const [notes, setNotes] = useState(match.notes || '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const handleSave = async () => {
     setErr('');
@@ -357,32 +360,6 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
           </div>
         </div>
 
-        {status === 'forfeit' && (
-          <div>
-            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>WHICH TEAM WON?</label>
-            <div className="grid grid-cols-2 gap-1 mb-2">
-              <button
-                type="button"
-                onClick={() => { setHomeScore(3); setAwayScore(0); }}
-                className="py-2 font-mono text-[10px] tracking-widest rounded uppercase"
-                style={homeScore === 3 && awayScore === 0
-                  ? { background: C.green, color: C.onColor }
-                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
-                }
-              >{home?.tag || 'HOME'} (3-0)</button>
-              <button
-                type="button"
-                onClick={() => { setHomeScore(0); setAwayScore(3); }}
-                className="py-2 font-mono text-[10px] tracking-widest rounded uppercase"
-                style={homeScore === 0 && awayScore === 3
-                  ? { background: C.green, color: C.onColor }
-                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
-                }
-              >{away?.tag || 'AWAY'} (3-0)</button>
-            </div>
-            <p className="font-mono text-[9px]" style={{ color: `${C.cream}66` }}>Forfeit wins are recorded as 3-0 in standings. Pick which team won.</p>
-          </div>
-        )}
         {status === 'completed' && (
           <div className="grid grid-cols-2 gap-2">
             <div>
@@ -438,6 +415,15 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
 
         {err && <div className="font-mono text-xs p-2 rounded" style={{ background: `${C.red}22`, color: C.redLight }}>{err}</div>}
 
+        {account && (
+          <button
+            onClick={() => setUploading(true)}
+            disabled={busy || !match.homeTeamId || !match.awayTeamId}
+            className="w-full py-2 font-heading tracking-wider text-sm rounded disabled:opacity-50 flex items-center justify-center gap-2"
+            style={{ background: `${C.gold}22`, color: C.goldLight, border: `1px solid ${C.gold}66` }}
+          ><Upload size={14} /> UPLOAD MATCH FILE</button>
+        )}
+
         <div className="flex gap-2 pt-1">
           <button
             onClick={handleSave}
@@ -458,6 +444,20 @@ export const EditMatchModal = ({ match, allTeams = [], onClose, onSaved }: { mat
           >CANCEL</button>
         </div>
       </div>
+      {uploading && account && (
+        <ModalShell title={`Upload match · ${match.season || ''}`} onClose={() => setUploading(false)}>
+          <p className="font-mono text-xs mb-3" style={{ color: `${C.cream}aa` }}>
+            Teams pre-selected from this scheduled match. Pick the Strikers Club JSON export, then map players.
+          </p>
+          <ImportMatchManager
+            account={account}
+            currentSeason={match.season}
+            initialHomeTeamId={match.homeTeamId}
+            initialAwayTeamId={match.awayTeamId}
+            onRefresh={() => { setUploading(false); onSaved(); }}
+          />
+        </ModalShell>
+      )}
     </ModalShell>
   );
 };

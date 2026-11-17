@@ -44,6 +44,17 @@ export async function findPlayer(database: Database, username: string): Promise<
   const rows = await database.query<Account>(Prisma.sql`SELECT * FROM asl.accounts WHERE username_lower=${username} FOR UPDATE`);
   return rows[0] ?? null;
 }
+// Locate one account's recorded entry for a specific match. Returns the
+// account plus the index of the matching entry in its matches array, or
+// null if the account doesn't exist or has no record of this match.
+export async function findPlayerMatch(database: Database, matchId: string, username: string): Promise<{ account: Account; matchIndex: number } | null> {
+  const account = await database.client.account.findFirst({ where: { username_lower: username.toLowerCase() } });
+  if (!account) return null;
+  const matches = Array.isArray(account.matches) ? (account.matches as Row[]) : [];
+  const matchIndex = matches.findIndex(row => row && typeof row === 'object' && 'strikersMatchId' in row && row.strikersMatchId === matchId);
+  return matchIndex === -1 ? null : { account: account as Account, matchIndex };
+}
+
 export function savePlayerMatches(database: Database, id: string, data: { matches: Row[]; stats: Record<string, number>; strikers_id?: string }): Promise<Account> {
   // Existing match JSON can contain undefined after legacy record normalization.
   return database.client.account.update({ where: { id }, data: { ...data, matches: JSON.parse(JSON.stringify(data.matches)) as Prisma.InputJsonValue } });

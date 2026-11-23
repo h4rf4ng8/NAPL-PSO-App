@@ -286,6 +286,12 @@ export const EditMatchModal = ({ match, allTeams = [], account = null, onClose, 
 
   const handleSave = async () => {
     setErr('');
+    // Forfeits need a winner — standings decide which side gets the W from
+    // the saved scores, so refuse to save a forfeit without one picked.
+    if (status === 'forfeit' && (homeScore === '' || awayScore === '' || Number(homeScore) === Number(awayScore))) {
+      setErr('Pick which team wins the forfeit.');
+      return;
+    }
     setBusy(true);
     try {
       const updated = {
@@ -385,6 +391,34 @@ export const EditMatchModal = ({ match, allTeams = [], account = null, onClose, 
                 className="w-full px-3 py-2 font-mono text-sm rounded"
                 style={{ background: `${C.navyLight}22`, border: `1px solid ${C.navyLight}66`, color: C.cream }}
               />
+            </div>
+          </div>
+        )}
+
+        {status === 'forfeit' && (
+          <div>
+            <label className="font-mono text-[10px] tracking-widest block mb-1" style={{ color: C.cream }}>
+              WINNER (3-0 FORFEIT)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => { setHomeScore(3); setAwayScore(0); }}
+                className="py-2 font-heading tracking-wider text-xs rounded"
+                style={homeScore !== '' && awayScore !== '' && Number(homeScore) > Number(awayScore)
+                  ? { background: C.green, color: C.onColor }
+                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
+                }
+              >{home?.tag || 'HOME'} WINS</button>
+              <button
+                type="button"
+                onClick={() => { setHomeScore(0); setAwayScore(3); }}
+                className="py-2 font-heading tracking-wider text-xs rounded"
+                style={homeScore !== '' && awayScore !== '' && Number(awayScore) > Number(homeScore)
+                  ? { background: C.green, color: C.onColor }
+                  : { background: `${C.navyLight}44`, color: `${C.cream}99` }
+                }
+              >{away?.tag || 'AWAY'} WINS</button>
             </div>
           </div>
         )}

@@ -8,6 +8,8 @@ type AwardId = (typeof AWARD_IDS)[number];
 export const accounts={
  reviewImage:(id:string,approve:boolean)=>request<void>(`/api/accounts/${segment(id)}/image/review`,'POST',{approve}),
  patchAccount:(id:string,fields:Partial<Omit<Account,'awards'>>)=>request<void>(`/api/accounts/${segment(id)}`,'PATCH',fields),
+ approvePendingUsername:(id:string)=>request<void>(`/api/accounts/${segment(id)}/pending-username/approve`,'POST'),
+ denyPendingUsername:(id:string)=>request<void>(`/api/accounts/${segment(id)}/pending-username/deny`,'POST'),
  assignAward:(id:string,awardId:AwardId,season:string)=>request<void>(`/api/accounts/${segment(id)}/awards/${segment(awardId)}/${segment(season)}`,'PUT'),
  removeAward:(id:string,awardId:string,season:string)=>request<void>(`/api/accounts/${segment(id)}/awards/${segment(awardId)}/${segment(season)}`,'DELETE'),
  createPositionRequest:({toPos,reason=''}:{toPos:string;reason?:string})=>request<void>('/api/position-requests','POST',{toPos,reason}),

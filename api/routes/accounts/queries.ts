@@ -20,7 +20,7 @@ export async function loadRankedAccounts(database: Database, weights?: unknown):
 export async function listAccounts(database: Database, includePending: boolean, accounts?: Row[]) {
   const rows = accounts ?? await loadRankedAccounts(database);
   const pending = includePending ? await database.client.account.findMany({
-    select: { id: true, pending_image_url: true }, orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
+    select: { id: true, pending_image_url: true, pending_username: true }, orderBy: [{ created_at: 'asc' }, { id: 'asc' }],
   }) : undefined;
   return rankedAccountsDto(rows, pending);
 }

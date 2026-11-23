@@ -28,7 +28,7 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
         const rows = accounts.filter(row => (!filters.search || string(row.username).toLowerCase().includes(filters.search.toLowerCase()))
             && (!filters.position || row.position === filters.position) && (!filters.teamId || (filters.teamId === 'unassigned' ? !row.teamId : row.teamId === filters.teamId)) && (!filters.pendingImage || Boolean(row.pendingImageUrl)));
         return page(rows.map(row => ({ ...playerSummary(row, filters.season ?? 'all'), strikersId: row.strikersId, cheater: row.cheater,
-            ...(isAdmin(request) && { pendingImageUrl: row.pendingImageUrl }) })), `accounts:${JSON.stringify(filters)}:${isAdmin(request)}`, pageInput(request));
+            ...(isAdmin(request) && { pendingImageUrl: row.pendingImageUrl, pendingUsername: row.pendingUsername ?? null }) })), `accounts:${JSON.stringify(filters)}:${isAdmin(request)}`, pageInput(request));
     });
     app.get('/api/accounts/:id', async (request) => {
         const id = z.uuid().parse(parameters(request).id);
@@ -112,18 +112,25 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
             }
             // Username rename: reject collisions with other accounts up front
             // so the duplicate error surfaces as a clear 409 instead of a 500.
-            if (input.username !== undefined && input.username !== existing.username) {
-                const clash = await tx.client.account.findUnique({ where: { username_lower: input.username.toLowerCase() } });
+            // Admins bypass the approval queue entirely; the rename is applied
+            // immediately and any pending request they had is cleared. Non-admin
+            // renames are stored as pending_username and wait for admin review.
+            const wantsRename = input.username !== undefined && input.username !== existing.username;
+            if (wantsRename) {
+                const clash = await tx.client.account.findUnique({ where: { username_lower: input.username!.toLowerCase() } });
                 if (clash && clash.id !== id) throw new HttpError(409, 'username_taken');
             }
             const data = {
                 country: input.country, steam_url: input.steamUrl, pending_image_url: input.pendingImageUrl,
                 strikers_id: input.strikersId, position: input.position,
-                // Rename: write only username. username_lower is a Postgres
-                // GENERATED ALWAYS AS (lower(username)) STORED column — it
-                // updates automatically on every username change and refuses
-                // explicit assignment (that's what caused the 503 earlier).
-                ...('username' in input && { username: input.username }),
+                // Admin rename: apply username now and clear any pending request.
+                // Non-admin rename: store the request in pending_username and
+                // leave the real username alone until an admin approves it.
+                // username_lower is a Postgres GENERATED STORED column — Postgres
+                // updates it on every username change and rejects explicit writes.
+                ...(wantsRename && (admin
+                    ? { username: input.username, pending_username: null }
+                    : { pending_username: input.username })),
                 ...('imageUrl' in input && { image_url: input.imageUrl }),
                 ...('stats' in input && { stats: input.stats }), ...('matches' in input && { matches: input.matches === undefined ? undefined : JSON.parse(JSON.stringify(input.matches)) }),
                 ...('championships' in input && { championships: input.championships === undefined ? undefined : JSON.parse(JSON.stringify(input.championships)) }),
@@ -142,6 +149,33 @@ export function registerAccounts(app: FastifyInstance, { db, auth, storage }: De
             ...((actor(request).id === id) && {roles:request.userRoles})
         };
         } finally { await removeUnusedImages(db, storage, request, images); }
+    });
+    // Admin approves a pending rename: apply pending_username → username and
+    // clear the pending slot. Rejects the uniqueness collision cleanly so the
+    // caller sees 409 instead of a 500 from the unique index violation.
+    app.post('/api/accounts/:id/pending-username/approve', { config: { role: 'admin' } }, async (request) => {
+        const id = z.uuid().parse(parameters(request).id);
+        return db.transaction(async (tx) => {
+            const existing = await requireAccount(tx, id, true);
+            request.resource = { type: 'account', id: existing.id };
+            if (!existing.pending_username) throw new HttpError(409, 'no_pending_rename');
+            const clash = await tx.client.account.findUnique({ where: { username_lower: existing.pending_username.toLowerCase() } });
+            if (clash && clash.id !== id) throw new HttpError(409, 'username_taken');
+            const row = await updateAccount(tx, id, { username: existing.pending_username, pending_username: null });
+            return accountDto(row, true);
+        });
+    });
+    // Admin denies a pending rename: clear pending_username without touching
+    // the real username. The requester has to submit a new request.
+    app.post('/api/accounts/:id/pending-username/deny', { config: { role: 'admin' } }, async (request) => {
+        const id = z.uuid().parse(parameters(request).id);
+        return db.transaction(async (tx) => {
+            const existing = await requireAccount(tx, id, true);
+            request.resource = { type: 'account', id: existing.id };
+            if (!existing.pending_username) throw new HttpError(409, 'no_pending_rename');
+            const row = await updateAccount(tx, id, { pending_username: null });
+            return accountDto(row, true);
+        });
     });
     app.put('/api/accounts/:id/awards/:awardId/:season', {
         config: { role: 'admin' }

@@ -37,6 +37,7 @@ model Account {
   created_at DateTime @db.Timestamptz @default(now())
   strikers_id String?
   steam_url String?
+  pending_username String?
   @@map("accounts")
   @@schema("asl")
 }

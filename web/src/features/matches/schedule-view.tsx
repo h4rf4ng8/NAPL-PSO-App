@@ -2,10 +2,9 @@ import { mergeSeasonPages } from '../dashboard/season-pages';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Calendar, Plus } from 'lucide-react';
 import { useEffect,useMemo,useState } from 'react';
-import { useRestPage } from '../../hooks/use-rest-page';
-import { PageButtons } from '../../components/PageButtons';
-import { readText } from '../../api/page';
-import { segment } from '../../api/http';
+import { useResource } from '../../hooks/use-resource';
+import { request, segment } from '../../api/http';
+import { pagePath, readText, type Page } from '../../api/page';
 import { LazyText } from '../content/LazyText';
 import { z } from 'zod';
 import { useQuery } from '@apollo/client/react';
@@ -15,6 +14,7 @@ import type { Account } from '../accounts/models';
 import type { ScheduledMatch } from './models';
 type MatchTeam = { id: string; name: string; tag: string; color: string | null; logoUrl?: string | null };
 type MatchSummary = Omit<ScheduledMatch, 'notes'> & { notesUrl: string; homeTeam: MatchTeam | null; awayTeam: MatchTeam | null; homeRecord: { w: number; d: number; l: number } | null; awayRecord: { w: number; d: number; l: number } | null };
+type SchedulePage = Page<MatchSummary> & { weekRange: { min: number | null; max: number | null; count: number } };
 import { C } from '../../theme/theme';
 import { isAdmin } from '../../utils/league';
 import { AddMatchModal, EditMatchModal, GenerateScheduleModal } from './schedule-setup';
@@ -26,8 +26,29 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const [emptySeasons, setEmptySeasons] = useState<string[]>([]);
   const seasonQuery = useQuery(SeasonsDocument, { variables: { after: null } });
   const seasons = [...new Set([...(seasonQuery.data?.seasons.nodes ?? []), ...emptySeasons])];
-  const page = useRestPage<MatchSummary>(season ? `/api/schedule?season=${segment(season)}${selectedWeek === null ? '' : `&week=${selectedWeek}`}` : null);
-  const { loading, error: loadError, restart: reload } = page;
+  useEffect(() => {
+    if (!seasonQuery.data?.seasons.pageInfo.hasNextPage || !seasonQuery.data.seasons.pageInfo.endCursor) return;
+    void seasonQuery.fetchMore({
+      variables: { after: seasonQuery.data.seasons.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }),
+    }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); });
+  }, [seasonQuery.data?.seasons.pageInfo.endCursor, seasonQuery.data?.seasons.pageInfo.hasNextPage, seasonQuery.fetchMore]);
+  // Fetch every schedule page up front so users scroll instead of clicking
+  // Previous/Next. Path changes (season or week filter) refetch from scratch.
+  const schedulePath = season ? `/api/schedule?season=${segment(season)}${selectedWeek === null ? '' : `&week=${selectedWeek}`}` : null;
+  const page = useResource(async () => {
+    if (!schedulePath) return undefined;
+    const nodes: MatchSummary[] = [];
+    let after: string | null = null;
+    let last: SchedulePage | undefined;
+    do {
+      last = await request<SchedulePage>(pagePath(schedulePath, after));
+      nodes.push(...last.nodes);
+      after = last.pageInfo.hasNextPage ? last.pageInfo.endCursor : null;
+    } while (after);
+    return { ...last!, nodes };
+  }, [schedulePath]);
+  const { loading, error: loadError, reload } = page;
   const matches = page.data?.nodes ?? [];
   const weekRange = page.data ? z.object({ weekRange: z.object({ min: z.number().nullable(), max: z.number().nullable(), count: z.number() }) }).parse(page.data).weekRange : null;
   const [editError, setEditError] = useState('');
@@ -128,7 +149,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         </div>
       </div>
 
-      {(loadError || editError || seasonQuery.error) && <p role="alert">{loadError || editError || seasonQuery.error?.message}<button onClick={page.restart}>Restart schedule</button></p>}
+      {(loadError || editError || seasonQuery.error) && <p role="alert">{loadError || editError || seasonQuery.error?.message}<button onClick={() => { void reload(); }}>Restart schedule</button></p>}
       {(loading || seasonQuery.loading) ? (
         <div className="text-center py-8 font-mono text-sm" style={{ color: `${C.brandNavy}77` }}>Loading schedule...</div>
       ) : (filtered.length === 0 ? (
@@ -396,9 +417,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
         </div>
       ))}
 
-      <PageButtons {...page} hasNextPage={page.data?.pageInfo.hasNextPage ?? false} />
-{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void seasonQuery.refetch({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
-      {seasonQuery.data?.seasons.pageInfo.hasNextPage && <button onClick={() => { void seasonQuery.fetchMore({ variables: { after: seasonQuery.data!.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}
+      {seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void seasonQuery.refetch({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
       {generating && (
         <GenerateScheduleModal
           existingSeasons={seasons}

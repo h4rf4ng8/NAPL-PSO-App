@@ -101,6 +101,36 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
     setBusy(false);
   };
 
+  const approvePendingName = async (player: AdminPlayer) => {
+    setError('');
+    if (!player.pendingUsername) return;
+    setBusy(true);
+    try {
+      await accountApi.approvePendingUsername(player.id);
+      setInfo(`✓ Approved: ${player.username} → ${player.pendingUsername}`);
+      refresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (approveError) {
+      setError('Could not approve: ' + (approveError instanceof Error ? approveError.message : String(approveError)));
+    }
+    setBusy(false);
+  };
+
+  const denyPendingName = async (player: AdminPlayer) => {
+    setError('');
+    if (!player.pendingUsername) return;
+    setBusy(true);
+    try {
+      await accountApi.denyPendingUsername(player.id);
+      setInfo(`✓ Denied rename request for ${player.username}`);
+      refresh();
+      setTimeout(() => setInfo(''), 3000);
+    } catch (denyError) {
+      setError('Could not deny: ' + (denyError instanceof Error ? denyError.message : String(denyError)));
+    }
+    setBusy(false);
+  };
+
   const changeName = async (player: AdminPlayer) => {
     setError('');
     const trimmed = newName.trim();
@@ -399,10 +429,15 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
                 </div>
               </div>
             ); return (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="font-heading tracking-wider text-sm" style={{ color: C.brandNavy }}>
                     {p.username.toUpperCase()}
+                    {p.pendingUsername && (
+                      <span className="ml-2 font-mono text-[9px] px-1.5 py-0.5 rounded" style={{ background: `${C.gold}22`, color: C.gold, border: `1px solid ${C.gold}66` }}>
+                        PENDING: {p.pendingUsername.toUpperCase()}
+                      </span>
+                    )}
                   </div>
                   <div className="font-mono text-[10px]" style={{ color: `${C.brandNavy}66` }}>
                     {p.position} • {p.stats?.games || 0} GAMES
@@ -414,6 +449,22 @@ export const PlayersManager = ({ currentSeason: _currentSeason = 'S1', onRefresh
                       : <span style={{ color: C.red }}> • NO SC ID</span>}
                   </div>
                 </div>
+                {p.pendingUsername && (
+                  <>
+                    <button
+                      onClick={() => { void approvePendingName(p); }}
+                      disabled={busy}
+                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                      style={{ background: C.green, color: C.onColor }}
+                    >APPROVE</button>
+                    <button
+                      onClick={() => { void denyPendingName(p); }}
+                      disabled={busy}
+                      className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                      style={{ background: `${C.red}cc`, color: C.white }}
+                    >DENY</button>
+                  </>
+                )}
                 <button
                   onClick={() => { setNameEditing(p); setNewName(p.username); setPosEditing(null); setTeamEditing(null); setSidEditing(null); setError(''); }}
                   className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded flex items-center gap-1.5"

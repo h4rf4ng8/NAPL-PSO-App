@@ -37,7 +37,7 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   // Previous/Next. Path changes (season or week filter) refetch from scratch.
   const schedulePath = season ? `/api/schedule?season=${segment(season)}${selectedWeek === null ? '' : `&week=${selectedWeek}`}` : null;
   const page = useResource(async () => {
-    if (!schedulePath) return undefined;
+    if (!schedulePath) return;
     const nodes: MatchSummary[] = [];
     let after: string | null = null;
     let last: SchedulePage | undefined;

@@ -58,13 +58,6 @@ test('all remaining application mutations complete successful contract exchanges
   const request = (await write('POST','/api/position-requests','/api/position-requests',{toPos:'CM',reason:'Contract request'},defender.id)).json();
   await write('POST','/api/position-requests/{id}/review',`/api/position-requests/${request.id}/review`,{status:'denied',reviewNote:'Contract review'});
   await write('DELETE','/api/position-requests/{id}',`/api/position-requests/${request.id}`);
-  // Pending-username approval flow: captain requests a rename (goes into
-  // pending_username as a non-admin), admin approves one, then captain
-  // requests again and admin denies it. Both admin endpoints are covered.
-  await write('PATCH','/api/accounts/{id}',`/api/accounts/${captain.id}`,{username:`${captain.username}_renamed`},captain.id);
-  await write('POST','/api/accounts/{id}/pending-username/approve',`/api/accounts/${captain.id}/pending-username/approve`);
-  await write('PATCH','/api/accounts/{id}',`/api/accounts/${captain.id}`,{username:`${captain.username}_revert`},captain.id);
-  await write('POST','/api/accounts/{id}/pending-username/deny',`/api/accounts/${captain.id}/pending-username/deny`);
   const previousAdmins = await owner.client.userRole.findMany({where:{role:'admin'},select:{user_id:true}});
   await write('PUT','/api/roles','/api/roles',{userIds:[...previousAdmins.map(row=>row.user_id),admin.id]});
   await write('PUT','/api/roles','/api/roles',{userIds:previousAdmins.map(row=>row.user_id)});
@@ -119,6 +112,13 @@ test('all remaining application mutations complete successful contract exchanges
   // the season; scheduled matches and transfers for this season were already
   // cleared by earlier DELETE calls, so this succeeds.
   await write('DELETE','/api/seasons/{id}',`/api/seasons/${season}`);
+  // Pending-username approval flow runs LAST because approving the rename
+  // changes the captain's username, and earlier operations (transfers, match
+  // imports, voting) look the captain up by their original username.
+  await write('PATCH','/api/accounts/{id}',`/api/accounts/${captain.id}`,{username:`${captain.username}_renamed`},captain.id);
+  await write('POST','/api/accounts/{id}/pending-username/approve',`/api/accounts/${captain.id}/pending-username/approve`);
+  await write('PATCH','/api/accounts/{id}',`/api/accounts/${captain.id}`,{username:`${captain.username}_revert`},captain.id);
+  await write('POST','/api/accounts/{id}/pending-username/deny',`/api/accounts/${captain.id}/pending-username/deny`);
   const expected = applicationOperations(c.registered).filter(key=>!key.startsWith('GET ')&&key!=='POST /api/graphql'&&!content.test(key.slice(key.indexOf(' ')+1)));
   assert.equal(expected.length,41);
   assert.deepEqual([...c.covered].toSorted((a,b)=>a.localeCompare(b)),expected,'Every non-content mutation needs a successful contract exchange');

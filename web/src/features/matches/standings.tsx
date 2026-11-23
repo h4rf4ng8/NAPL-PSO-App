@@ -1,10 +1,10 @@
 import { mergeSeasonPages } from '../dashboard/season-pages';
 import { z } from 'zod';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@apollo/client/react';
 import { TeamStandingsDocument, SeasonsDocument } from '../../api/generated/graphql';
 import { MediaImage, mediaUrl } from '../../components/MediaImage';
 import { Trophy } from 'lucide-react';
-import { useState } from 'react';
 
 import { C } from '../../theme/theme';
 
@@ -20,11 +20,26 @@ const standingsRowSchema = z.object({
 export const TeamStandings = () => {
   const [seasonPageError, setSeasonPageError] = useState('');
   const [season, setSeason] = useState('all');
-  const [after, setAfter] = useState<string | null>(null);
-  const [previous, setPrevious] = useState<(string | null)[]>([]);
+  // Request the server's max page size (50) and auto-load the rest so every
+  // team's row shows at once. The old Previous/Next team buttons are gone —
+  // users just scroll instead.
   const { data: seasonData, fetchMore: moreSeasons, refetch: refreshSeasons } = useQuery(SeasonsDocument, { variables: { after: null } });
   const seasons = seasonData?.seasons.nodes ?? [];
-  const { data, loading: recordsLoading, error: recordsError, refetch } = useQuery(TeamStandingsDocument, { variables: { season, after } });
+  const { data, loading: recordsLoading, error: recordsError, fetchMore, refetch } = useQuery(TeamStandingsDocument, { variables: { season, first: 50, after: null } });
+  useEffect(() => {
+    if (!data?.standings.pageInfo.hasNextPage || !data.standings.pageInfo.endCursor) return;
+    void fetchMore({
+      variables: { after: data.standings.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ standings: { ...fetchMoreResult.standings, nodes: [...before.standings.nodes, ...fetchMoreResult.standings.nodes] } }),
+    }).catch((loadError: unknown) => { console.error('standings fetchMore failed:', loadError); });
+  }, [data?.standings.pageInfo.endCursor, data?.standings.pageInfo.hasNextPage, fetchMore]);
+  useEffect(() => {
+    if (!seasonData?.seasons.pageInfo.hasNextPage || !seasonData.seasons.pageInfo.endCursor) return;
+    void moreSeasons({
+      variables: { after: seasonData.seasons.pageInfo.endCursor },
+      updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }),
+    }).catch((loadError: unknown) => { setSeasonPageError(loadError instanceof Error ? loadError.message : 'Could not load seasons.'); });
+  }, [seasonData?.seasons.pageInfo.endCursor, seasonData?.seasons.pageInfo.hasNextPage, moreSeasons]);
   const standings = (data?.standings.nodes ?? []).map(row => standingsRowSchema.parse(row));
   const hasAnyMatches = standings.length > 0;
 
@@ -38,7 +53,7 @@ export const TeamStandings = () => {
         {seasons.length > 0 && (
           <select
             value={season}
-            onChange={(e) => { setSeason(e.target.value); setAfter(null); setPrevious([]); }}
+            onChange={(e) => { setSeason(e.target.value); }}
             className="rounded px-2 py-1 font-mono text-[11px] tracking-wider"
             style={{ background: C.navyDeep, color: C.cream, border: `1px solid ${C.navyLight}66` }}
           >
@@ -48,7 +63,8 @@ export const TeamStandings = () => {
         )}
       </div>
 
-      {recordsError && <p role="alert">{recordsError.message} <button onClick={() => { setAfter(null); setPrevious([]); void refetch({ after: null }).catch(() => {}); }}>Try again</button></p>}
+      {recordsError && <p role="alert">{recordsError.message} <button onClick={() => { void refetch({ after: null }).catch(() => {}); }}>Try again</button></p>}
+      {seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
       {recordsLoading ? <p role="status">Loading standings…</p> : (hasAnyMatches ? (
         <div className="rounded-lg overflow-x-auto" style={{ background: C.white, border: `1px solid ${C.navyLight}` }}>
           <table className="w-full text-sm">
@@ -96,16 +112,13 @@ export const TeamStandings = () => {
               ))}
             </tbody>
           </table>
+          {data?.standings.pageInfo.hasNextPage && <p role="status" className="px-3 py-2 font-mono text-xs" style={{ color: `${C.brandNavy}77` }}>Loading more teams…</p>}
         </div>
       ) : (
         <div className="text-center py-6 font-mono text-xs" style={{ color: `${C.cream}55` }}>
           NO APPROVED MATCHES YET
         </div>
       ))}
-      <div className="flex gap-3"><button disabled={recordsLoading || previous.length === 0} onClick={() => { setAfter(previous.at(-1) ?? null); setPrevious(previous.slice(0, -1)); }}>Previous teams</button>
-      <button disabled={recordsLoading || !data?.standings.pageInfo.hasNextPage} onClick={() => { setPrevious([...previous, after]); setAfter(data?.standings.pageInfo.endCursor ?? null); }}>Next teams</button>
-{seasonPageError && <p role="alert">{seasonPageError}<button onClick={() => { void refreshSeasons({ after: null }).then(() => setSeasonPageError('')).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>Restart seasons</button></p>}
-      {seasonData?.seasons.pageInfo.hasNextPage && <button onClick={() => { void moreSeasons({ variables: { after: seasonData.seasons.pageInfo.endCursor }, updateQuery: (before, { fetchMoreResult }) => ({ seasons: mergeSeasonPages(before.seasons, fetchMoreResult.seasons) }) }).catch((error: unknown) => { setSeasonPageError(error instanceof Error ? error.message : 'Could not load seasons.'); }); }}>More seasons</button>}</div>
     </div>
   );
 };

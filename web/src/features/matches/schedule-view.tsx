@@ -229,7 +229,9 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
                 {byWeek[wkNum].map(m => {
                   const home = m.homeTeam;
                   const away = m.awayTeam;
-                  const played = m.status === 'completed' && m.homeScore !== null && m.awayScore !== null;
+                  // Show the scoreline for completed matches AND forfeits — a
+                  // forfeit saves as 3-0, so the viewer should see who won.
+                  const played = (m.status === 'completed' || m.status === 'forfeit') && m.homeScore !== null && m.awayScore !== null;
                   const homeColor = home?.color || C.brandNavy;
                   const awayColor = away?.color || C.brandNavy;
                   const homeWon = played && (m.homeScore || 0) > (m.awayScore || 0);

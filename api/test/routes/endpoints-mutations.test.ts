@@ -101,6 +101,9 @@ test('all remaining application mutations complete successful contract exchanges
   });
   // PATCH /api/matches/{id}/players/{username} — admin edits one player's stats in a match.
   await write('PATCH','/api/matches/{id}/players/{username}',`/api/matches/${prefix}/players/${captain.username}`,{goals:2});
+  // PATCH /api/matches/{id}/score — admin edits the match's final score; the server
+  // rewrites each player's goalsFor/goalsAgainst/result from their team's perspective.
+  await write('PATCH','/api/matches/{id}/score',`/api/matches/${prefix}/score`,{scores:{[home]:2,[away]:1}});
   // DELETE /api/matches/{id} — admin removes a mis-entered match from every player's record.
   await write('DELETE','/api/matches/{id}',`/api/matches/${prefix}`);
   const period = (await write('POST','/api/voting/periods','/api/voting/periods',{closesAt:Date.now()+3_600_000,eligiblePlayers:[captain.username,striker.username,defender.username,midfielder.username]})).json();
@@ -120,6 +123,6 @@ test('all remaining application mutations complete successful contract exchanges
   await write('PATCH','/api/accounts/{id}',`/api/accounts/${captain.id}`,{username:`${captain.username}_revert`},captain.id);
   await write('POST','/api/accounts/{id}/pending-username/deny',`/api/accounts/${captain.id}/pending-username/deny`);
   const expected = applicationOperations(c.registered).filter(key=>!key.startsWith('GET ')&&key!=='POST /api/graphql'&&!content.test(key.slice(key.indexOf(' ')+1)));
-  assert.equal(expected.length,41);
+  assert.equal(expected.length,42);
   assert.deepEqual([...c.covered].toSorted((a,b)=>a.localeCompare(b)),expected,'Every non-content mutation needs a successful contract exchange');
 });

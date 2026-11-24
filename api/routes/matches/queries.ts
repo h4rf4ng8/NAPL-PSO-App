@@ -60,6 +60,32 @@ export function savePlayerMatches(database: Database, id: string, data: { matche
   return database.client.account.update({ where: { id }, data: { ...data, matches: JSON.parse(JSON.stringify(data.matches)) as Prisma.InputJsonValue } });
 }
 
+// Find every account that has a match entry with this strikersMatchId. Used by
+// the admin "edit final score" flow, which needs to update each player's
+// goalsFor / goalsAgainst / result from a single API call.
+export async function findAccountsWithMatch(database: Database, matchId: string): Promise<Account[]> {
+  return database.query<Account>(Prisma.sql`SELECT * FROM asl.accounts
+    WHERE jsonb_typeof(matches)='array'
+      AND matches @> jsonb_build_array(jsonb_build_object('strikersMatchId', ${matchId}::text))
+    FOR UPDATE`);
+}
+
+// If this match is linked to a scheduled fixture, mirror the new per-team
+// scores onto that fixture's home_score / away_score so the schedule view
+// stays consistent. A no-op if the match wasn't linked to any fixture, or if
+// the fixture's home/away team ids aren't both in the scores map.
+export async function syncScheduledMatchScore(database: Database, matchId: string, scores: Record<string, number>): Promise<void> {
+  const [scheduled] = await database.query<{ home_team_id: string; away_team_id: string }>(
+    Prisma.sql`SELECT home_team_id, away_team_id FROM asl.scheduled_matches WHERE linked_match_id=${matchId}`
+  );
+  if (!scheduled) return;
+  const home = scores[scheduled.home_team_id], away = scores[scheduled.away_team_id];
+  if (typeof home !== 'number' || typeof away !== 'number') return;
+  await database.query(Prisma.sql`
+    UPDATE asl.scheduled_matches SET home_score=${home}, away_score=${away}, status='completed', updated_at=now()
+    WHERE linked_match_id=${matchId}`);
+}
+
 // Row the UI needs for the VIEW MATCH modal: each player who was in a match
 // identified by its strikersMatchId, with their stats pulled from the match
 // entry on their own account record.

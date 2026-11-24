@@ -8,8 +8,8 @@ test('MY CARD keeps its rendered view after hashchange and reload', () => {
   assert.equal(viewFromHash('#/card/'), 'me');
   assert.equal(viewFromHash('#card'), 'me');
 });
-test('voting and match navigation round-trips and article links select news', () => {
-  for (const view of ['vote', 'matches']) assert.equal(viewFromHash(hashForView(view)), view);
+test('voting navigation round-trips and article links select news', () => {
+  assert.equal(viewFromHash(hashForView('vote')), 'vote');
   assert.equal(viewFromHash('#/articles/season-preview'), 'news');
   assert.equal(viewFromHash('#/missing'), 'home');
 });

@@ -18,6 +18,7 @@ type SchedulePage = Page<MatchSummary> & { weekRange: { min: number | null; max:
 import { C } from '../../theme/theme';
 import { isAdmin } from '../../utils/league';
 import { AddMatchModal, EditMatchModal, GenerateScheduleModal } from './schedule-setup';
+import { MatchDetailsModal } from './MatchDetailsModal';
 
 export const ScheduleView = ({ account }: { account: Account | null }) => {
   const [seasonPageError, setSeasonPageError] = useState('');
@@ -56,6 +57,9 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
   const [editing, setEditing] = useState<ScheduledMatch | null>(null);
   const [generating, setGenerating] = useState(false);
   const [adding, setAdding] = useState(false);
+  // Which uploaded match the user is viewing full stats for. Set by the
+  // VIEW RESULT button on any schedule card whose linkedMatchId is known.
+  const [viewingMatchId, setViewingMatchId] = useState<string | null>(null);
   const isAdminUser = isAdmin(account);
 
   // Default to the most recent season on first load
@@ -345,6 +349,18 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
                                 border: '1px solid #9146FF55',
                               }}>▶ WATCH</a>
                           )}
+                          {m.linkedMatchId && (
+                            <button
+                              onClick={() => setViewingMatchId(m.linkedMatchId!)}
+                              className="font-mono rounded-full"
+                              style={{
+                                fontSize: 10, letterSpacing: '0.2em', fontWeight: 700,
+                                padding: '3px 10px',
+                                background: `${C.green}33`, color: C.greenLight,
+                                border: `1px solid ${C.green}66`,
+                              }}
+                            >VIEW RESULT</button>
+                          )}
                           {isAdminUser && (
                             <button
                               onClick={() => { void openEdit(m); }}
@@ -453,6 +469,14 @@ export const ScheduleView = ({ account }: { account: Account | null }) => {
           account={account}
           onClose={() => setEditing(null)}
           onSaved={() => { void reload(); }}
+        />
+      )}
+      {viewingMatchId && (
+        <MatchDetailsModal
+          matchId={viewingMatchId}
+          account={account}
+          onClose={() => setViewingMatchId(null)}
+          onDeleted={() => { setViewingMatchId(null); void reload(); }}
         />
       )}
     </div>

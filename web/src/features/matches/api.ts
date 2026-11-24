@@ -12,6 +12,7 @@ export const matches={
  fetchMatchDetails:(matchId:string)=>request<MatchDetails>(`/api/matches/${segment(matchId)}`,'GET'),
  deleteMatch:(matchId:string)=>request<{ok:boolean,removedFrom:number}>(`/api/matches/${segment(matchId)}`,'DELETE'),
  updateMatchStats:(matchId:string,username:string,stats:Partial<Pick<MatchParticipant,'goals'|'assists'|'passes'|'tackles'|'deflects'|'catches'|'cleanSheet'>>)=>request<{ok:boolean}>(`/api/matches/${segment(matchId)}/players/${segment(username)}`,'PATCH',stats),
+ updateMatchScore:(matchId:string,scores:Record<string,number>)=>request<{ok:boolean,updatedPlayers:number}>(`/api/matches/${segment(matchId)}/score`,'PATCH',{scores}),
 };
 
 export interface MatchParticipant {

@@ -41,7 +41,6 @@ export function Header({ account, season, setSeason, allSeasons, tickerNews, vie
   // Reference tabs (less frequently visited). Live under a MORE dropdown
   // but still have real URLs that work when visited directly.
   const moreTabs = [
-    { id: 'matches', label: 'MATCH LOG', icon: Swords },
     { id: 'transfers', label: 'TRANSFER MARKET', icon: Swords },
     { id: 'hof', label: 'HALL OF FAME', icon: Crown },
     { id: 'tiers', label: 'TIER PREVIEW', icon: Sparkles },

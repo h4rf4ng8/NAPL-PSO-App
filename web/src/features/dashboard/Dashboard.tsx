@@ -19,7 +19,6 @@ import { mapCurrentCard } from '../accounts/api';
 import { useQuery } from '@apollo/client/react';
 import { LeagueOverviewDocument, SeasonsDocument } from '../../api/generated/graphql';
 import { Header } from './Header';
-import { MatchLog } from './MatchLog';
 import { MyCard, type CardAction } from './MyCard';
 import { useView } from './use-view';
 
@@ -82,7 +81,6 @@ export function Dashboard({ account, onLogout, onUpdate }: { account: Account; o
         {error && <p role="alert">{error.message} <button onClick={() => { void refetch().catch(() => {}); }}>Try again</button></p>}
         {view === 'home' && <HomeView account={data?.me ?? account} allTeams={teams} currentSeason={data?.currentSeason} onJump={setView} onUpdate={savedAccount} />}
         {data && view === 'me' && <MyCard account={data.me} season={season} currentSeason={currentSeason} allSeasons={allSeasons} setSeason={setSeason} myTeam={myTeam} onEdit={setModal} />}
-        {view === 'matches' && <MatchLog account={account} season={season} />}
         {data && view === 'teams' && <TeamsView account={data.me} onUpdate={savedAccount} currentSeason={currentSeason} />}
         {data && view === 'leaderboard' && <StatsView allTeams={teams} onPlayerClick={setSelectedPlayer} />}
         {view === 'hof' && <HallOfFameView allTeams={teams} onPlayerClick={setSelectedPlayer} />}

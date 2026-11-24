@@ -68,5 +68,5 @@ export function inventory(app: FastifyInstance) {
 }
 export function assertInventory(registered: Set<string>) {
   assert.equal(applicationOperations(registered).length, 107);
-  assert.equal(registered.size, 161);
+  assert.equal(registered.size, 160);
 }

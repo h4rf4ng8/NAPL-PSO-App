@@ -61,22 +61,21 @@ function appFor() {
 
 test('server rankings preserve weighted percentile scores, small-pool tiers, and custom weights', () => {
   const result = calculateRankings(accounts, positionWeights);
-  // Alice leads every weighted stat (goals/assists/passes/tackles per game)
-  // so each stat contribution hits the full weight. Raw = 0.55+0.2+0.1+0.15
-  // = 1.0 → OVR = 50 + 50 * 1 = 100.
-  assert.deepEqual(result.get('alice'), { score: 95, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-  // Bob: 0 goals/game. With the test's goals-only weight ({ goalsPerGame: 1 }),
-  // the only contribution is 0 * 1 = 0 → raw 0 → OVR = 50 + 50 * 0 = 50.
-  assert.deepEqual(result.get('bob'), { score: 50, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
+  // Test uses custom weights { ST: { goalsPerGame: 1 } }. Alice leads goals
+  // (1 goal/game = benchmark), raw = 1 × 1 = 1, confidence (10 games) = 1,
+  // so OVR = round(1 × 100) = 100. No per-position anchor — Alice earns it.
+  assert.deepEqual(result.get('alice'), { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+  // Bob: 0 goals/game, raw = 0, OVR = 0. No midpoint fallback — zero stays zero.
+  assert.deepEqual(result.get('bob'), { score: 0, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
   const tied = calculateRankings([
-    { username: 'First', position: 'ST', stats: { ...zeroStats, games: 3, goals: 3 } },
-    { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 3, goals: 3 } },
+    { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
+    { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
   ], positionWeights);
-  // Tied players both hit max goals (benchmark = 1), both receive the full
-  // custom weight of 1, so both end up at raw = 1. Tier split stays 1-player
-  // DIAMOND then 1-player GOLD by sort order.
-  assert.equal(tied.get('first')?.percentile, 1);
-  assert.equal(tied.get('second')?.percentile, 1);
+  // Tied players both hit max goals (benchmark = 1): raw = 1 → would be 100.
+  // Each has 1 game so the games cap kicks in at 80 + 1×5 = 85.
+  // Tier split stays 1-player DIAMOND then 1-player GOLD by sort order.
+  assert.equal(tied.get('first')?.score, 85);
+  assert.equal(tied.get('second')?.score, 85);
   assert.equal(tied.get('first')?.tier, 'DIAMOND');
   assert.equal(tied.get('second')?.tier, 'GOLD');
   const unranked = calculateRankings([{ username: 'New', position: 'ST', stats: zeroStats }], null).get('new');
@@ -89,12 +88,11 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
 test('finite negative saved weights remain compatible and malformed stored weights fail explicitly', async () => {
   const negative = calculateRankings(accounts, { ST: { goalsPerGame: -1 } });
   // Only the negative goals weight applies. Alice's raw = 1 × -1 = -1,
-  // Bob's raw = 0 × -1 = 0. Top raw is 0, which hits the "nobody has a
-  // positive contribution" fallback → both players land at the midpoint
-  // OVR 50. Percentile preserves the actual raw score for ordering.
-  assert.equal(negative.get('alice')?.score, 50);
+  // Bob's raw = 0 × -1 = 0. Score clamps to [0, 100] so both land at 0.
+  // Percentile preserves the actual raw score for ordering.
+  assert.equal(negative.get('alice')?.score, 0);
   assert.equal(negative.get('alice')?.percentile, -1);
-  assert.equal(negative.get('bob')?.score, 50);
+  assert.equal(negative.get('bob')?.score, 0);
 
   const database: Database = {
     client: { setting: { findUnique: async () => ({ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }) } } as unknown as Database['client'],
@@ -143,7 +141,7 @@ test('REST and GraphQL account reads expose computed values without private colu
     const rest = await app.inject('/api/accounts');
     assert.equal(rest.statusCode, 200, rest.body);
     const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(restAlice.ranking, { score: 95, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+    assert.deepEqual(restAlice.ranking, { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
     assert.equal(restAlice.cardStats, undefined);
     assert.equal(restAlice.email, undefined);
     assert.equal(restAlice.pendingImageUrl, undefined);

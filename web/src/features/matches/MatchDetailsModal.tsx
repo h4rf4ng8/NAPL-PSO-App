@@ -34,6 +34,10 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
   const [editDraft, setEditDraft] = useState<EditableStats | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
+  // Final-score edit: null when not editing, otherwise a draft keyed by teamId.
+  const [scoreDraft, setScoreDraft] = useState<Record<string, number> | null>(null);
+  const [savingScore, setSavingScore] = useState(false);
+  const [scoreError, setScoreError] = useState('');
 
   const openEdit = (player: MatchParticipant) => {
     setEditingUsername(player.username);
@@ -87,12 +91,44 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
   };
 
   const canDelete = account && hasAdminRole(account);
+  const isAdmin = account && hasAdminRole(account);
   const groups = details ? groupByTeam(details.participants) : [];
   // Prefer the first participant that has goalsFor/goalsAgainst set — forfeits
   // or incomplete entries may miss these, so this falls back gracefully.
   const scoreCarrier = details?.participants.find(p => typeof p.goalsFor === 'number' && typeof p.goalsAgainst === 'number');
   const date = details?.participants.find(p => typeof p.date === 'number')?.date;
   const season = details?.participants.find(p => p.season)?.season;
+  // For the score editor: pick one player per team so we know (teamId, teamName,
+  // teamScore). Each team's name is the OPPONENT name recorded by the other
+  // team's players — i.e. team B's players call team A "opponent".
+  const teamSides: Array<{ teamId: string; name: string; score: number | null }> = [];
+  const seenTeamIds = new Set<string>();
+  for (const player of details?.participants ?? []) {
+    if (!player.teamId || seenTeamIds.has(player.teamId)) continue;
+    seenTeamIds.add(player.teamId);
+    const nameFromOpponent = details?.participants.find(other => other.teamId && other.teamId !== player.teamId)?.opponent;
+    teamSides.push({ teamId: player.teamId, name: nameFromOpponent ?? player.teamId, score: typeof player.goalsFor === 'number' ? player.goalsFor : null });
+  }
+
+  const openScoreEdit = () => {
+    if (teamSides.length !== 2) { setScoreError('Need exactly two teams to edit the score.'); return; }
+    setScoreDraft(Object.fromEntries(teamSides.map(side => [side.teamId, side.score ?? 0])));
+    setScoreError('');
+  };
+  const cancelScoreEdit = () => { setScoreDraft(null); setScoreError(''); };
+  const saveScoreEdit = async () => {
+    if (!scoreDraft) return;
+    setSavingScore(true); setScoreError('');
+    try {
+      await matchesApi.updateMatchScore(matchId, scoreDraft);
+      const refreshed = await matchesApi.fetchMatchDetails(matchId);
+      setDetails(refreshed);
+      cancelScoreEdit();
+    } catch (saveError) {
+      setScoreError(saveError instanceof Error ? saveError.message : 'Could not save score.');
+    }
+    setSavingScore(false);
+  };
 
   return (
     <ModalShell onClose={onClose} title="Match details">
@@ -103,8 +139,51 @@ export const MatchDetailsModal = ({ matchId, account, onClose, onDeleted }: {
           <div className="mb-3 font-mono text-xs" style={{ color: `${C.cream}aa` }}>
             {date ? new Date(date).toLocaleDateString() : 'Date unknown'}
             {season && <> &middot; <span style={{ color: C.cream }}>{season}</span></>}
-            {scoreCarrier && <> &middot; <span style={{ color: C.cream }}>{scoreCarrier.goalsFor}\u{2013}{scoreCarrier.goalsAgainst}</span> (from {scoreCarrier.username}&rsquo;s perspective)</>}
           </div>
+          {scoreDraft && teamSides.length === 2 ? (
+            <div className="mb-3 rounded p-2 space-y-2" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.gold}66` }}>
+              <div className="font-heading tracking-wider text-[10px]" style={{ color: C.goldLight }}>EDIT FINAL SCORE</div>
+              <div className="flex items-center gap-2 font-mono text-xs" style={{ color: C.cream }}>
+                <span className="flex-1 truncate text-right">{teamSides[0]!.name}</span>
+                <input type="number" min={0} value={scoreDraft[teamSides[0]!.teamId]}
+                  onChange={event => setScoreDraft({ ...scoreDraft, [teamSides[0]!.teamId]: Number(event.target.value) })}
+                  className="w-14 px-2 py-1 rounded text-center" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }} />
+                <span style={{ color: `${C.cream}66` }}>&ndash;</span>
+                <input type="number" min={0} value={scoreDraft[teamSides[1]!.teamId]}
+                  onChange={event => setScoreDraft({ ...scoreDraft, [teamSides[1]!.teamId]: Number(event.target.value) })}
+                  className="w-14 px-2 py-1 rounded text-center" style={{ background: C.navyDeep, border: `1px solid ${C.navyLight}`, color: C.cream }} />
+                <span className="flex-1 truncate">{teamSides[1]!.name}</span>
+              </div>
+              {scoreError && <p role="alert" className="font-mono text-[10px]" style={{ color: C.redLight }}>{scoreError}</p>}
+              <div className="flex gap-2">
+                <button onClick={() => { void saveScoreEdit(); }} disabled={savingScore}
+                  className="flex-1 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                  style={{ background: C.green, color: C.onColor }}>{savingScore ? 'SAVING…' : 'SAVE SCORE'}</button>
+                <button onClick={cancelScoreEdit} disabled={savingScore}
+                  className="px-3 py-1.5 font-heading tracking-wider text-[10px] rounded disabled:opacity-50"
+                  style={{ background: `${C.navyLight}66`, color: C.cream }}>CANCEL</button>
+              </div>
+            </div>
+          ) : teamSides.length === 2 && (
+            <div className="mb-3 rounded p-2 flex items-center gap-2 font-mono text-xs" style={{ background: `${C.navyDeep}aa`, border: `1px solid ${C.navyLight}44`, color: C.cream }}>
+              <span className="flex-1 truncate text-right">{teamSides[0]!.name}</span>
+              <span className="font-heading text-sm px-2">{teamSides[0]!.score ?? '?'}</span>
+              <span style={{ color: `${C.cream}66` }}>&ndash;</span>
+              <span className="font-heading text-sm px-2">{teamSides[1]!.score ?? '?'}</span>
+              <span className="flex-1 truncate">{teamSides[1]!.name}</span>
+              {isAdmin && (
+                <button onClick={openScoreEdit} aria-label="Edit final score"
+                  className="p-1 rounded" style={{ background: `${C.navyLight}55`, color: C.goldLight }}>
+                  <Edit3 size={12} />
+                </button>
+              )}
+            </div>
+          )}
+          {scoreCarrier && teamSides.length !== 2 && (
+            <div className="mb-3 font-mono text-xs" style={{ color: `${C.cream}aa` }}>
+              Score: <span style={{ color: C.cream }}>{scoreCarrier.goalsFor}&ndash;{scoreCarrier.goalsAgainst}</span> (from {scoreCarrier.username}&rsquo;s perspective)
+            </div>
+          )}
           {groups.length === 0 && <p className="font-mono text-xs" style={{ color: `${C.cream}aa` }}>No player records found for this match.</p>}
           {groups.map(([teamKey, players]) => (
             <div key={teamKey} className="mb-4">

@@ -72,10 +72,10 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
     { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
   ], positionWeights);
   // Tied players both hit max goals (benchmark = 1): raw = 1 → would be 100.
-  // Each has 1 game so the games cap kicks in at 80 + 1×5 = 85.
+  // Each has 1 game so the games cap kicks in at 50.
   // Tier split stays 1-player DIAMOND then 1-player GOLD by sort order.
-  assert.equal(tied.get('first')?.score, 85);
-  assert.equal(tied.get('second')?.score, 85);
+  assert.equal(tied.get('first')?.score, 50);
+  assert.equal(tied.get('second')?.score, 50);
   assert.equal(tied.get('first')?.tier, 'DIAMOND');
   assert.equal(tied.get('second')?.tier, 'GOLD');
   const unranked = calculateRankings([{ username: 'New', position: 'ST', stats: zeroStats }], null).get('new');

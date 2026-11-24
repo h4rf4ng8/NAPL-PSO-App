@@ -88,35 +88,18 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
         // but possible transiently) does not grant OVR beyond the full weight.
         rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }
-      // Games-played confidence: a 1-game sub still gets most of their
-      // deserved credit but can't quite top a proven 3+ game player.
-      // 1 game = 70%, 2 games = 85%, 3+ games = 100%.
-      const confidence = Math.min(1, 0.55 + games * 0.15);
-      rawScore *= confidence;
       scored.push({ username, score: rawScore, percentile: rawScore, games });
     }
-    // Per-position normalization: the strongest raw score at this position
-    // anchors to OVR 100. Everyone else scales down from there, keeping
-    // within-position comparisons strictly monotonic (more weighted stats =
-    // more OVR) while ensuring top players actually reach the 90s and 100s
-    // instead of plateauing in the 80s because nobody leads in every stat.
+    // OVR = raw weighted score × 100, with a hard ceiling that lifts as the
+    // player plays more games: 1 game caps at 50, 2 at 70, 3 at 90, 4+ at
+    // 100. A sub can still get a card, but reaching the top of the league
+    // takes a real sample size. Each stat contribution is already capped at
+    // its weight (above), weights per position sum to 1, so rawScore is in
+    // [0, 1] and OVR naturally lands in [0, 100] before the games cap.
     scored.sort((left, right) => right.score - left.score);
-    const topRaw = scored.length > 0 ? scored[0]!.score : 0;
     for (const player of scored) {
-      if (topRaw <= 0) {
-        // Degenerate case: nobody has any positive weighted contribution
-        // (empty league, or every weight is <=0). Fall back to a flat
-        // midpoint OVR instead of dividing by a tiny or negative number.
-        player.score = 50;
-      } else {
-        const normalized = Math.max(0, Math.min(100, Math.round(50 + 45 * (player.score / topRaw))));
-        // Hard cap by games played: no matter how dominant the raw score,
-        // a 1-game player can't show more than 70 OVR, a 2-game player 80.
-        // Prevents a sub from leading the leaderboard just because the
-        // rest of their position pool has weak stats.
-        const gamesCap = player.games >= 3 ? 100 : 60 + player.games * 10;
-        player.score = Math.min(normalized, gamesCap);
-      }
+      const gamesCap = [0, 50, 70, 90, 100][Math.min(4, player.games)] ?? 100;
+      player.score = Math.max(0, Math.min(gamesCap, Math.round(player.score * 100)));
     }
     const count = scored.length;
     const diamond = Math.max(1, Math.ceil(count * 0.1));

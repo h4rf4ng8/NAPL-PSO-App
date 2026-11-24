@@ -7,7 +7,7 @@ import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identit
 import { type Row } from '../../plugins/db/client.js';
 import { object, array } from '../../plugins/db/records.js';
 import { submissionDto } from './dto.js';
-import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews, findMatchParticipants, deleteMatchFromAllPlayers, findPlayerMatch } from './queries.js';
+import { listSubmissions, getSubmission, needSubmission, saveSubmission, updateSubmission, deleteSubmission, needMatchTeam, findPlayer, savePlayerMatches, saveResultNews, findMatchParticipants, deleteMatchFromAllPlayers, findPlayerMatch, findAccountsWithMatch, syncScheduledMatchScore } from './queries.js';
 import { pathSegment, detailUrl, page, pageInput } from '../payload/page.js';
 export function aggregate(matches: Row[]): Record<string, number> {
     const totals: Record<string, number> = {
@@ -239,6 +239,39 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             await savePlayerMatches(tx, found.account.id, { matches: nextMatches, stats: aggregate(nextMatches) });
             request.resource = { type: 'account', id: found.account.id };
             return { ok: true };
+        });
+    });
+    // PATCH /api/matches/:id/score — admin edits the match's final score. The
+    // body says what each team scored, keyed by teamId. The server rewrites
+    // every participant's goalsFor / goalsAgainst / result from their own
+    // team's perspective, recomputes their aggregate stats, and if the match
+    // is linked to a scheduled fixture syncs its home/away scores too.
+    const scoreInput = z.strictObject({ scores: z.record(id, stat) });
+    app.patch('/api/matches/:id/score', { config: { role: 'admin' } }, async (request) => {
+        const input = scoreInput.parse(request.body);
+        const matchId = parameters(request).id!;
+        return db.transaction(async (tx) => {
+            const accounts = await findAccountsWithMatch(tx, matchId);
+            if (accounts.length === 0) throw new HttpError(404, 'match_not_found');
+            let updated = 0;
+            for (const account of accounts) {
+                const currentMatches = array(account.matches).map(value => object(value));
+                const matchIndex = currentMatches.findIndex(row => String(row.strikersMatchId) === matchId);
+                if (matchIndex === -1) continue;
+                const existing = currentMatches[matchIndex]!;
+                const ownTeamId = String(existing.ownTeamId ?? ''), opponentTeamId = String(existing.opponentTeamId ?? '');
+                const my = input.scores[ownTeamId], other = input.scores[opponentTeamId];
+                // Both team IDs must appear in the scores map; otherwise we
+                // can't tell which side of the match this player was on.
+                if (typeof my !== 'number' || typeof other !== 'number') throw new HttpError(400, 'missing_team_score');
+                const nextMatches = [...currentMatches];
+                nextMatches[matchIndex] = { ...existing, goalsFor: my, goalsAgainst: other,
+                    result: my > other ? 'W' : (my < other ? 'L' : 'D'), cleanSheet: other === 0 };
+                await savePlayerMatches(tx, account.id, { matches: nextMatches, stats: aggregate(nextMatches) });
+                updated++;
+            }
+            await syncScheduledMatchScore(tx, matchId, input.scores);
+            return { ok: true, updatedPlayers: updated };
         });
     });
 }

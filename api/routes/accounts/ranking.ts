@@ -90,7 +90,7 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
       let rawScore = 0;
       for (const [key, weight] of Object.entries(weights)) {
         const benchmark = (benchmarks[key as StatKey] ?? 1) * FULL_CREDIT_SHARE;
-        // Capped at weight: once you clear 90% of the league leader for a
+        // Capped at weight: once you clear 65% of the league leader for a
         // stat you get the full weight; going higher doesn't exceed it.
         rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }

@@ -24,35 +24,41 @@ const parsedSeasonStats = (value: unknown): Record<string, AccountStats> => Obje
   Object.entries(partialSeasonStatsSchema.parse(value ?? {})).map(([season, stats]) => [season, parsedStats(stats)]),
 );
 
+// Stat values compared against the league leader. We use season TOTALS
+// (not per-game rates), so volume matters: a player with 14 goals is at
+// 14/22 of a 22-goal leader for the goals weight. Keys keep their old
+// "PerGame" / "Pct" names to stay compatible with the stored position
+// weights setting — only the numerator changed.
 function statValues(stats: AccountStats): Record<string, number> {
-  const games = Math.max(stats.games, 1);
   return {
-    goalsPerGame: stats.goals / games,
-    assistsPerGame: stats.assists / games,
-    tacklesPerGame: stats.tackles / games,
-    passesPerGame: stats.passes / games,
-    deflectsPerGame: stats.deflects / games,
-    catchesPerGame: stats.catches / games,
-    cleanSheetPct: stats.cleanSheets / games,
+    goalsPerGame: stats.goals,
+    assistsPerGame: stats.assists,
+    tacklesPerGame: stats.tackles,
+    passesPerGame: stats.passes,
+    deflectsPerGame: stats.deflects,
+    catchesPerGame: stats.catches,
+    cleanSheetPct: stats.cleanSheets,
   };
 }
 
-// Each stat's benchmark is the league-wide maximum per-game value for that
-// stat. A player's contribution to that stat = (their value / benchmark) *
-// weight, capped at the weight itself. This makes OVR strictly monotonic in
-// absolute stats within a position — more of a weighted stat always means
-// more OVR — while still being comparable across positions, since every
-// stat is scored on the same 0-100%-of-league-leader scale.
+// Each stat's benchmark is the league-wide maximum TOTAL for that stat (e.g.
+// most goals scored by any player at that position), scaled down so hitting
+// 90% of the league leader = full credit. Using totals means volume counts:
+// a 22-goal leader sets the bar; a 14-goal player at the same position gets
+// 14 / (0.9 × 22) ≈ 70.7% of the goals weight. Contribution for each stat =
+// min(1, player_total / (0.9 × leader_total)) × weight. The games cap below
+// still prevents tiny sample sizes from going out of range.
+const FULL_CREDIT_SHARE = 0.9;
 const STAT_KEYS = ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame', 'deflectsPerGame', 'catchesPerGame', 'cleanSheetPct'] as const;
 type StatKey = typeof STAT_KEYS[number];
 
 function leagueBenchmarks(accounts: Row[]): Record<StatKey, number> {
   const parsed = accounts.map(account => parsedStats(account.stats));
-  const perGame = parsed.filter(stats => stats.games >= 1).map(stats => statValues(stats));
+  const values = parsed.filter(stats => stats.games >= 1).map(stats => statValues(stats));
   const bench = {} as Record<StatKey, number>;
   for (const key of STAT_KEYS) {
     let max = 0;
-    for (const row of perGame) if (row[key] > max) max = row[key];
+    for (const row of values) if (row[key] > max) max = row[key];
     // Floor at a tiny positive number so (value / bench) stays finite when
     // no one has recorded that stat yet. OVR will just be 0 for everyone
     // on that component rather than NaN.
@@ -83,9 +89,9 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
       const playerValues = statValues(stats);
       let rawScore = 0;
       for (const [key, weight] of Object.entries(weights)) {
-        const benchmark = benchmarks[key as StatKey] ?? 1;
-        // Capped at weight: having 2x the league leader (impossible normally
-        // but possible transiently) does not grant OVR beyond the full weight.
+        const benchmark = (benchmarks[key as StatKey] ?? 1) * FULL_CREDIT_SHARE;
+        // Capped at weight: once you clear 90% of the league leader for a
+        // stat you get the full weight; going higher doesn't exceed it.
         rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
       }
       scored.push({ username, score: rawScore, percentile: rawScore, games });

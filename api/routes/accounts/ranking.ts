@@ -1,178 +1,183 @@
-import { test } from 'node:test';
-import assert from 'node:assert/strict';
-import { createApp } from '../helper.js';
-import { type Database, type Row, Prisma } from '../../plugins/db/client.js';
+import { z } from 'zod';
+import { POS, POSITIONS } from '@napl/contracts/league';
+import { accountStatsSchema, type AccountCardStatSeason, type AccountRanking, type AccountStats } from '@napl/contracts/accounts';
 import { HttpError } from '../../plugins/auth/identity.js';
-import { calculateCardStats, calculateRankings, DEFAULT_POSITION_WEIGHTS, enrichAccounts } from '../../routes/accounts/ranking.js';
-import { getSetting } from '../../routes/settings/queries.js';
+import type { Row } from '../../plugins/db/client.js';
 
-const alice = '11111111-1111-4111-8111-111111111111';
-const bob = '22222222-2222-4222-8222-222222222222';
-const positionWeights = { ST: { goalsPerGame: 1 } };
-const zeroStats = { games: 0, wins: 0, losses: 0, draws: 0, goals: 0, assists: 0, passes: 0, tackles: 0, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 };
-const accounts: Row[] = [
-  {
-    id: alice, username: 'Alice', username_lower: 'alice', position: 'ST', team_id: null, image_url: null, country: null,
-    stats: { games: 10, wins: 7, losses: 2, draws: 1, goals: 10, assists: 2, passes: 20, tackles: 5, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 },
-    season_stats: { S1: { games: 10, wins: 7, losses: 2, draws: 1, goals: 10, assists: 2, passes: 2, tackles: 5, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 } },
-    matches: [{ id: 'match-1', season: 'S1' }], awards: [], championships: [], totw_until: null, cheater: false, strikers_id: null,
-    steam_url: null, created_at: new Date(0), email: 'private@example.test', pending_image_url: 'secret-image', private_note: 'internal',
-  },
-  {
-    id: bob, username: 'Bob', username_lower: 'bob', position: 'ST', team_id: null, image_url: null, country: null,
-    stats: { games: 10, wins: 2, losses: 7, draws: 1, goals: 0, assists: 1, passes: 10, tackles: 1, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 },
-    season_stats: { S2: { games: 10, wins: 2, losses: 7, draws: 1, goals: 0, assists: 1, passes: 1, tackles: 1, deflects: 0, catches: 0, cleanSheets: 0, motm: 0 } },
-    matches: [], awards: [], championships: [], totw_until: null, cheater: false, strikers_id: null,
-    steam_url: null, created_at: new Date(1),
-  },
-];
+export const DEFAULT_POSITION_WEIGHTS: Record<string, Record<string, number>> = {
+  [POS.ST]: { goalsPerGame: 0.55, assistsPerGame: 0.2, passesPerGame: 0.1, tacklesPerGame: 0.15 },
+  [POS.WG]: { assistsPerGame: 0.35, goalsPerGame: 0.3, passesPerGame: 0.2, tacklesPerGame: 0.15 },
+  [POS.CM]: { assistsPerGame: 0.35, passesPerGame: 0.3, goalsPerGame: 0.15, tacklesPerGame: 0.2 },
+  [POS.DEF]: { tacklesPerGame: 0.4, cleanSheetPct: 0.2, passesPerGame: 0.15, assistsPerGame: 0.15, goalsPerGame: 0.1 },
+  [POS.GK]: { deflectsPerGame: 0.35, cleanSheetPct: 0.35, catchesPerGame: 0.3 },
+  [POS.FLEX]: { goalsPerGame: 0.25, assistsPerGame: 0.25, tacklesPerGame: 0.25, passesPerGame: 0.25 },
+};
 
-function appFor() {
-  const seen = new Map<string, number>();
-  const database: Database = {
-    client: {
-      setting: { findUnique: async ({ where }: { where: { key: string } }) => ({ key: where.key, value: JSON.stringify(positionWeights) }) },
-      team: { findMany: async () => [] },
-      teamJoinRequest: { findMany: async () => [] },
-      season: { findMany: async () => [] },
-      teamSeason: { findMany: async () => [] },
-      account: { findMany: async () => accounts, findUnique: async ({ where }: { where: { id?: string; username_lower?: string } }) =>
-        accounts.find(row => where.id ? row.id === where.id : row.username_lower === where.username_lower) ?? null },
-    } as unknown as Database['client'],
-    query: async <T extends Row>(sql: Prisma.Sql) => {
-      const key = sql.sql.replaceAll(/\s+/g, ' ').trim();
-      seen.set(key, (seen.get(key) ?? 0) + 1);
-      if (key.includes('FROM auth_gateway.memberships')) return [{ eligible: true, fresh: true }] as T[];
-      if (key.includes('public."settings"')) return [{ key: sql.values[0], value: JSON.stringify(positionWeights) }] as T[];
-      if (key.startsWith('WITH match_rows AS')) return [] as T[];
-      if (key.includes('asl.accounts') || key.includes('public."accounts"')) {
-        const usernameFilter = key.includes('username_lower');
-        const idFilter = key.includes('id =');
-        return accounts.filter(row => (!usernameFilter || row.username_lower === sql.values[1] || row.username_lower === sql.values[0]) && (!idFilter || row.id === sql.values[0])) as T[];
-      }
-      return [] as T[];
-    },
-    execute: async () => 0,
-    transaction: async work => work(database),
-    close: async () => {},
+const weightsSchema = z.record(z.string(), z.record(z.string(), z.number()));
+const emptyStats: AccountStats = accountStatsSchema.parse(
+  Object.fromEntries(Object.keys(accountStatsSchema.shape).map(key => [key, 0])),
+);
+const partialStatsSchema = accountStatsSchema.partial();
+const partialSeasonStatsSchema = z.record(z.string(), partialStatsSchema);
+const parsedStats = (value: unknown): AccountStats => accountStatsSchema.parse({ ...emptyStats, ...partialStatsSchema.parse(value ?? {}) });
+const parsedSeasonStats = (value: unknown): Record<string, AccountStats> => Object.fromEntries(
+  Object.entries(partialSeasonStatsSchema.parse(value ?? {})).map(([season, stats]) => [season, parsedStats(stats)]),
+);
+
+// Stat values compared against the league leader. We use season TOTALS for
+// counting stats so volume matters: 14 goals is at 14/22 of a 22-goal leader
+// for the goals weight. Passes is the exception — it's judged on a per-game
+// basis because raw pass volume is mostly a function of minutes played, not
+// quality (10 pg over 10 games beats 5 pg over 10 games, but 50 passes in 10
+// games shouldn't beat 50 passes in 5 games). Keys keep their old
+// "PerGame" / "Pct" names to stay compatible with the stored position
+// weights setting.
+function statValues(stats: AccountStats): Record<string, number> {
+  const games = Math.max(stats.games, 1);
+  return {
+    goalsPerGame: stats.goals,
+    assistsPerGame: stats.assists,
+    tacklesPerGame: stats.tackles,
+    passesPerGame: stats.passes / games,
+    deflectsPerGame: stats.deflects,
+    catchesPerGame: stats.catches,
+    cleanSheetPct: stats.cleanSheets,
   };
-  return { app: createApp({ db: database, verify: async token => ({ id: token, sessionId: token, claims: { sub: token } }) }), seen };
 }
 
-test('server rankings preserve weighted percentile scores, small-pool tiers, and custom weights', () => {
-  const result = calculateRankings(accounts, positionWeights);
-  // Custom weights { ST: { goalsPerGame: 1 } }. Alice's raw = 1 (leads with
-  // 10 goals), Bob's raw = 0. Mean of the two = 0.5, stdev = 0.5, so Alice
-  // sits one σ above mean (OVR 80 + 10 = 90) and Bob one σ below (OVR 70).
-  // Games cap for 10 games is 100, so no clamping.
-  assert.deepEqual(result.get('alice'), { score: 90, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-  assert.deepEqual(result.get('bob'), { score: 70, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
-  const tied = calculateRankings([
-    { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
-    { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
-  ], positionWeights);
-  // Tied players: identical raw scores → stdev = 0 → both collapse to the
-  // target mean OVR of 80. Each has 1 game so the games cap clamps to 50.
-  // Tier split stays 1-player DIAMOND then 1-player GOLD by sort order.
-  assert.equal(tied.get('first')?.score, 50);
-  assert.equal(tied.get('second')?.score, 50);
-  assert.equal(tied.get('first')?.tier, 'DIAMOND');
-  assert.equal(tied.get('second')?.tier, 'GOLD');
-  const unranked = calculateRankings([{ username: 'New', position: 'ST', stats: zeroStats }], null).get('new');
-  assert.deepEqual(unranked, { score: 0, percentile: 0, ranked: false, gamesPlayed: 0, tier: 'BRONZE' });
-  const legacy = enrichAccounts([{ username: 'Legacy', position: 'LB', stats: { ...zeroStats, games: 8 } }], positionWeights)[0]!;
-  assert.deepEqual(legacy.ranking, { score: 0, percentile: 0, ranked: false, gamesPlayed: 8, tier: 'BRONZE' });
-  assert.deepEqual(DEFAULT_POSITION_WEIGHTS.ST, { goalsPerGame: 0.55, assistsPerGame: 0.2, passesPerGame: 0.1, tacklesPerGame: 0.15 });
-});
+// Each stat's benchmark is the league-wide maximum TOTAL for that stat (e.g.
+// most goals scored by any player at that position), scaled down so hitting
+// 65% of the league leader = full credit. Using totals means volume counts:
+// a 22-goal leader sets the bar; a 15-goal player at the same position
+// earns about 100% of the goals weight. Contribution for each stat =
+// min(1, player_total / (0.65 × leader_total)) × weight. The games cap below
+// still prevents tiny sample sizes from going out of range.
+const FULL_CREDIT_SHARE = 0.65;
+// After raw weighted-stat scores are computed, we normalize them onto a
+// bell curve PER POSITION. Target: mean OVR = 80, standard deviation = 10.
+// So ~2% of players at a position land at 100, median lands at 80, and ~2%
+// settle near 60. No more cliffs between tiers, no more 21-OVR regulars.
+const TARGET_OVR_MEAN = 80;
+const TARGET_OVR_SIGMA = 10;
+const STAT_KEYS = ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame', 'deflectsPerGame', 'catchesPerGame', 'cleanSheetPct'] as const;
+type StatKey = typeof STAT_KEYS[number];
 
-test('finite negative saved weights remain compatible and malformed stored weights fail explicitly', async () => {
-  const negative = calculateRankings(accounts, { ST: { goalsPerGame: -1 } });
-  // Only the negative goals weight applies. Alice's raw = 1 × -1 = -1,
-  // Bob's raw = 0 × -1 = 0. Mean = -0.5, stdev = 0.5, so Alice is σ below
-  // mean (OVR 70) and Bob is σ above (OVR 90). Percentile preserves the
-  // actual raw score for ordering.
-  assert.equal(negative.get('alice')?.score, 70);
-  assert.equal(negative.get('alice')?.percentile, -1);
-  assert.equal(negative.get('bob')?.score, 90);
-
-  const database: Database = {
-    client: { setting: { findUnique: async () => ({ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }) } } as unknown as Database['client'],
-    query: async <T extends Row>() => [] as T[],
-    execute: async () => 0, transaction: async work => work(database), close: async () => {},
-  };
-  const saved = await getSetting(database, 'position_weights');
-  assert.throws(() => calculateRankings(accounts, saved), error =>
-    error instanceof HttpError && error.status === 503 && error.code === 'invalid_position_weights');
-  for (const goalsPerGame of [NaN, Infinity, -Infinity]) {
-    assert.throws(() => calculateRankings(accounts, { ST: { goalsPerGame } }), error =>
-      error instanceof HttpError && error.status === 503 && error.code === 'invalid_position_weights');
+function leagueBenchmarks(accounts: Row[]): Record<StatKey, number> {
+  const parsed = accounts.map(account => parsedStats(account.stats));
+  const values = parsed.filter(stats => stats.games >= 1).map(stats => statValues(stats));
+  const bench = {} as Record<StatKey, number>;
+  for (const key of STAT_KEYS) {
+    let max = 0;
+    for (const row of values) if (row[key] > max) max = row[key];
+    // Floor at a tiny positive number so (value / bench) stays finite when
+    // no one has recorded that stat yet. OVR will just be 0 for everyone
+    // on that component rather than NaN.
+    bench[key] = max > 0 ? max : 1;
   }
-});
+  return bench;
+}
 
-test('unset position weights use the API-owned defaults', async () => {
-  const database: Database = {
-    client: { setting: { findUnique: async () => null } } as unknown as Database['client'],
-    query: async <T extends Row>() => [] as T[], execute: async () => 0,
-    transaction: async work => work(database), close: async () => {},
-  };
-  assert.deepEqual(await getSetting(database, 'position_weights'), DEFAULT_POSITION_WEIGHTS);
-});
+export function calculateRankings(accounts: Row[], customWeights: unknown): Map<string, AccountRanking> {
+  const parsed = customWeights == null ? null : weightsSchema.safeParse(customWeights);
+  if (parsed && !parsed.success) throw new HttpError(503, 'invalid_position_weights');
+  const weightsByPos: Record<string, Record<string, number>> = parsed?.data ?? DEFAULT_POSITION_WEIGHTS;
+  const result = new Map<string, AccountRanking>();
+  const benchmarks = leagueBenchmarks(accounts);
+  for (const position of POSITIONS) {
+    const players = accounts.filter(account => account.position === position);
+    const weights = weightsByPos[position] ?? DEFAULT_POSITION_WEIGHTS[position];
+    const statsByPlayer = new Map(players.map(account => [account, parsedStats(account.stats)]));
+    const scored: Array<{ username: string; score: number; percentile: number; games: number }> = [];
+    for (const account of players) {
+      const username = String(account.username ?? '').toLowerCase();
+      const stats = statsByPlayer.get(account)!;
+      const games = stats.games;
+      if (games < 1) {
+        result.set(username, { score: 0, percentile: 0, ranked: false, gamesPlayed: games, tier: 'BRONZE' });
+        continue;
+      }
+      const playerValues = statValues(stats);
+      let rawScore = 0;
+      for (const [key, weight] of Object.entries(weights)) {
+        const benchmark = (benchmarks[key as StatKey] ?? 1) * FULL_CREDIT_SHARE;
+        // Capped at weight: once you clear 65% of the league leader for a
+        // stat you get the full weight; going higher doesn't exceed it.
+        rawScore += Math.min(1, (playerValues[key] ?? 0) / benchmark) * weight;
+      }
+      scored.push({ username, score: rawScore, percentile: rawScore, games });
+    }
+    // Normalize raw weighted scores onto a bell curve for this position.
+    // OVR = TARGET_MEAN + z × TARGET_SIGMA, where z is how many standard
+    // deviations above the position's average this player is. Degenerate
+    // cases (one player, or all tied) collapse to TARGET_MEAN. The games
+    // cap still applies on top: 1 game maxes at 50, 2 at 70, 3 at 90, 4+
+    // at 100, so a hot 1-game sample can't jump above its sample size.
+    scored.sort((left, right) => right.score - left.score);
+    const mean = scored.length > 0
+      ? scored.reduce((sum, p) => sum + p.score, 0) / scored.length
+      : 0;
+    const variance = scored.length > 0
+      ? scored.reduce((sum, p) => sum + (p.score - mean) ** 2, 0) / scored.length
+      : 0;
+    const stdev = Math.sqrt(variance);
+    for (const player of scored) {
+      const z = stdev > 0 ? (player.score - mean) / stdev : 0;
+      const base = TARGET_OVR_MEAN + z * TARGET_OVR_SIGMA;
+      const gamesCap = [0, 50, 70, 90, 100][Math.min(4, player.games)] ?? 100;
+      player.score = Math.max(0, Math.min(gamesCap, Math.round(base)));
+    }
+    const count = scored.length;
+    const diamond = Math.max(1, Math.ceil(count * 0.1));
+    const gold = count > 1 ? Math.max(1, Math.ceil(count * 0.2)) : 0;
+    const silver = count > 2 ? Math.max(1, Math.ceil(count * 0.3)) : 0;
+    for (const [index, player] of scored.entries()) {
+      let tier: AccountRanking['tier'];
+      if (index < diamond) tier = 'DIAMOND';
+      else if (index < diamond + gold) tier = 'GOLD';
+      else if (index < diamond + gold + silver) tier = 'SILVER';
+      else tier = 'BRONZE';
+      result.set(player.username, { score: player.score, percentile: player.percentile, ranked: true, gamesPlayed: player.games, tier });
+    }
+  }
+  return result;
+}
 
-test('card cells preserve season and all-time presentation, including the existing passes semantics', () => {
-  const stats = calculateCardStats({
-    username: 'Alice', position: 'ST', stats: accounts[0]!.stats,
-    seasonStats: { S1: { ...zeroStats, games: 10, wins: 7, losses: 2, goals: 10, assists: 2, passes: 2, tackles: 5 } },
+export function calculateCardStats(account: Row): AccountCardStatSeason[] {
+  const seasons = parsedSeasonStats(account.seasonStats);
+  const allStats = parsedStats(account.stats);
+  const seasonRows: Array<[string | null, AccountStats | undefined]> = [
+    ...Object.entries(seasons).filter(([season]) => season !== 'all'), ['all', allStats], [null, emptyStats],
+  ];
+  return seasonRows.map(([season, raw]) => {
+    const stats = raw ?? emptyStats;
+    const games = stats.games;
+    const perGame = (value: number) => (value / Math.max(games, 1)).toFixed(1);
+    const suffix = games > 0 ? '/G' : '';
+    const goalkeeper = account.position === POS.GK;
+    const fourthCell = goalkeeper
+      ? { label: `CAT${suffix}`, value: perGame(stats.catches) }
+      : { label: 'W-L', value: `${stats.wins}-${stats.losses}` };
+    return {
+      season,
+      cells: [
+        { label: 'GOALS', value: String(stats.goals) },
+        { label: goalkeeper ? `DFL${suffix}` : `TKL${suffix}`, value: perGame(goalkeeper ? stats.deflects : stats.tackles) },
+        { label: 'ASSIST', value: String(stats.assists) },
+        fourthCell,
+        { label: `PASS${suffix}`, value: perGame(stats.passes) },
+        { label: goalkeeper ? 'CS' : 'GP', value: String(goalkeeper ? stats.cleanSheets : games) },
+      ],
+    };
   });
-  const all = stats.find(entry => entry.season === 'all')!;
-  const season = stats.find(entry => entry.season === 'S1')!;
-  assert.equal(all.cells.length, 6);
-  assert.deepEqual(all.cells.map(cell => cell.label), ['GOALS', 'TKL/G', 'ASSIST', 'W-L', 'PASS/G', 'GP']);
-  assert.deepEqual(all.cells.map(cell => cell.value), ['10', '0.5', '2', '7-2', '2.0', '10']);
-  assert.equal(season.cells[4]?.value, '0.2');
-  const fallback = stats.find(entry => entry.season === null)!;
-  assert.deepEqual(fallback.cells.map(cell => cell.label), ['GOALS', 'TKL', 'ASSIST', 'W-L', 'PASS', 'GP']);
-  assert.deepEqual(fallback.cells.map(cell => cell.value), ['0', '0.0', '0', '0-0', '0.0', '0']);
-  const goalkeeper = calculateCardStats({ username: 'Keeper', position: 'GK', stats: { ...zeroStats, games: 2, deflects: 3, catches: 1, cleanSheets: 1 } })[0]!;
-  assert.deepEqual(goalkeeper.cells.map(cell => cell.label), ['GOALS', 'DFL/G', 'ASSIST', 'CAT/G', 'PASS/G', 'CS']);
-});
+}
 
-test('REST and GraphQL account reads expose computed values without private columns', async () => {
-  const { app, seen } = appFor();
-  try {
-    const rest = await app.inject('/api/accounts');
-    assert.equal(rest.statusCode, 200, rest.body);
-    const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(restAlice.ranking, { score: 90, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-    assert.equal(restAlice.cardStats, undefined);
-    assert.equal(restAlice.email, undefined);
-    assert.equal(restAlice.pendingImageUrl, undefined);
-    assert.equal(restAlice.privateNote, undefined);
-
-    const graph = await app.inject({
-      method: 'POST', url: '/api/graphql', headers: { authorization: `Bearer ${alice}` },
-      payload: { operationName: 'Leaderboard', variables: {} },
-    });
-    assert.equal(graph.statusCode, 200, graph.body);
-    const result = graph.json<{ data: { leaderboard: { nodes: Array<Record<string, unknown>> }; defaultPositionWeights: Record<string, unknown> } }>();
-    const graphAlice = result.data.leaderboard.nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(graphAlice.ranking, { ...restAlice.ranking as object, __typename: 'AccountRanking' });
-    assert.equal(graphAlice.email, undefined);
-    const weights = await app.inject({ method: 'POST', url: '/api/graphql', payload: { operationName: 'DefaultPositionWeights', variables: {} } });
-    assert.ok(weights.json().data.defaultPositionWeights.ST);
-    const summaryQueries = [...seen].filter(([key]) => key.includes('SELECT a.id') && key.includes('season_stats'));
-    assert.equal(summaryQueries.reduce((sum, [, count]) => sum + count, 0), 2, 'one full-population read per REST and GraphQL request');
-
-    const profile = await app.inject('/api/accounts/username/Alice');
-    assert.equal(profile.statusCode, 200, profile.body);
-    const profileAlice = profile.json<Record<string, unknown>>();
-    assert.equal(profileAlice.matches, undefined);
-    const raw = await app.inject(`/api/accounts/${alice}/history/matches`);
-    assert.equal(raw.statusCode, 200, raw.body);
-    const detail = await app.inject(raw.json().nodes[0].detailUrl);
-    assert.equal(detail.statusCode, 200, detail.body);
-    assert.deepEqual(Object.fromEntries(detail.json().nodes.map((field: { key: string; value: unknown }) => [field.key, field.value])), (accounts[0]!.matches as unknown[])[0]);
-    assert.deepEqual(profileAlice.ranking, restAlice.ranking);
-    assert.equal(profileAlice.email, undefined);
-    assert.equal(profileAlice.privateNote, undefined);
-  } finally { await app.close(); }
-});
+export function enrichAccounts(accounts: Row[], weights: unknown): Row[] {
+  const rankings = calculateRankings(accounts, weights);
+  return accounts.map(account => ({
+    ...account,
+    ranking: rankings.get(String(account.username ?? '').toLowerCase()) ?? {
+      score: 0, percentile: 0, ranked: false, gamesPlayed: parsedStats(account.stats).games, tier: 'BRONZE',
+    },
+    cardStats: calculateCardStats(account),
+  }));
+}

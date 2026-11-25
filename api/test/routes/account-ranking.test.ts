@@ -61,18 +61,18 @@ function appFor() {
 
 test('server rankings preserve weighted percentile scores, small-pool tiers, and custom weights', () => {
   const result = calculateRankings(accounts, positionWeights);
-  // Test uses custom weights { ST: { goalsPerGame: 1 } }. Alice leads goals
-  // (1 goal/game = benchmark), raw = 1 × 1 = 1, confidence (10 games) = 1,
-  // so OVR = round(1 × 100) = 100. No per-position anchor — Alice earns it.
-  assert.deepEqual(result.get('alice'), { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
-  // Bob: 0 goals/game, raw = 0, OVR = 0. No midpoint fallback — zero stays zero.
-  assert.deepEqual(result.get('bob'), { score: 0, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
+  // Custom weights { ST: { goalsPerGame: 1 } }. Alice's raw = 1 (leads with
+  // 10 goals), Bob's raw = 0. Mean of the two = 0.5, stdev = 0.5, so Alice
+  // sits one σ above mean (OVR 80 + 10 = 90) and Bob one σ below (OVR 70).
+  // Games cap for 10 games is 100, so no clamping.
+  assert.deepEqual(result.get('alice'), { score: 90, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+  assert.deepEqual(result.get('bob'), { score: 70, percentile: 0, ranked: true, gamesPlayed: 10, tier: 'GOLD' });
   const tied = calculateRankings([
     { username: 'First', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
     { username: 'Second', position: 'ST', stats: { ...zeroStats, games: 1, goals: 1 } },
   ], positionWeights);
-  // Tied players both hit max goals (benchmark = 1): raw = 1 → would be 100.
-  // Each has 1 game so the games cap kicks in at 50.
+  // Tied players: identical raw scores → stdev = 0 → both collapse to the
+  // target mean OVR of 80. Each has 1 game so the games cap clamps to 50.
   // Tier split stays 1-player DIAMOND then 1-player GOLD by sort order.
   assert.equal(tied.get('first')?.score, 50);
   assert.equal(tied.get('second')?.score, 50);
@@ -88,11 +88,12 @@ test('server rankings preserve weighted percentile scores, small-pool tiers, and
 test('finite negative saved weights remain compatible and malformed stored weights fail explicitly', async () => {
   const negative = calculateRankings(accounts, { ST: { goalsPerGame: -1 } });
   // Only the negative goals weight applies. Alice's raw = 1 × -1 = -1,
-  // Bob's raw = 0 × -1 = 0. Score clamps to [0, 100] so both land at 0.
-  // Percentile preserves the actual raw score for ordering.
-  assert.equal(negative.get('alice')?.score, 0);
+  // Bob's raw = 0 × -1 = 0. Mean = -0.5, stdev = 0.5, so Alice is σ below
+  // mean (OVR 70) and Bob is σ above (OVR 90). Percentile preserves the
+  // actual raw score for ordering.
+  assert.equal(negative.get('alice')?.score, 70);
   assert.equal(negative.get('alice')?.percentile, -1);
-  assert.equal(negative.get('bob')?.score, 0);
+  assert.equal(negative.get('bob')?.score, 90);
 
   const database: Database = {
     client: { setting: { findUnique: async () => ({ key: 'position_weights', value: JSON.stringify({ ST: { goalsPerGame: 'bad' } }) }) } } as unknown as Database['client'],

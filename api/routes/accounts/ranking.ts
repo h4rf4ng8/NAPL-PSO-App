@@ -24,19 +24,19 @@ const parsedSeasonStats = (value: unknown): Record<string, AccountStats> => Obje
   Object.entries(partialSeasonStatsSchema.parse(value ?? {})).map(([season, stats]) => [season, parsedStats(stats)]),
 );
 
-// Stat values compared against the league leader. We use season TOTALS for
-// counting stats so volume matters: 14 goals is at 14/22 of a 22-goal leader
-// for the goals weight. Passes is the exception — it's judged on a per-game
-// basis because raw pass volume is mostly a function of minutes played, not
-// quality (10 pg over 10 games beats 5 pg over 10 games, but 50 passes in 10
-// games shouldn't beat 50 passes in 5 games). Keys keep their old
-// "PerGame" / "Pct" names to stay compatible with the stored position
-// weights setting.
+// Stat values compared against the league leader. Scoring stats (goals,
+// assists) and passing are judged per-game — rate of production matters,
+// not raw totals padded by playing more games. Tackles/deflects/catches
+// and clean sheets stay as totals because those stats come in bursts: a
+// defender who makes 15 tackles in one game and 0 in the next averages
+// out poorly on a per-game read even though the volume was there. Keys
+// keep their old "PerGame" / "Pct" names to stay compatible with the
+// stored position weights setting.
 function statValues(stats: AccountStats): Record<string, number> {
   const games = Math.max(stats.games, 1);
   return {
-    goalsPerGame: stats.goals,
-    assistsPerGame: stats.assists,
+    goalsPerGame: stats.goals / games,
+    assistsPerGame: stats.assists / games,
     tacklesPerGame: stats.tackles,
     passesPerGame: stats.passes / games,
     deflectsPerGame: stats.deflects,

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { submissionInput, approveSubmission, id, username } from '@napl/contracts';
+import type { Account } from '../../generated/prisma/client.js';
 import type { Dependencies } from '../../app.js';
 import { params as parameters } from '../../plugins/request.js';
 import { HttpError, actor, actorName, isAdmin } from '../../plugins/auth/identity.js';
@@ -166,11 +167,16 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
             const skippedIndexes: number[] = [];
             const mapped = new Set<string>();
             const md = input.matchData;
+            // First pass: resolve each file entry. We need every player up
+            // front so we can detect whether the Strikers file's home/away
+            // sides match the schedule's home/away or are flipped — and only
+            // then can we write the correct score/team to each player.
+            const resolved: { p: (typeof md.players)[number]; index: number; player: Account | null }[] = [];
             for (const [index, p] of md.players.entries()) {
                 const name = input.playerMap[String(p.player_id)];
                 if (!name) {
-                    skipped++;
-                    skippedIndexes.push(index);
+                    skipped++; skippedIndexes.push(index);
+                    resolved.push({ p, index, player: null });
                     continue;
                 }
                 if (mapped.has(name.toLowerCase()))
@@ -179,12 +185,44 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 const player = await findPlayer(tx, name.toLowerCase());
                 if (!player)
                     throw new HttpError(409, 'mapped_player_missing');
+                resolved.push({ p, index, player });
+            }
+            // Detect whether the file's 'home'/'away' labels match the
+            // schedule's home/away team IDs, or whether they're flipped.
+            // Source of truth is each mapped player's team_id (from the DB).
+            // Without this, uploading a file where the Strikers "host" is the
+            // schedule's away team gives every away player the home score and
+            // vice versa — e.g., Cr1tical hosts in the schedule but KSG hosts
+            // in-game, and the import credits the win to the wrong side.
+            let swap = false;
+            for (const { p, player } of resolved) {
+                if (!player) continue;
+                if (player.team_id === input.homeTeamId) { swap = p.team !== 'home'; break; }
+                if (player.team_id === input.awayTeamId) { swap = p.team !== 'away'; break; }
+            }
+            const scheduleHomeScore = swap ? md.score.away : md.score.home;
+            const scheduleAwayScore = swap ? md.score.home : md.score.away;
+            // Second pass: write each player's record using the schedule-anchored
+            // home/away, not the file's labels.
+            for (const { p, player } of resolved) {
+                if (!player) continue;
                 const matches = array(player.matches).map(value => object(value));
                 if (matches.some(m => String(m.strikersMatchId) === String(md.match_id))) {
                     alreadyImported++;
                     continue;
                 }
-                const own = p.team === 'home' ? home : away, opponent = p.team === 'home' ? away : home, my = p.team === 'home' ? md.score.home : md.score.away, other = p.team === 'home' ? md.score.away : md.score.home, override = input.tackleOverrides[String(p.player_id)], s = p.stats;
+                // Prefer the player's actual team_id to assign them to a
+                // schedule side. Fall back to the (possibly swapped) file
+                // label when they're on neither scheduled team — rare, but
+                // keeps ringers and stale-roster imports from failing.
+                let isHome: boolean;
+                if (player.team_id === input.homeTeamId) isHome = true;
+                else if (player.team_id === input.awayTeamId) isHome = false;
+                else isHome = swap ? p.team !== 'home' : p.team === 'home';
+                const own = isHome ? home : away, opponent = isHome ? away : home;
+                const my = isHome ? scheduleHomeScore : scheduleAwayScore;
+                const other = isHome ? scheduleAwayScore : scheduleHomeScore;
+                const override = input.tackleOverrides[String(p.player_id)], s = p.stats;
                 matches.push({
                     id: `sc_${md.match_id}_${p.player_id}`, strikersMatchId: md.match_id, date: Date.now(), season: input.season, opponent: opponent.name, opponentTeamId: opponent.id, ownTeamId: own.id, result: my > other ? 'W' : (my < other ? 'L' : 'D'), goalsFor: my, goalsAgainst: other, stadium: md.stadium ?? '', matchLength: md.match_length ?? 0, goals: s.goals ?? 0, assists: s.assists ?? 0, passes: s.passes ?? 0, tackles: override === undefined || override === '' ? (s.poke_tackles_won ?? 0) + (s.slide_tackles_won ?? 0) : Number(override), deflects: s.deflects ?? 0, catches: s.catches ?? 0, cleanSheet: other === 0, motm: false, source: 'strikers-club-import'
                 });
@@ -196,7 +234,7 @@ export function registerMatches(app: FastifyInstance, { db }: Dependencies): voi
                 updated++;
             }
             return {
-                ok: true, matchId: md.match_id, updated, skipped, alreadyImported, skippedIndexes, homeTeam: home.name, awayTeam: away.name, score: `${md.score.home} - ${md.score.away}`
+                ok: true, matchId: md.match_id, updated, skipped, alreadyImported, skippedIndexes, homeTeam: home.name, awayTeam: away.name, score: `${scheduleHomeScore} - ${scheduleAwayScore}`
             };
         });
     });

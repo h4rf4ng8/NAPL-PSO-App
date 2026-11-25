@@ -43,12 +43,12 @@ function statValues(stats: AccountStats): Record<string, number> {
 
 // Each stat's benchmark is the league-wide maximum TOTAL for that stat (e.g.
 // most goals scored by any player at that position), scaled down so hitting
-// 50% of the league leader = full credit. Using totals means volume counts:
-// a 22-goal leader sets the bar; an 11-goal player at the same position
-// already earns full goals weight. Contribution for each stat =
-// min(1, player_total / (0.5 × leader_total)) × weight. The games cap below
+// 60% of the league leader = full credit. Using totals means volume counts:
+// a 22-goal leader sets the bar; a 13-goal player at the same position
+// earns about 99% of the goals weight. Contribution for each stat =
+// min(1, player_total / (0.6 × leader_total)) × weight. The games cap below
 // still prevents tiny sample sizes from going out of range.
-const FULL_CREDIT_SHARE = 0.5;
+const FULL_CREDIT_SHARE = 0.6;
 const STAT_KEYS = ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame', 'deflectsPerGame', 'catchesPerGame', 'cleanSheetPct'] as const;
 type StatKey = typeof STAT_KEYS[number];
 

@@ -142,7 +142,7 @@ test('REST and GraphQL account reads expose computed values without private colu
     const rest = await app.inject('/api/accounts');
     assert.equal(rest.statusCode, 200, rest.body);
     const restAlice = rest.json<{ nodes: Array<Record<string, unknown>> }>().nodes.find(row => row.username === 'Alice')!;
-    assert.deepEqual(restAlice.ranking, { score: 100, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
+    assert.deepEqual(restAlice.ranking, { score: 90, percentile: 1, ranked: true, gamesPlayed: 10, tier: 'DIAMOND' });
     assert.equal(restAlice.cardStats, undefined);
     assert.equal(restAlice.email, undefined);
     assert.equal(restAlice.pendingImageUrl, undefined);

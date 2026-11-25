@@ -49,6 +49,12 @@ function statValues(stats: AccountStats): Record<string, number> {
 // min(1, player_total / (0.65 × leader_total)) × weight. The games cap below
 // still prevents tiny sample sizes from going out of range.
 const FULL_CREDIT_SHARE = 0.65;
+// After raw weighted-stat scores are computed, we normalize them onto a
+// bell curve PER POSITION. Target: mean OVR = 80, standard deviation = 10.
+// So ~2% of players at a position land at 100, median lands at 80, and ~2%
+// settle near 60. No more cliffs between tiers, no more 21-OVR regulars.
+const TARGET_OVR_MEAN = 80;
+const TARGET_OVR_SIGMA = 10;
 const STAT_KEYS = ['goalsPerGame', 'assistsPerGame', 'tacklesPerGame', 'passesPerGame', 'deflectsPerGame', 'catchesPerGame', 'cleanSheetPct'] as const;
 type StatKey = typeof STAT_KEYS[number];
 
@@ -96,16 +102,25 @@ export function calculateRankings(accounts: Row[], customWeights: unknown): Map<
       }
       scored.push({ username, score: rawScore, percentile: rawScore, games });
     }
-    // OVR = raw weighted score × 100, with a hard ceiling that lifts as the
-    // player plays more games: 1 game caps at 50, 2 at 70, 3 at 90, 4+ at
-    // 100. A sub can still get a card, but reaching the top of the league
-    // takes a real sample size. Each stat contribution is already capped at
-    // its weight (above), weights per position sum to 1, so rawScore is in
-    // [0, 1] and OVR naturally lands in [0, 100] before the games cap.
+    // Normalize raw weighted scores onto a bell curve for this position.
+    // OVR = TARGET_MEAN + z × TARGET_SIGMA, where z is how many standard
+    // deviations above the position's average this player is. Degenerate
+    // cases (one player, or all tied) collapse to TARGET_MEAN. The games
+    // cap still applies on top: 1 game maxes at 50, 2 at 70, 3 at 90, 4+
+    // at 100, so a hot 1-game sample can't jump above its sample size.
     scored.sort((left, right) => right.score - left.score);
+    const mean = scored.length > 0
+      ? scored.reduce((sum, p) => sum + p.score, 0) / scored.length
+      : 0;
+    const variance = scored.length > 0
+      ? scored.reduce((sum, p) => sum + (p.score - mean) ** 2, 0) / scored.length
+      : 0;
+    const stdev = Math.sqrt(variance);
     for (const player of scored) {
+      const z = stdev > 0 ? (player.score - mean) / stdev : 0;
+      const base = TARGET_OVR_MEAN + z * TARGET_OVR_SIGMA;
       const gamesCap = [0, 50, 70, 90, 100][Math.min(4, player.games)] ?? 100;
-      player.score = Math.max(0, Math.min(gamesCap, Math.round(player.score * 100)));
+      player.score = Math.max(0, Math.min(gamesCap, Math.round(base)));
     }
     const count = scored.length;
     const diamond = Math.max(1, Math.ceil(count * 0.1));
